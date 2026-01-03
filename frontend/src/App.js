@@ -78,8 +78,8 @@ function App() {
           >
             <Route index element={<Navigate to="/app/inbox" replace />} />
             <Route path="inbox" element={<Inbox />} />
-            <Route path="settings" element={<Settings />} />
             <Route path="settings/connections" element={<Connections />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
 
           {/* Default redirect */}
