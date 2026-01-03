@@ -115,3 +115,14 @@ code {
         border-bottom-color: inherit;
     }
 }
+
+/* Glassmorphism utilities */
+@layer utilities {
+  .glass-card {
+    @apply backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 shadow-2xl shadow-emerald-500/10 rounded-3xl;
+  }
+  
+  .glass-input {
+    @apply bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/50;
+  }
+}
