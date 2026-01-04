@@ -22,6 +22,15 @@ load_dotenv(ROOT_DIR / '.env')
 # Create the main app
 app = FastAPI(title="WhatsApp CRM API")
 
+# Healthcheck endpoint (required for Railway)
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "whatpress-crm"}
+
+@app.get("/")
+async def root():
+    return {"message": "WhatsApp CRM API", "status": "running"}
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
