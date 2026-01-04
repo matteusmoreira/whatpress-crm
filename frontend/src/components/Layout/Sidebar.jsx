@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,19 +9,25 @@ import {
   Menu,
   X,
   Building2,
-  Plug
+  Plug,
+  Search,
+  User
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
+import SearchModal from '../SearchModal';
+import { toast } from '../ui/glass-toaster';
 
 const Sidebar = () => {
   const { user, logout } = useAuthStore();
-  const { sidebarCollapsed, toggleSidebar } = useAppStore();
+  const { sidebarCollapsed, toggleSidebar, conversations } = useAppStore();
   const navigate = useNavigate();
+  const [showSearch, setShowSearch] = useState(false);
 
   const handleLogout = () => {
     logout();
+    toast.success('Até logo!', { description: 'Você foi desconectado com sucesso.' });
     navigate('/sign-in');
   };
 
@@ -37,6 +43,10 @@ const Sidebar = () => {
         { to: '/app/settings/connections', icon: Plug, label: 'Conexões' },
         { to: '/app/settings', icon: Settings, label: 'Configurações' },
       ];
+
+  const handleSelectConversation = (conv) => {
+    navigate('/app/inbox');
+  };
 
   return (
     <>
