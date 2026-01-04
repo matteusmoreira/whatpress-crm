@@ -142,13 +142,12 @@ const Inbox = () => {
   };
 
   const handleFileUpload = async (fileData) => {
-    try {
-      // For now, send the file info as a message
-      await sendMessage(selectedConversation.id, `📎 ${fileData.name}`, fileData.type);
-      setShowFileUpload(false);
-      toast.success('Arquivo enviado!');
-    } catch (error) {
-      toast.error('Erro ao enviar arquivo');
+    // FileUpload component now handles the upload via UploadAPI
+    // Just close the panel and refresh messages
+    setShowFileUpload(false);
+    // Messages will be updated via realtime or we can fetch manually
+    if (selectedConversation?.id) {
+      useAppStore.getState().fetchMessages(selectedConversation.id);
     }
   };
 
