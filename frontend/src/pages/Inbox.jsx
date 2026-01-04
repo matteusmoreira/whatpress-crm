@@ -95,57 +95,6 @@ const Inbox = () => {
     loadAgents();
   }, [tenantId, fetchConversations, fetchConnections, loadAgents]);
 
-  // Subscribe to realtime updates
-  useEffect(() => {
-    if (!tenantId) return;
-
-    const unsubConversations = subscribeToConversations(tenantId, (data) => {
-      if (data.event === 'INSERT') {
-        useAppStore.setState(state => ({
-          conversations: [data.conversation, ...state.conversations.filter(c => c.id !== data.conversation.id)]
-        }));
-        toast.info('Nova conversa!', { description: `${data.conversation.contactName}` });
-      } else if (data.event === 'UPDATE') {
-        useAppStore.setState(state => ({
-          conversations: state.conversations.map(c => 
-            c.id === data.conversation.id ? data.conversation : c
-          )
-        }));
-      }
-    });
-
-    setRealtimeConnected(true);
-
-    return () => {
-      unsubConversations?.();
-      setRealtimeConnected(false);
-    };
-  }, [tenantId]);
-
-  // Subscribe to messages for selected conversation
-  useEffect(() => {
-    if (!selectedConversation?.id) return;
-
-    const unsubMessages = subscribeToMessages(selectedConversation.id, (message) => {
-      useAppStore.setState(state => {
-        const exists = state.messages.some(m => m.id === message.id);
-        if (exists) return state;
-        return { messages: [...state.messages, message] };
-      });
-
-      // Play sound for inbound messages
-      if (message.direction === 'inbound') {
-        try {
-          const audio = new Audio('data:audio/wav;base64,UklGRl9vT19teleXh2dGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU');
-          audio.volume = 0.2;
-          audio.play().catch(() => {});
-        } catch (e) {}
-      }
-    });
-
-    return () => unsubMessages?.();
-  }, [selectedConversation?.id]);
-
   // Auto-scroll to bottom
   useEffect(() => {
     if (messagesEndRef.current) {
