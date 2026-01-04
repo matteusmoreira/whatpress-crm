@@ -5,7 +5,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 // Pages
 import SignIn from "./pages/SignIn";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import Dashboard from "./pages/Dashboard";
 import Inbox from "./pages/Inbox";
+import Automations from "./pages/Automations";
+import Chatbot from "./pages/Chatbot";
+import Templates from "./pages/Templates";
+import KnowledgeBase from "./pages/KnowledgeBase";
 import Connections from "./pages/Connections";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
@@ -87,8 +92,13 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/app/inbox" replace />} />
+                <Route index element={<Navigate to="/app/dashboard" replace />} />
+                <Route path="dashboard" element={<Dashboard />} />
                 <Route path="inbox" element={<Inbox />} />
+                <Route path="automations" element={<Automations />} />
+                <Route path="chatbot" element={<Chatbot />} />
+                <Route path="templates" element={<Templates />} />
+                <Route path="kb" element={<KnowledgeBase />} />
                 <Route path="settings/connections" element={<Connections />} />
                 <Route path="settings/profile" element={<Profile />} />
                 <Route path="settings" element={<Settings />} />

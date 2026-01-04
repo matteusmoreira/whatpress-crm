@@ -11,7 +11,10 @@ import {
   Building2,
   Plug,
   Search,
-  User
+  User,
+  Bot,
+  FileText,
+  BookOpen
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -38,14 +41,19 @@ const Sidebar = () => {
 
   const navItems = isSuperAdmin
     ? [
-        { to: '/superadmin', icon: LayoutDashboard, label: 'Dashboard' },
-        { to: '/superadmin/tenants', icon: Building2, label: 'Tenants' },
-      ]
+      { to: '/superadmin', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/superadmin/tenants', icon: Building2, label: 'Tenants' },
+    ]
     : [
-        { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
-        { to: '/app/settings/connections', icon: Plug, label: 'Conexões' },
-        { to: '/app/settings', icon: Settings, label: 'Configurações' },
-      ];
+      { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
+      { to: '/app/automations', icon: Bot, label: 'Automações' },
+      { to: '/app/chatbot', icon: Bot, label: 'Chatbot' },
+      { to: '/app/templates', icon: FileText, label: 'Templates' },
+      { to: '/app/kb', icon: BookOpen, label: 'Base de Conhecimento' },
+      { to: '/app/settings/connections', icon: Plug, label: 'Conexões' },
+      { to: '/app/settings', icon: Settings, label: 'Configurações' },
+    ];
 
   const handleSelectConversation = (conv) => {
     navigate('/app/inbox');
@@ -86,7 +94,7 @@ const Sidebar = () => {
           'flex flex-col',
           'transition-all duration-300 ease-in-out',
           sidebarCollapsed ? '-translate-x-full lg:translate-x-0 lg:w-20' : 'translate-x-0',
-          theme === 'dark' 
+          theme === 'dark'
             ? 'bg-gradient-to-b from-emerald-900/90 to-emerald-950/95 border-white/10'
             : 'bg-gradient-to-b from-white/90 to-slate-50/95 border-slate-200/50'
         )}
@@ -120,7 +128,7 @@ const Sidebar = () => {
               className={cn(
                 'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
                 'transition-all duration-200 group',
-                theme === 'dark' 
+                theme === 'dark'
                   ? 'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
               )}

@@ -88,6 +88,78 @@ class LabelCreate(BaseModel):
 class AssignAgent(BaseModel):
     agent_id: str
 
+class AutoMessageCreate(BaseModel):
+    type: str  # 'welcome', 'away', 'keyword'
+    name: str
+    message: str
+    trigger_keyword: Optional[str] = None
+    is_active: bool = True
+    schedule_start: Optional[str] = None  # HH:MM format
+    schedule_end: Optional[str] = None
+    schedule_days: Optional[List[int]] = None  # 0-6, 0=Sunday
+    delay_seconds: int = 0
+
+class ChatbotFlowCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    trigger_type: str  # 'keyword', 'new_conversation', 'menu_option'
+    trigger_value: Optional[str] = None
+    is_active: bool = True
+    priority: int = 0
+
+class ChatbotStepCreate(BaseModel):
+    step_order: int
+    step_type: str  # 'message', 'menu', 'wait_input', 'transfer', 'condition'
+    message: Optional[str] = None
+    menu_options: Optional[List[dict]] = None
+    next_step_id: Optional[str] = None
+    transfer_to: Optional[str] = None
+    wait_timeout_seconds: int = 300
+
+class WebhookCreate(BaseModel):
+    name: str
+    url: str
+    secret: Optional[str] = None
+    events: List[str] = []
+    headers: Optional[dict] = None
+    is_active: bool = True
+
+class MessageTemplateCreate(BaseModel):
+    name: str
+    category: str = "general"
+    content: str
+    variables: Optional[List[dict]] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
+    is_active: bool = True
+
+class KBCategoryCreate(BaseModel):
+    name: str
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    display_order: int = 0
+    is_active: bool = True
+
+class KBArticleCreate(BaseModel):
+    category_id: Optional[str] = None
+    title: str
+    slug: Optional[str] = None
+    content: str
+    excerpt: Optional[str] = None
+    keywords: List[str] = []
+    is_published: bool = False
+    is_featured: bool = False
+
+class KBFaqCreate(BaseModel):
+    category_id: Optional[str] = None
+    question: str
+    answer: str
+    keywords: List[str] = []
+    display_order: int = 0
+    is_active: bool = True
+
 class TenantRegister(BaseModel):
     tenant_name: str
     tenant_slug: str
@@ -730,6 +802,58 @@ async def send_typing_indicator(instance_name: str, phone: str, payload: dict = 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# ==================== MESSAGE REACTIONS ====================
+
+@api_router.get("/messages/{message_id}/reactions")
+async def get_message_reactions(message_id: str, payload: dict = Depends(verify_token)):
+    """Get reactions for a message"""
+    try:
+        result = supabase.table('message_reactions').select('*, users(name, avatar)').eq('message_id', message_id).execute()
+        return [{
+            'id': r['id'],
+            'emoji': r['emoji'],
+            'userId': r['user_id'],
+            'userName': r['users']['name'] if r.get('users') else None,
+            'userAvatar': r['users']['avatar'] if r.get('users') else None
+        } for r in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting reactions: {e}")
+        return []
+
+@api_router.post("/messages/{message_id}/reactions")
+async def add_message_reaction(message_id: str, emoji: str, payload: dict = Depends(verify_token)):
+    """Add a reaction to a message"""
+    try:
+        user_id = payload.get('user_id')
+        
+        # Check if user already reacted with this emoji
+        existing = supabase.table('message_reactions').select('id').eq('message_id', message_id).eq('user_id', user_id).eq('emoji', emoji).execute()
+        
+        if existing.data:
+            # Remove the reaction (toggle)
+            supabase.table('message_reactions').delete().eq('id', existing.data[0]['id']).execute()
+            return {"success": True, "action": "removed"}
+        else:
+            # Add the reaction
+            supabase.table('message_reactions').insert({
+                'message_id': message_id,
+                'user_id': user_id,
+                'emoji': emoji
+            }).execute()
+            return {"success": True, "action": "added"}
+    except Exception as e:
+        logger.error(f"Error adding reaction: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/messages/{message_id}/reactions/{reaction_id}")
+async def remove_message_reaction(message_id: str, reaction_id: str, payload: dict = Depends(verify_token)):
+    """Remove a reaction from a message"""
+    try:
+        supabase.table('message_reactions').delete().eq('id', reaction_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ==================== WEBHOOKS ====================
 
 @api_router.post("/webhooks/evolution/{instance_name}")
@@ -850,6 +974,513 @@ async def delete_quick_reply(reply_id: str, payload: dict = Depends(verify_token
     await QuickRepliesService.delete_quick_reply(reply_id)
     return {"success": True}
 
+# ==================== AUTO MESSAGES ====================
+
+@api_router.get("/auto-messages")
+async def get_auto_messages(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get all auto messages for tenant"""
+    try:
+        result = supabase.table('auto_messages').select('*').eq('tenant_id', tenant_id).order('created_at').execute()
+        return [{
+            'id': m['id'],
+            'type': m['type'],
+            'name': m['name'],
+            'message': m['message'],
+            'triggerKeyword': m.get('trigger_keyword'),
+            'isActive': m['is_active'],
+            'scheduleStart': m.get('schedule_start'),
+            'scheduleEnd': m.get('schedule_end'),
+            'scheduleDays': m.get('schedule_days'),
+            'delaySeconds': m.get('delay_seconds', 0),
+            'createdAt': m['created_at']
+        } for m in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting auto messages: {e}")
+        return []
+
+@api_router.post("/auto-messages")
+async def create_auto_message(tenant_id: str, data: AutoMessageCreate, payload: dict = Depends(verify_token)):
+    """Create a new auto message"""
+    try:
+        msg_data = {
+            'tenant_id': tenant_id,
+            'type': data.type,
+            'name': data.name,
+            'message': data.message,
+            'trigger_keyword': data.trigger_keyword,
+            'is_active': data.is_active,
+            'schedule_start': data.schedule_start,
+            'schedule_end': data.schedule_end,
+            'schedule_days': data.schedule_days,
+            'delay_seconds': data.delay_seconds
+        }
+        result = supabase.table('auto_messages').insert(msg_data).execute()
+        
+        if result.data:
+            m = result.data[0]
+            return {
+                'id': m['id'],
+                'type': m['type'],
+                'name': m['name'],
+                'message': m['message'],
+                'triggerKeyword': m.get('trigger_keyword'),
+                'isActive': m['is_active'],
+                'createdAt': m['created_at']
+            }
+        
+        raise HTTPException(status_code=400, detail="Erro ao criar mensagem automática")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/auto-messages/{message_id}")
+async def update_auto_message(message_id: str, data: AutoMessageCreate, payload: dict = Depends(verify_token)):
+    """Update an auto message"""
+    try:
+        update_data = {
+            'name': data.name,
+            'message': data.message,
+            'trigger_keyword': data.trigger_keyword,
+            'is_active': data.is_active,
+            'schedule_start': data.schedule_start,
+            'schedule_end': data.schedule_end,
+            'schedule_days': data.schedule_days,
+            'delay_seconds': data.delay_seconds,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        result = supabase.table('auto_messages').update(update_data).eq('id', message_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+        
+        return {"success": True, "id": message_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/auto-messages/{message_id}")
+async def delete_auto_message(message_id: str, payload: dict = Depends(verify_token)):
+    """Delete an auto message"""
+    try:
+        supabase.table('auto_messages').delete().eq('id', message_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.patch("/auto-messages/{message_id}/toggle")
+async def toggle_auto_message(message_id: str, payload: dict = Depends(verify_token)):
+    """Toggle auto message active status"""
+    try:
+        # Get current status
+        msg = supabase.table('auto_messages').select('is_active').eq('id', message_id).execute()
+        if not msg.data:
+            raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+        
+        new_status = not msg.data[0]['is_active']
+        supabase.table('auto_messages').update({'is_active': new_status}).eq('id', message_id).execute()
+        
+        return {"success": True, "isActive": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== CHATBOT FLOWS ====================
+
+@api_router.get("/chatbot/flows")
+async def get_chatbot_flows(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get all chatbot flows for tenant"""
+    try:
+        result = supabase.table('chatbot_flows').select('*').eq('tenant_id', tenant_id).order('priority', desc=True).execute()
+        flows = []
+        for f in result.data or []:
+            # Get steps count
+            steps = supabase.table('chatbot_steps').select('id', count='exact').eq('flow_id', f['id']).execute()
+            flows.append({
+                'id': f['id'],
+                'name': f['name'],
+                'description': f.get('description'),
+                'triggerType': f['trigger_type'],
+                'triggerValue': f.get('trigger_value'),
+                'isActive': f['is_active'],
+                'priority': f['priority'],
+                'stepsCount': steps.count or 0,
+                'createdAt': f['created_at']
+            })
+        return flows
+    except Exception as e:
+        logger.error(f"Error getting chatbot flows: {e}")
+        return []
+
+@api_router.post("/chatbot/flows")
+async def create_chatbot_flow(tenant_id: str, data: ChatbotFlowCreate, payload: dict = Depends(verify_token)):
+    """Create a new chatbot flow"""
+    try:
+        flow_data = {
+            'tenant_id': tenant_id,
+            'name': data.name,
+            'description': data.description,
+            'trigger_type': data.trigger_type,
+            'trigger_value': data.trigger_value,
+            'is_active': data.is_active,
+            'priority': data.priority
+        }
+        result = supabase.table('chatbot_flows').insert(flow_data).execute()
+        
+        if result.data:
+            f = result.data[0]
+            return {
+                'id': f['id'],
+                'name': f['name'],
+                'triggerType': f['trigger_type'],
+                'isActive': f['is_active']
+            }
+        raise HTTPException(status_code=400, detail="Erro ao criar fluxo")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/chatbot/flows/{flow_id}")
+async def get_chatbot_flow(flow_id: str, payload: dict = Depends(verify_token)):
+    """Get a chatbot flow with its steps"""
+    try:
+        flow = supabase.table('chatbot_flows').select('*').eq('id', flow_id).execute()
+        if not flow.data:
+            raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+        
+        f = flow.data[0]
+        steps = supabase.table('chatbot_steps').select('*').eq('flow_id', flow_id).order('step_order').execute()
+        
+        return {
+            'id': f['id'],
+            'name': f['name'],
+            'description': f.get('description'),
+            'triggerType': f['trigger_type'],
+            'triggerValue': f.get('trigger_value'),
+            'isActive': f['is_active'],
+            'priority': f['priority'],
+            'steps': [{
+                'id': s['id'],
+                'stepOrder': s['step_order'],
+                'stepType': s['step_type'],
+                'message': s.get('message'),
+                'menuOptions': s.get('menu_options'),
+                'nextStepId': s.get('next_step_id'),
+                'transferTo': s.get('transfer_to'),
+                'waitTimeoutSeconds': s.get('wait_timeout_seconds', 300)
+            } for s in steps.data] if steps.data else []
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/chatbot/flows/{flow_id}")
+async def update_chatbot_flow(flow_id: str, data: ChatbotFlowCreate, payload: dict = Depends(verify_token)):
+    """Update a chatbot flow"""
+    try:
+        update_data = {
+            'name': data.name,
+            'description': data.description,
+            'trigger_type': data.trigger_type,
+            'trigger_value': data.trigger_value,
+            'is_active': data.is_active,
+            'priority': data.priority,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        result = supabase.table('chatbot_flows').update(update_data).eq('id', flow_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+        
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/chatbot/flows/{flow_id}")
+async def delete_chatbot_flow(flow_id: str, payload: dict = Depends(verify_token)):
+    """Delete a chatbot flow"""
+    try:
+        # Steps are deleted by CASCADE
+        supabase.table('chatbot_flows').delete().eq('id', flow_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.patch("/chatbot/flows/{flow_id}/toggle")
+async def toggle_chatbot_flow(flow_id: str, payload: dict = Depends(verify_token)):
+    """Toggle chatbot flow active status"""
+    try:
+        flow = supabase.table('chatbot_flows').select('is_active').eq('id', flow_id).execute()
+        if not flow.data:
+            raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+        
+        new_status = not flow.data[0]['is_active']
+        supabase.table('chatbot_flows').update({'is_active': new_status}).eq('id', flow_id).execute()
+        
+        return {"success": True, "isActive": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Chatbot Steps
+@api_router.post("/chatbot/flows/{flow_id}/steps")
+async def add_chatbot_step(flow_id: str, data: ChatbotStepCreate, payload: dict = Depends(verify_token)):
+    """Add a step to a chatbot flow"""
+    try:
+        step_data = {
+            'flow_id': flow_id,
+            'step_order': data.step_order,
+            'step_type': data.step_type,
+            'message': data.message,
+            'menu_options': data.menu_options,
+            'next_step_id': data.next_step_id,
+            'transfer_to': data.transfer_to,
+            'wait_timeout_seconds': data.wait_timeout_seconds
+        }
+        result = supabase.table('chatbot_steps').insert(step_data).execute()
+        
+        if result.data:
+            s = result.data[0]
+            return {
+                'id': s['id'],
+                'stepOrder': s['step_order'],
+                'stepType': s['step_type']
+            }
+        raise HTTPException(status_code=400, detail="Erro ao criar passo")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/chatbot/steps/{step_id}")
+async def update_chatbot_step(step_id: str, data: ChatbotStepCreate, payload: dict = Depends(verify_token)):
+    """Update a chatbot step"""
+    try:
+        update_data = {
+            'step_order': data.step_order,
+            'step_type': data.step_type,
+            'message': data.message,
+            'menu_options': data.menu_options,
+            'next_step_id': data.next_step_id,
+            'transfer_to': data.transfer_to,
+            'wait_timeout_seconds': data.wait_timeout_seconds
+        }
+        result = supabase.table('chatbot_steps').update(update_data).eq('id', step_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Passo não encontrado")
+        
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/chatbot/steps/{step_id}")
+async def delete_chatbot_step(step_id: str, payload: dict = Depends(verify_token)):
+    """Delete a chatbot step"""
+    try:
+        supabase.table('chatbot_steps').delete().eq('id', step_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== WEBHOOKS ====================
+
+@api_router.get("/webhooks")
+async def get_webhooks(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get all webhooks for tenant"""
+    try:
+        result = supabase.table('custom_webhooks').select('*').eq('tenant_id', tenant_id).order('created_at').execute()
+        return [{
+            'id': w['id'],
+            'name': w['name'],
+            'url': w['url'],
+            'events': w.get('events', []),
+            'isActive': w['is_active'],
+            'lastTriggeredAt': w.get('last_triggered_at'),
+            'lastStatus': w.get('last_status'),
+            'failureCount': w.get('failure_count', 0),
+            'createdAt': w['created_at']
+        } for w in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting webhooks: {e}")
+        return []
+
+@api_router.post("/webhooks")
+async def create_webhook(tenant_id: str, data: WebhookCreate, payload: dict = Depends(verify_token)):
+    """Create a new webhook"""
+    try:
+        webhook_data = {
+            'tenant_id': tenant_id,
+            'name': data.name,
+            'url': data.url,
+            'secret': data.secret,
+            'events': data.events,
+            'headers': data.headers or {},
+            'is_active': data.is_active
+        }
+        result = supabase.table('custom_webhooks').insert(webhook_data).execute()
+        
+        if result.data:
+            return {'id': result.data[0]['id'], 'name': data.name}
+        raise HTTPException(status_code=400, detail="Erro ao criar webhook")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/webhooks/{webhook_id}")
+async def update_webhook(webhook_id: str, data: WebhookCreate, payload: dict = Depends(verify_token)):
+    """Update a webhook"""
+    try:
+        update_data = {
+            'name': data.name,
+            'url': data.url,
+            'secret': data.secret,
+            'events': data.events,
+            'headers': data.headers or {},
+            'is_active': data.is_active,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        supabase.table('custom_webhooks').update(update_data).eq('id', webhook_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/webhooks/{webhook_id}")
+async def delete_webhook(webhook_id: str, payload: dict = Depends(verify_token)):
+    """Delete a webhook"""
+    try:
+        supabase.table('custom_webhooks').delete().eq('id', webhook_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.patch("/webhooks/{webhook_id}/toggle")
+async def toggle_webhook(webhook_id: str, payload: dict = Depends(verify_token)):
+    """Toggle webhook active status"""
+    try:
+        wh = supabase.table('custom_webhooks').select('is_active').eq('id', webhook_id).execute()
+        if not wh.data:
+            raise HTTPException(status_code=404, detail="Webhook não encontrado")
+        
+        new_status = not wh.data[0]['is_active']
+        supabase.table('custom_webhooks').update({'is_active': new_status}).eq('id', webhook_id).execute()
+        
+        return {"success": True, "isActive": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== MESSAGE TEMPLATES ====================
+
+@api_router.get("/templates")
+async def get_templates(tenant_id: str, category: str = None, payload: dict = Depends(verify_token)):
+    """Get all message templates for tenant"""
+    try:
+        query = supabase.table('message_templates').select('*').eq('tenant_id', tenant_id)
+        if category:
+            query = query.eq('category', category)
+        result = query.order('usage_count', desc=True).execute()
+        
+        return [{
+            'id': t['id'],
+            'name': t['name'],
+            'category': t['category'],
+            'content': t['content'],
+            'variables': t.get('variables', []),
+            'mediaUrl': t.get('media_url'),
+            'mediaType': t.get('media_type'),
+            'usageCount': t.get('usage_count', 0),
+            'isActive': t['is_active'],
+            'createdAt': t['created_at']
+        } for t in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting templates: {e}")
+        return []
+
+@api_router.post("/templates")
+async def create_template(tenant_id: str, data: MessageTemplateCreate, payload: dict = Depends(verify_token)):
+    """Create a new message template"""
+    try:
+        template_data = {
+            'tenant_id': tenant_id,
+            'name': data.name,
+            'category': data.category,
+            'content': data.content,
+            'variables': data.variables or [],
+            'media_url': data.media_url,
+            'media_type': data.media_type,
+            'is_active': data.is_active
+        }
+        result = supabase.table('message_templates').insert(template_data).execute()
+        
+        if result.data:
+            return {'id': result.data[0]['id'], 'name': data.name}
+        raise HTTPException(status_code=400, detail="Erro ao criar template")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/templates/{template_id}")
+async def update_template(template_id: str, data: MessageTemplateCreate, payload: dict = Depends(verify_token)):
+    """Update a message template"""
+    try:
+        update_data = {
+            'name': data.name,
+            'category': data.category,
+            'content': data.content,
+            'variables': data.variables or [],
+            'media_url': data.media_url,
+            'media_type': data.media_type,
+            'is_active': data.is_active,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        supabase.table('message_templates').update(update_data).eq('id', template_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/templates/{template_id}")
+async def delete_template(template_id: str, payload: dict = Depends(verify_token)):
+    """Delete a message template"""
+    try:
+        supabase.table('message_templates').delete().eq('id', template_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/templates/{template_id}/use")
+async def use_template(template_id: str, payload: dict = Depends(verify_token)):
+    """Increment template usage count and return content"""
+    try:
+        # Get template
+        t = supabase.table('message_templates').select('*').eq('id', template_id).execute()
+        if not t.data:
+            raise HTTPException(status_code=404, detail="Template não encontrado")
+        
+        # Increment usage
+        supabase.table('message_templates').update({
+            'usage_count': (t.data[0].get('usage_count', 0) or 0) + 1
+        }).eq('id', template_id).execute()
+        
+        return {
+            'content': t.data[0]['content'],
+            'variables': t.data[0].get('variables', []),
+            'mediaUrl': t.data[0].get('media_url'),
+            'mediaType': t.data[0].get('media_type')
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @api_router.get("/labels")
 async def get_labels(tenant_id: str, payload: dict = Depends(verify_token)):
     """Get labels for tenant with usage count"""
@@ -954,7 +1585,261 @@ async def delete_label(label_id: str, payload: dict = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# ==================== AGENTS ====================
+# ==================== KNOWLEDGE BASE ====================
+
+def slugify(text: str) -> str:
+    """Convert text to URL-friendly slug"""
+    import re
+    text = text.lower().strip()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[\s_-]+', '-', text)
+    return text
+
+# KB Categories
+@api_router.get("/kb/categories")
+async def get_kb_categories(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get all KB categories"""
+    try:
+        result = supabase.table('kb_categories').select('*').eq('tenant_id', tenant_id).eq('is_active', True).order('display_order').execute()
+        return [{
+            'id': c['id'],
+            'name': c['name'],
+            'slug': c['slug'],
+            'description': c.get('description'),
+            'icon': c.get('icon'),
+            'color': c.get('color'),
+            'displayOrder': c['display_order']
+        } for c in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting KB categories: {e}")
+        return []
+
+@api_router.post("/kb/categories")
+async def create_kb_category(tenant_id: str, data: KBCategoryCreate, payload: dict = Depends(verify_token)):
+    """Create a KB category"""
+    try:
+        cat_data = {
+            'tenant_id': tenant_id,
+            'name': data.name,
+            'slug': data.slug or slugify(data.name),
+            'description': data.description,
+            'icon': data.icon,
+            'color': data.color,
+            'display_order': data.display_order,
+            'is_active': data.is_active
+        }
+        result = supabase.table('kb_categories').insert(cat_data).execute()
+        if result.data:
+            return {'id': result.data[0]['id'], 'name': data.name}
+        raise HTTPException(status_code=400, detail="Erro ao criar categoria")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/kb/categories/{category_id}")
+async def delete_kb_category(category_id: str, payload: dict = Depends(verify_token)):
+    """Delete a KB category"""
+    try:
+        supabase.table('kb_categories').delete().eq('id', category_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# KB Articles
+@api_router.get("/kb/articles")
+async def get_kb_articles(tenant_id: str, category_id: str = None, published_only: bool = True, payload: dict = Depends(verify_token)):
+    """Get KB articles"""
+    try:
+        query = supabase.table('kb_articles').select('*, kb_categories(name, slug)').eq('tenant_id', tenant_id)
+        if category_id:
+            query = query.eq('category_id', category_id)
+        if published_only:
+            query = query.eq('is_published', True)
+        result = query.order('created_at', desc=True).execute()
+        
+        return [{
+            'id': a['id'],
+            'title': a['title'],
+            'slug': a['slug'],
+            'excerpt': a.get('excerpt'),
+            'content': a['content'],
+            'category': a.get('kb_categories'),
+            'keywords': a.get('keywords', []),
+            'views': a.get('views', 0),
+            'helpfulYes': a.get('helpful_yes', 0),
+            'helpfulNo': a.get('helpful_no', 0),
+            'isPublished': a['is_published'],
+            'isFeatured': a.get('is_featured', False),
+            'createdAt': a['created_at']
+        } for a in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting KB articles: {e}")
+        return []
+
+@api_router.post("/kb/articles")
+async def create_kb_article(tenant_id: str, data: KBArticleCreate, payload: dict = Depends(verify_token)):
+    """Create a KB article"""
+    try:
+        article_data = {
+            'tenant_id': tenant_id,
+            'category_id': data.category_id,
+            'title': data.title,
+            'slug': data.slug or slugify(data.title),
+            'content': data.content,
+            'excerpt': data.excerpt or data.content[:200],
+            'keywords': data.keywords,
+            'is_published': data.is_published,
+            'is_featured': data.is_featured,
+            'author_id': payload.get('user_id'),
+            'published_at': datetime.utcnow().isoformat() if data.is_published else None
+        }
+        result = supabase.table('kb_articles').insert(article_data).execute()
+        if result.data:
+            return {'id': result.data[0]['id'], 'title': data.title}
+        raise HTTPException(status_code=400, detail="Erro ao criar artigo")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/kb/articles/{article_id}")
+async def update_kb_article(article_id: str, data: KBArticleCreate, payload: dict = Depends(verify_token)):
+    """Update a KB article"""
+    try:
+        update_data = {
+            'category_id': data.category_id,
+            'title': data.title,
+            'slug': data.slug or slugify(data.title),
+            'content': data.content,
+            'excerpt': data.excerpt or data.content[:200],
+            'keywords': data.keywords,
+            'is_published': data.is_published,
+            'is_featured': data.is_featured,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        if data.is_published:
+            # Check if first publish
+            existing = supabase.table('kb_articles').select('published_at').eq('id', article_id).execute()
+            if existing.data and not existing.data[0].get('published_at'):
+                update_data['published_at'] = datetime.utcnow().isoformat()
+        
+        supabase.table('kb_articles').update(update_data).eq('id', article_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/kb/articles/{article_id}")
+async def delete_kb_article(article_id: str, payload: dict = Depends(verify_token)):
+    """Delete a KB article"""
+    try:
+        supabase.table('kb_articles').delete().eq('id', article_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/kb/articles/{article_id}/view")
+async def increment_article_view(article_id: str):
+    """Increment article view count"""
+    try:
+        article = supabase.table('kb_articles').select('views').eq('id', article_id).execute()
+        if article.data:
+            supabase.table('kb_articles').update({
+                'views': (article.data[0].get('views', 0) or 0) + 1
+            }).eq('id', article_id).execute()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False}
+
+@api_router.post("/kb/articles/{article_id}/feedback")
+async def article_feedback(article_id: str, helpful: bool, payload: dict = Depends(verify_token)):
+    """Submit article feedback"""
+    try:
+        article = supabase.table('kb_articles').select('helpful_yes, helpful_no').eq('id', article_id).execute()
+        if article.data:
+            field = 'helpful_yes' if helpful else 'helpful_no'
+            supabase.table('kb_articles').update({
+                field: (article.data[0].get(field, 0) or 0) + 1
+            }).eq('id', article_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# KB FAQs
+@api_router.get("/kb/faqs")
+async def get_kb_faqs(tenant_id: str, category_id: str = None, payload: dict = Depends(verify_token)):
+    """Get FAQs"""
+    try:
+        query = supabase.table('kb_faqs').select('*, kb_categories(name)').eq('tenant_id', tenant_id).eq('is_active', True)
+        if category_id:
+            query = query.eq('category_id', category_id)
+        result = query.order('display_order').execute()
+        
+        return [{
+            'id': f['id'],
+            'question': f['question'],
+            'answer': f['answer'],
+            'category': f.get('kb_categories'),
+            'keywords': f.get('keywords', []),
+            'usageCount': f.get('usage_count', 0)
+        } for f in result.data] if result.data else []
+    except Exception as e:
+        logger.error(f"Error getting FAQs: {e}")
+        return []
+
+@api_router.post("/kb/faqs")
+async def create_kb_faq(tenant_id: str, data: KBFaqCreate, payload: dict = Depends(verify_token)):
+    """Create a FAQ"""
+    try:
+        faq_data = {
+            'tenant_id': tenant_id,
+            'category_id': data.category_id,
+            'question': data.question,
+            'answer': data.answer,
+            'keywords': data.keywords,
+            'display_order': data.display_order,
+            'is_active': data.is_active
+        }
+        result = supabase.table('kb_faqs').insert(faq_data).execute()
+        if result.data:
+            return {'id': result.data[0]['id']}
+        raise HTTPException(status_code=400, detail="Erro ao criar FAQ")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/kb/faqs/{faq_id}")
+async def delete_kb_faq(faq_id: str, payload: dict = Depends(verify_token)):
+    """Delete a FAQ"""
+    try:
+        supabase.table('kb_faqs').delete().eq('id', faq_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# KB Search
+@api_router.get("/kb/search")
+async def search_kb(tenant_id: str, q: str, payload: dict = Depends(verify_token)):
+    """Search KB articles and FAQs"""
+    try:
+        query_lower = q.lower()
+        
+        # Search articles
+        articles = supabase.table('kb_articles').select('id, title, excerpt, slug').eq('tenant_id', tenant_id).eq('is_published', True).ilike('title', f'%{query_lower}%').limit(5).execute()
+        
+        # Search FAQs
+        faqs = supabase.table('kb_faqs').select('id, question, answer').eq('tenant_id', tenant_id).eq('is_active', True).ilike('question', f'%{query_lower}%').limit(5).execute()
+        
+        # Log search
+        supabase.table('kb_search_logs').insert({
+            'tenant_id': tenant_id,
+            'query': q,
+            'results_count': len(articles.data or []) + len(faqs.data or []),
+            'user_id': payload.get('user_id')
+        }).execute()
+        
+        return {
+            'articles': [{'id': a['id'], 'title': a['title'], 'excerpt': a.get('excerpt'), 'slug': a['slug']} for a in articles.data] if articles.data else [],
+            'faqs': [{'id': f['id'], 'question': f['question'], 'answer': f['answer'][:200]} for f in faqs.data] if faqs.data else []
+        }
+    except Exception as e:
+        logger.error(f"Error searching KB: {e}")
+        return {'articles': [], 'faqs': []}
 
 @api_router.get("/agents")
 async def get_agents(tenant_id: str, payload: dict = Depends(verify_token)):
@@ -1058,6 +1943,13 @@ async def get_analytics_overview(tenant_id: str, payload: dict = Depends(verify_
     
     tenant = supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
     
+    # Get today's message count
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    today_messages = supabase.table('messages').select('id', count='exact').gte('timestamp', today).execute()
+    
+    # Get active agents count
+    active_agents = supabase.table('users').select('id', count='exact').eq('tenant_id', tenant_id).eq('status', 'online').execute()
+    
     return {
         'conversations': {
             'total': conversations.count or 0,
@@ -1067,9 +1959,258 @@ async def get_analytics_overview(tenant_id: str, payload: dict = Depends(verify_
         },
         'messages': {
             'thisMonth': tenant.data[0]['messages_this_month'] if tenant.data else 0,
+            'today': today_messages.count or 0,
             'avgPerDay': (tenant.data[0]['messages_this_month'] // 30) if tenant.data else 0
+        },
+        'agents': {
+            'online': active_agents.count or 0
         }
     }
+
+@api_router.get("/analytics/messages-by-day")
+async def get_messages_by_day(tenant_id: str, days: int = 7, payload: dict = Depends(verify_token)):
+    """Get message count per day for the last N days"""
+    try:
+        from datetime import timedelta
+        
+        data = []
+        for i in range(days - 1, -1, -1):
+            day = datetime.utcnow() - timedelta(days=i)
+            start = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            end = day.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
+            
+            # Get inbound messages
+            inbound = supabase.table('messages').select('id', count='exact').gte('timestamp', start).lte('timestamp', end).eq('direction', 'inbound').execute()
+            
+            # Get outbound messages
+            outbound = supabase.table('messages').select('id', count='exact').gte('timestamp', start).lte('timestamp', end).eq('direction', 'outbound').execute()
+            
+            data.append({
+                'date': day.strftime('%Y-%m-%d'),
+                'day': day.strftime('%a'),
+                'inbound': inbound.count or 0,
+                'outbound': outbound.count or 0,
+                'total': (inbound.count or 0) + (outbound.count or 0)
+            })
+        
+        return data
+    except Exception as e:
+        logger.error(f"Error getting messages by day: {e}")
+        return []
+
+@api_router.get("/analytics/agent-performance")
+async def get_agent_performance(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get performance metrics for each agent"""
+    try:
+        agents = supabase.table('users').select('id, name, avatar, status').eq('tenant_id', tenant_id).in_('role', ['admin', 'agent']).execute()
+        
+        performance = []
+        for agent in agents.data or []:
+            # Get assigned conversations
+            assigned = supabase.table('conversations').select('id', count='exact').eq('assigned_to', agent['id']).execute()
+            
+            # Get resolved conversations
+            resolved = supabase.table('conversations').select('id', count='exact').eq('assigned_to', agent['id']).eq('status', 'resolved').execute()
+            
+            # Get messages sent by this agent (outbound)
+            messages_sent = supabase.table('messages').select('id', count='exact').eq('direction', 'outbound').execute()
+            
+            performance.append({
+                'id': agent['id'],
+                'name': agent['name'],
+                'avatar': agent['avatar'],
+                'status': agent.get('status', 'offline'),
+                'assignedConversations': assigned.count or 0,
+                'resolvedConversations': resolved.count or 0,
+                'resolutionRate': round((resolved.count or 0) / max(assigned.count or 1, 1) * 100, 1)
+            })
+        
+        return performance
+    except Exception as e:
+        logger.error(f"Error getting agent performance: {e}")
+        return []
+
+@api_router.get("/analytics/conversations-by-status")
+async def get_conversations_by_status(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get conversation distribution by status"""
+    try:
+        statuses = ['open', 'pending', 'resolved']
+        data = []
+        
+        for status in statuses:
+            count = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('status', status).execute()
+            data.append({
+                'status': status,
+                'count': count.count or 0,
+                'label': {'open': 'Abertas', 'pending': 'Pendentes', 'resolved': 'Resolvidas'}.get(status, status)
+            })
+        
+        return data
+    except Exception as e:
+        logger.error(f"Error getting conversations by status: {e}")
+        return []
+
+# ==================== REPORTS EXPORT ====================
+
+@api_router.get("/reports/conversations/csv")
+async def export_conversations_csv(
+    tenant_id: str, 
+    status: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    payload: dict = Depends(verify_token)
+):
+    """Export conversations as CSV"""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    try:
+        query = supabase.table('conversations').select(
+            'id, contact_name, contact_phone, status, created_at, last_message_at, unread_count, assigned_to'
+        ).eq('tenant_id', tenant_id)
+        
+        if status:
+            query = query.eq('status', status)
+        if date_from:
+            query = query.gte('created_at', date_from)
+        if date_to:
+            query = query.lte('created_at', date_to)
+        
+        result = query.order('last_message_at', desc=True).execute()
+        
+        # Create CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            'ID', 'Nome do Contato', 'Telefone', 'Status', 
+            'Data Criação', 'Última Mensagem', 'Não Lidas', 'Agente Atribuído'
+        ])
+        
+        # Data
+        for conv in result.data or []:
+            writer.writerow([
+                conv['id'],
+                conv['contact_name'],
+                conv['contact_phone'],
+                conv['status'],
+                conv['created_at'],
+                conv['last_message_at'],
+                conv['unread_count'],
+                conv.get('assigned_to', '-')
+            ])
+        
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=conversas_{datetime.utcnow().strftime('%Y%m%d')}.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting conversations: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/reports/messages/csv")
+async def export_messages_csv(
+    conversation_id: str,
+    payload: dict = Depends(verify_token)
+):
+    """Export messages from a conversation as CSV"""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    try:
+        # Get conversation info
+        conv = supabase.table('conversations').select('contact_name, contact_phone').eq('id', conversation_id).execute()
+        contact_name = conv.data[0]['contact_name'] if conv.data else 'Contato'
+        
+        # Get messages
+        result = supabase.table('messages').select(
+            'id, content, type, direction, status, timestamp'
+        ).eq('conversation_id', conversation_id).order('timestamp').execute()
+        
+        # Create CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow(['Data/Hora', 'Direção', 'Tipo', 'Conteúdo', 'Status'])
+        
+        # Data
+        for msg in result.data or []:
+            writer.writerow([
+                msg['timestamp'],
+                'Enviada' if msg['direction'] == 'outbound' else 'Recebida',
+                msg['type'],
+                msg['content'][:500] if msg['content'] else '',
+                msg['status']
+            ])
+        
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=mensagens_{contact_name}_{datetime.utcnow().strftime('%Y%m%d')}.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting messages: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/reports/agents/csv")
+async def export_agents_report_csv(
+    tenant_id: str,
+    payload: dict = Depends(verify_token)
+):
+    """Export agent performance report as CSV"""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    try:
+        agents = supabase.table('users').select('id, name, email, role, status').eq('tenant_id', tenant_id).in_('role', ['admin', 'agent']).execute()
+        
+        # Create CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            'Nome', 'Email', 'Papel', 'Status', 
+            'Conversas Atribuídas', 'Conversas Resolvidas', 'Taxa de Resolução'
+        ])
+        
+        # Data
+        for agent in agents.data or []:
+            assigned = supabase.table('conversations').select('id', count='exact').eq('assigned_to', agent['id']).execute()
+            resolved = supabase.table('conversations').select('id', count='exact').eq('assigned_to', agent['id']).eq('status', 'resolved').execute()
+            
+            rate = round((resolved.count or 0) / max(assigned.count or 1, 1) * 100, 1)
+            
+            writer.writerow([
+                agent['name'],
+                agent['email'],
+                agent['role'],
+                agent.get('status', 'offline'),
+                assigned.count or 0,
+                resolved.count or 0,
+                f"{rate}%"
+            ])
+        
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=agentes_{datetime.utcnow().strftime('%Y%m%d')}.csv"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting agents report: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== EVOLUTION API INSTANCES ====================
 

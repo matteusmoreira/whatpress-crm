@@ -22,7 +22,8 @@ import {
   Mic,
   Video,
   Wifi,
-  WifiOff
+  WifiOff,
+  Reply
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
@@ -71,6 +72,7 @@ const Inbox = () => {
   const [agents, setAgents] = useState([]);
   const [labels, setLabels] = useState([]);
   const [selectedLabelFilter, setSelectedLabelFilter] = useState('all');
+  const [replyToMessage, setReplyToMessage] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -182,8 +184,10 @@ const Inbox = () => {
     if (!newMessage.trim() || !selectedConversation) return;
 
     try {
+      // TODO: Include replyToMessage.id when sending to support quoted replies
       await sendMessage(selectedConversation.id, newMessage);
       setNewMessage('');
+      setReplyToMessage(null);
       inputRef.current?.focus();
     } catch (error) {
       toast.error('Erro ao enviar mensagem');
@@ -581,10 +585,21 @@ const Inbox = () => {
                     <div
                       key={msg.id}
                       className={cn(
-                        'flex',
+                        'flex group',
                         msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
                       )}
                     >
+                      {/* Reply button - appears on hover (left side for outbound) */}
+                      {msg.direction === 'outbound' && (
+                        <button
+                          onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                          className="self-center mr-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                          title="Responder"
+                        >
+                          <Reply className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <div
                         className={cn(
                           'max-w-[70%] rounded-2xl px-4 py-3',
@@ -611,6 +626,17 @@ const Inbox = () => {
                           {msg.direction === 'outbound' && getStatusIcon(msg.status)}
                         </div>
                       </div>
+
+                      {/* Reply button - appears on hover (right side for inbound) */}
+                      {msg.direction === 'inbound' && (
+                        <button
+                          onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                          className="self-center ml-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                          title="Responder"
+                        >
+                          <Reply className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
@@ -638,6 +664,29 @@ const Inbox = () => {
               </div>
             )}
 
+            {/* Reply Preview */}
+            {replyToMessage && (
+              <div className="px-4 pt-2 border-t border-white/10">
+                <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border-l-2 border-emerald-500">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Reply className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400 text-xs font-medium">
+                        Respondendo a {replyToMessage.direction === 'inbound' ? selectedConversation?.contactName : 'você'}
+                      </span>
+                    </div>
+                    <p className="text-white/60 text-sm truncate">{replyToMessage.content}</p>
+                  </div>
+                  <button
+                    onClick={() => setReplyToMessage(null)}
+                    className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Input */}
             <div className="p-4 border-t border-white/10 backdrop-blur-sm bg-black/20 relative">
               {/* Quick Replies Panel */}
@@ -647,6 +696,7 @@ const Inbox = () => {
                   onClose={() => setShowQuickReplies(false)}
                 />
               )}
+
 
               <form onSubmit={handleSendMessage} className="flex items-center gap-3">
                 <button

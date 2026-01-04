@@ -168,6 +168,21 @@ export const MessagesAPI = {
       type
     });
     return response.data;
+  },
+
+  async getReactions(messageId) {
+    const response = await apiClient.get(`/messages/${messageId}/reactions`);
+    return response.data;
+  },
+
+  async addReaction(messageId, emoji) {
+    const response = await apiClient.post(`/messages/${messageId}/reactions`, null, { params: { emoji } });
+    return response.data;
+  },
+
+  async removeReaction(messageId, reactionId) {
+    const response = await apiClient.delete(`/messages/${messageId}/reactions/${reactionId}`);
+    return response.data;
   }
 };
 
@@ -233,6 +248,216 @@ export const LabelsAPI = {
   }
 };
 
+// Auto Messages API
+export const AutoMessagesAPI = {
+  async list(tenantId) {
+    const response = await apiClient.get('/auto-messages', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async create(tenantId, data) {
+    const response = await apiClient.post('/auto-messages', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async update(messageId, data) {
+    const response = await apiClient.put(`/auto-messages/${messageId}`, data);
+    return response.data;
+  },
+
+  async delete(messageId) {
+    const response = await apiClient.delete(`/auto-messages/${messageId}`);
+    return response.data;
+  },
+
+  async toggle(messageId) {
+    const response = await apiClient.patch(`/auto-messages/${messageId}/toggle`);
+    return response.data;
+  }
+};
+
+// Chatbot API
+export const ChatbotAPI = {
+  async listFlows(tenantId) {
+    const response = await apiClient.get('/chatbot/flows', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async getFlow(flowId) {
+    const response = await apiClient.get(`/chatbot/flows/${flowId}`);
+    return response.data;
+  },
+
+  async createFlow(tenantId, data) {
+    const response = await apiClient.post('/chatbot/flows', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async updateFlow(flowId, data) {
+    const response = await apiClient.put(`/chatbot/flows/${flowId}`, data);
+    return response.data;
+  },
+
+  async deleteFlow(flowId) {
+    const response = await apiClient.delete(`/chatbot/flows/${flowId}`);
+    return response.data;
+  },
+
+  async toggleFlow(flowId) {
+    const response = await apiClient.patch(`/chatbot/flows/${flowId}/toggle`);
+    return response.data;
+  },
+
+  async addStep(flowId, data) {
+    const response = await apiClient.post(`/chatbot/flows/${flowId}/steps`, data);
+    return response.data;
+  },
+
+  async updateStep(stepId, data) {
+    const response = await apiClient.put(`/chatbot/steps/${stepId}`, data);
+    return response.data;
+  },
+
+  async deleteStep(stepId) {
+    const response = await apiClient.delete(`/chatbot/steps/${stepId}`);
+    return response.data;
+  }
+};
+
+// Webhooks API
+export const WebhooksAPI = {
+  async list(tenantId) {
+    const response = await apiClient.get('/webhooks', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async create(tenantId, data) {
+    const response = await apiClient.post('/webhooks', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async update(webhookId, data) {
+    const response = await apiClient.put(`/webhooks/${webhookId}`, data);
+    return response.data;
+  },
+
+  async delete(webhookId) {
+    const response = await apiClient.delete(`/webhooks/${webhookId}`);
+    return response.data;
+  },
+
+  async toggle(webhookId) {
+    const response = await apiClient.patch(`/webhooks/${webhookId}/toggle`);
+    return response.data;
+  }
+};
+
+// Templates API
+export const TemplatesAPI = {
+  async list(tenantId, category = null) {
+    const params = { tenant_id: tenantId };
+    if (category) params.category = category;
+    const response = await apiClient.get('/templates', { params });
+    return response.data;
+  },
+
+  async create(tenantId, data) {
+    const response = await apiClient.post('/templates', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async update(templateId, data) {
+    const response = await apiClient.put(`/templates/${templateId}`, data);
+    return response.data;
+  },
+
+  async delete(templateId) {
+    const response = await apiClient.delete(`/templates/${templateId}`);
+    return response.data;
+  },
+
+  async use(templateId) {
+    const response = await apiClient.post(`/templates/${templateId}/use`);
+    return response.data;
+  }
+};
+
+// Knowledge Base API
+export const KnowledgeBaseAPI = {
+  // Categories
+  async listCategories(tenantId) {
+    const response = await apiClient.get('/kb/categories', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async createCategory(tenantId, data) {
+    const response = await apiClient.post('/kb/categories', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async deleteCategory(categoryId) {
+    const response = await apiClient.delete(`/kb/categories/${categoryId}`);
+    return response.data;
+  },
+
+  // Articles
+  async listArticles(tenantId, categoryId = null, publishedOnly = true) {
+    const params = { tenant_id: tenantId, published_only: publishedOnly };
+    if (categoryId) params.category_id = categoryId;
+    const response = await apiClient.get('/kb/articles', { params });
+    return response.data;
+  },
+
+  async createArticle(tenantId, data) {
+    const response = await apiClient.post('/kb/articles', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async updateArticle(articleId, data) {
+    const response = await apiClient.put(`/kb/articles/${articleId}`, data);
+    return response.data;
+  },
+
+  async deleteArticle(articleId) {
+    const response = await apiClient.delete(`/kb/articles/${articleId}`);
+    return response.data;
+  },
+
+  async viewArticle(articleId) {
+    const response = await apiClient.post(`/kb/articles/${articleId}/view`);
+    return response.data;
+  },
+
+  async feedbackArticle(articleId, helpful) {
+    const response = await apiClient.post(`/kb/articles/${articleId}/feedback`, null, { params: { helpful } });
+    return response.data;
+  },
+
+  // FAQs
+  async listFaqs(tenantId, categoryId = null) {
+    const params = { tenant_id: tenantId };
+    if (categoryId) params.category_id = categoryId;
+    const response = await apiClient.get('/kb/faqs', { params });
+    return response.data;
+  },
+
+  async createFaq(tenantId, data) {
+    const response = await apiClient.post('/kb/faqs', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async deleteFaq(faqId) {
+    const response = await apiClient.delete(`/kb/faqs/${faqId}`);
+    return response.data;
+  },
+
+  // Search
+  async search(tenantId, query) {
+    const response = await apiClient.get('/kb/search', { params: { tenant_id: tenantId, q: query } });
+    return response.data;
+  }
+};
+
 // Agents API
 export const AgentsAPI = {
   async list(tenantId) {
@@ -271,6 +496,60 @@ export const AnalyticsAPI = {
   async getOverview(tenantId) {
     const response = await apiClient.get('/analytics/overview', { params: { tenant_id: tenantId } });
     return response.data;
+  },
+
+  async getMessagesByDay(tenantId, days = 7) {
+    const response = await apiClient.get('/analytics/messages-by-day', { params: { tenant_id: tenantId, days } });
+    return response.data;
+  },
+
+  async getAgentPerformance(tenantId) {
+    const response = await apiClient.get('/analytics/agent-performance', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async getConversationsByStatus(tenantId) {
+    const response = await apiClient.get('/analytics/conversations-by-status', { params: { tenant_id: tenantId } });
+    return response.data;
+  }
+};
+
+// Reports API
+export const ReportsAPI = {
+  getConversationsCsvUrl(tenantId, status = null, dateFrom = null, dateTo = null) {
+    const params = new URLSearchParams({ tenant_id: tenantId });
+    if (status) params.append('status', status);
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    return `${apiClient.defaults.baseURL}/reports/conversations/csv?${params.toString()}`;
+  },
+
+  getMessagesCsvUrl(conversationId) {
+    return `${apiClient.defaults.baseURL}/reports/messages/csv?conversation_id=${conversationId}`;
+  },
+
+  getAgentsCsvUrl(tenantId) {
+    return `${apiClient.defaults.baseURL}/reports/agents/csv?tenant_id=${tenantId}`;
+  },
+
+  // Helper to download with auth
+  async downloadCsv(url, filename) {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) throw new Error('Download failed');
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
   }
 };
 

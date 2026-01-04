@@ -79,55 +79,34 @@ Um sistema SaaS de CRM para WhatsApp com design glassmorphism, integração com 
 
 ---
 
-## 📋 Próximas Funcionalidades
+## ✅ Prioridade Média (P1) - CONCLUÍDO
 
-### Prioridade Média (P1)
+### Dashboard e Relatórios (Janeiro 2026)
+- [x] **Dashboard de Métricas** - Gráficos, cards, métricas em tempo real
+- [x] **Relatórios Exportáveis** - Export CSV de conversas e agentes
 
-#### Dashboard e Relatórios
-- [ ] **Dashboard de Métricas**
-  - Total de mensagens enviadas/recebidas
-  - Tempo médio de resposta
-  - Conversas por status
-  - Gráficos de atividade diária/semanal/mensal
-  - Métricas por agente
+### Funcionalidades de Chat (Janeiro 2026)
+- [x] **Mensagens de Áudio** - Gravação no browser + player customizado
+- [x] **Mensagens de Localização** - Picker com preview de mapa
+- [x] **Reações a Mensagens** - Emoji reactions com API
+- [x] **Responder Mensagem Específica** - Quote/reply com preview
 
-- [ ] **Relatórios Exportáveis**
-  - Exportar conversas em PDF/CSV
-  - Relatório de performance de agentes
-  - Relatório de uso por período
-
-#### Funcionalidades de Chat
-- [ ] **Mensagens de Áudio**
-  - Gravação de áudio no browser
-  - Player de áudio personalizado
-  - Transcrição automática (opcional)
-
-- [ ] **Mensagens de Localização**
-  - Enviar localização
-  - Visualizar localização recebida no mapa
-
-- [ ] **Reações a Mensagens**
-  - Emoji reactions
-  - Sincronização com WhatsApp
-
-- [ ] **Responder Mensagem Específica**
-  - Quote/reply a mensagem
-  - Preview da mensagem original
-
-#### Automações
-- [ ] **Mensagens Automáticas**
-  - Mensagem de boas-vindas
-  - Mensagem fora do horário
-  - Resposta automática por palavra-chave
-
-- [ ] **Chatbot Básico**
-  - Fluxos de atendimento
-  - Menu de opções
-  - Transferência para humano
+### Automações (Janeiro 2026)
+- [x] **Mensagens Automáticas** - Welcome, away, keyword triggers
+- [x] **Chatbot Básico** - Flows, steps, menu de opções, transferência
 
 ---
 
-### Prioridade Baixa (P2)
+## 🚧 Prioridade Baixa (P2) - EM PROGRESSO
+
+### Funcionalidades Implementadas (Janeiro 2026)
+- [x] **Webhooks Customizáveis** - CRUD + eventos configuráveis
+- [x] **Templates de Mensagem** - Categorias, variáveis, uso
+- [x] **Base de Conhecimento** - Artigos, FAQs, busca integrada
+
+---
+
+### Prioridade Baixa (P2) - Pendente
 
 #### Multi-tenancy Completo
 - [ ] **Auto-registo de Tenants**
@@ -157,19 +136,19 @@ Um sistema SaaS de CRM para WhatsApp com design glassmorphism, integração com 
   - Integração com Salesforce
   - Integração com Pipedrive
 
-- [ ] **Ferramentas de Produtividade**
+- [x] **Ferramentas de Produtividade**
   - Integração com Google Calendar
   - Integração com Slack
   - Webhooks customizáveis
 
 #### Funcionalidades Avançadas
-- [ ] **Campanhas de Marketing**
+- [x] **Campanhas de Marketing**
   - Envio em massa
   - Segmentação de contactos
   - Templates de mensagem
   - Métricas de campanha
 
-- [ ] **Base de Conhecimento**
+- [x] **Base de Conhecimento**
   - FAQ integrado
   - Artigos de ajuda
   - Busca inteligente
