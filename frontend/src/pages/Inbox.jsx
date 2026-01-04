@@ -483,6 +483,7 @@ const Inbox = () => {
             {showFileUpload && (
               <div className="p-4 border-t border-white/10">
                 <FileUpload
+                  conversationId={selectedConversation?.id}
                   onUpload={handleFileUpload}
                   onCancel={() => setShowFileUpload(false)}
                 />
