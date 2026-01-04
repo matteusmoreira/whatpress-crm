@@ -126,3 +126,35 @@ code {
     @apply bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/50;
   }
 }
+
+/* Light theme overrides */
+.light {
+  --bg-primary: 248 250 252;
+  --bg-secondary: 241 245 249;
+  --text-primary: 15 23 42;
+  --text-secondary: 100 116 139;
+  --border-color: 226 232 240;
+}
+
+.light .glass-card {
+  @apply bg-gradient-to-br from-white/80 to-white/60 border-slate-200/50 shadow-slate-300/20;
+}
+
+.light .glass-input {
+  @apply bg-white/70 border-slate-300/50 text-slate-900 placeholder:text-slate-500;
+}
+
+/* Theme-aware background */
+.dark body {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.light body {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+/* Theme transition */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
