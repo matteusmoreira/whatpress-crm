@@ -1,4 +1,4 @@
-// API Client for WhatsApp CRM
+// API Client for WhatsApp CRM v2
 import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -40,6 +40,11 @@ apiClient.interceptors.response.use(
 export const AuthAPI = {
   async login(email, password) {
     const response = await apiClient.post('/auth/login', { email, password });
+    return response.data;
+  },
+
+  async register(data) {
+    const response = await apiClient.post('/auth/register', data);
     return response.data;
   },
 
@@ -94,6 +99,11 @@ export const ConnectionsAPI = {
     return response.data;
   },
 
+  async getQRCode(id) {
+    const response = await apiClient.get(`/connections/${id}/qrcode`);
+    return response.data;
+  },
+
   async updateStatus(id, status) {
     const response = await apiClient.patch(`/connections/${id}/status`, { status });
     return response.data;
@@ -121,6 +131,26 @@ export const ConversationsAPI = {
   async markAsRead(id) {
     const response = await apiClient.post(`/conversations/${id}/read`);
     return response.data;
+  },
+
+  async assign(id, agentId) {
+    const response = await apiClient.post(`/conversations/${id}/assign`, { agent_id: agentId });
+    return response.data;
+  },
+
+  async unassign(id) {
+    const response = await apiClient.post(`/conversations/${id}/unassign`);
+    return response.data;
+  },
+
+  async addLabel(conversationId, labelId) {
+    const response = await apiClient.post(`/conversations/${conversationId}/labels/${labelId}`);
+    return response.data;
+  },
+
+  async removeLabel(conversationId, labelId) {
+    const response = await apiClient.delete(`/conversations/${conversationId}/labels/${labelId}`);
+    return response.data;
   }
 };
 
@@ -137,6 +167,92 @@ export const MessagesAPI = {
       content,
       type
     });
+    return response.data;
+  }
+};
+
+// WhatsApp Direct API
+export const WhatsAppAPI = {
+  async sendMessage(instanceName, phone, message, type = 'text', mediaUrl = null) {
+    const response = await apiClient.post('/whatsapp/send', {
+      instance_name: instanceName,
+      phone,
+      message,
+      type,
+      media_url: mediaUrl
+    });
+    return response.data;
+  },
+
+  async sendTyping(instanceName, phone) {
+    const response = await apiClient.post('/whatsapp/typing', null, {
+      params: { instance_name: instanceName, phone }
+    });
+    return response.data;
+  }
+};
+
+// Quick Replies API
+export const QuickRepliesAPI = {
+  async list(tenantId) {
+    const response = await apiClient.get('/quick-replies', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async create(tenantId, data) {
+    const response = await apiClient.post('/quick-replies', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async delete(replyId) {
+    const response = await apiClient.delete(`/quick-replies/${replyId}`);
+    return response.data;
+  }
+};
+
+// Labels API
+export const LabelsAPI = {
+  async list(tenantId) {
+    const response = await apiClient.get('/labels', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async create(tenantId, data) {
+    const response = await apiClient.post('/labels', data, { params: { tenant_id: tenantId } });
+    return response.data;
+  }
+};
+
+// Agents API
+export const AgentsAPI = {
+  async list(tenantId) {
+    const response = await apiClient.get('/agents', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async getStats(tenantId, agentId) {
+    const response = await apiClient.get(`/agents/${agentId}/stats`, { params: { tenant_id: tenantId } });
+    return response.data;
+  }
+};
+
+// Analytics API
+export const AnalyticsAPI = {
+  async getOverview(tenantId) {
+    const response = await apiClient.get('/analytics/overview', { params: { tenant_id: tenantId } });
+    return response.data;
+  }
+};
+
+// Evolution API
+export const EvolutionAPI = {
+  async listInstances() {
+    const response = await apiClient.get('/evolution/instances');
+    return response.data;
+  },
+
+  async createInstance(name) {
+    const response = await apiClient.post('/evolution/instances', null, { params: { name } });
     return response.data;
   }
 };
