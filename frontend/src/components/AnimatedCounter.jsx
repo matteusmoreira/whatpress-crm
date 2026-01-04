@@ -4,9 +4,10 @@ const AnimatedCounter = ({ value, duration = 1000, prefix = '', suffix = '' }) =
   const [displayValue, setDisplayValue] = useState(0);
   const startTimeRef = useRef(null);
   const startValueRef = useRef(0);
+  const targetValue = typeof value === 'number' && !isNaN(value) ? value : 0;
 
   useEffect(() => {
-    startValueRef.current = displayValue;
+    startValueRef.current = displayValue || 0;
     startTimeRef.current = null;
 
     const animate = (timestamp) => {
@@ -17,7 +18,7 @@ const AnimatedCounter = ({ value, duration = 1000, prefix = '', suffix = '' }) =
       const progress = Math.min((timestamp - startTimeRef.current) / duration, 1);
       const easeOutQuart = 1 - Math.pow(1 - progress, 4);
       const currentValue = Math.floor(
-        startValueRef.current + (value - startValueRef.current) * easeOutQuart
+        startValueRef.current + (targetValue - startValueRef.current) * easeOutQuart
       );
 
       setDisplayValue(currentValue);
@@ -28,7 +29,8 @@ const AnimatedCounter = ({ value, duration = 1000, prefix = '', suffix = '' }) =
     };
 
     requestAnimationFrame(animate);
-  }, [value, duration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetValue, duration]);
 
   return (
     <span>
