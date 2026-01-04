@@ -133,7 +133,7 @@ const SuperAdminDashboard = () => {
         <KPICard
           icon={TrendingUp}
           label="Mensagens / Mês"
-          value={stats?.totalMessages?.toLocaleString() || 0}
+          value={stats?.totalMessages || 0}
           color="bg-amber-500/30"
         />
       </div>
