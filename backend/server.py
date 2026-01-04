@@ -923,6 +923,172 @@ async def root():
 async def health_check():
     return {"status": "healthy", "database": "supabase", "whatsapp": "evolution-api"}
 
+# ==================== FILE UPLOAD ====================
+
+class FileUploadResponse(BaseModel):
+    id: str
+    url: str
+    name: str
+    type: str
+    size: int
+
+@api_router.post("/upload", response_model=FileUploadResponse)
+async def upload_file(
+    file: UploadFile = File(...),
+    conversation_id: str = Form(...),
+    payload: dict = Depends(verify_token)
+):
+    """Upload a file and return its URL"""
+    try:
+        # Read file content
+        content = await file.read()
+        file_size = len(content)
+        
+        # Validate file size (10MB max)
+        max_size = 10 * 1024 * 1024
+        if file_size > max_size:
+            raise HTTPException(status_code=400, detail="Arquivo muito grande. Máximo: 10MB")
+        
+        # Generate unique filename
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'bin'
+        unique_filename = f"{uuid.uuid4()}.{file_ext}"
+        
+        # Determine file type
+        content_type = file.content_type or 'application/octet-stream'
+        if content_type.startswith('image/'):
+            file_type = 'image'
+            folder = 'images'
+        elif content_type.startswith('video/'):
+            file_type = 'video'
+            folder = 'videos'
+        elif content_type.startswith('audio/'):
+            file_type = 'audio'
+            folder = 'audios'
+        else:
+            file_type = 'document'
+            folder = 'documents'
+        
+        # Upload to Supabase Storage
+        storage_path = f"{folder}/{unique_filename}"
+        
+        try:
+            # Try to upload to Supabase Storage
+            result = supabase.storage.from_('uploads').upload(
+                storage_path,
+                content,
+                file_options={"content-type": content_type}
+            )
+            
+            # Get public URL
+            public_url = supabase.storage.from_('uploads').get_public_url(storage_path)
+            
+        except Exception as storage_error:
+            logger.warning(f"Supabase storage error: {storage_error}")
+            # Fallback: encode as base64 and store in database or return as data URL
+            encoded = base64.b64encode(content).decode('utf-8')
+            public_url = f"data:{content_type};base64,{encoded}"
+        
+        return {
+            "id": str(uuid.uuid4()),
+            "url": public_url,
+            "name": file.filename,
+            "type": file_type,
+            "size": file_size
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao fazer upload: {str(e)}")
+
+@api_router.post("/messages/media")
+async def send_media_message(
+    conversation_id: str = Form(...),
+    content: str = Form(default=""),
+    media_type: str = Form(...),
+    media_url: str = Form(...),
+    media_name: str = Form(default="file"),
+    background_tasks: BackgroundTasks = None,
+    payload: dict = Depends(verify_token)
+):
+    """Send a media message (image, video, audio, document)"""
+    # Get conversation details
+    conv = supabase.table('conversations').select('*, connections(*)').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    
+    conversation = conv.data[0]
+    connection = conversation.get('connections')
+    
+    # Create message content
+    message_content = content if content else f"📎 {media_name}"
+    
+    # Save message to database
+    data = {
+        'conversation_id': conversation_id,
+        'content': message_content,
+        'type': media_type,
+        'direction': 'outbound',
+        'status': 'sent',
+        'media_url': media_url
+    }
+    
+    result = supabase.table('messages').insert(data).execute()
+    
+    # Update conversation
+    supabase.table('conversations').update({
+        'last_message_at': datetime.utcnow().isoformat(),
+        'last_message_preview': message_content[:50]
+    }).eq('id', conversation_id).execute()
+    
+    # Update tenant message count
+    if conversation.get('tenant_id'):
+        tenant = supabase.table('tenants').select('messages_this_month').eq('id', conversation['tenant_id']).execute()
+        if tenant.data:
+            new_count = tenant.data[0]['messages_this_month'] + 1
+            supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
+    
+    # Send via WhatsApp if Evolution API connection
+    if connection and connection.get('provider') == 'evolution' and connection.get('status') == 'connected':
+        if background_tasks:
+            background_tasks.add_task(
+                send_whatsapp_media,
+                connection['instance_name'],
+                conversation['contact_phone'],
+                media_type,
+                media_url,
+                content,
+                result.data[0]['id']
+            )
+    
+    m = result.data[0]
+    return {
+        'id': m['id'],
+        'conversationId': m['conversation_id'],
+        'content': m['content'],
+        'type': m['type'],
+        'direction': m['direction'],
+        'status': m['status'],
+        'mediaUrl': m['media_url'],
+        'timestamp': m['timestamp']
+    }
+
+async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, message_id: str):
+    """Background task to send WhatsApp media"""
+    try:
+        await evolution_api.send_media(
+            instance_name, 
+            phone, 
+            media_type,
+            media_url=media_url,
+            caption=caption
+        )
+        supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
+    except Exception as e:
+        logger.error(f"Failed to send WhatsApp media: {e}")
+        supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+
 # Include the router in the main app
 app.include_router(api_router)
 
