@@ -225,14 +225,16 @@ metadata:
 
 test_plan:
   current_focus:
-    - "RealtimeProvider Integration"
     - "FileUpload Component"
     - "QuickReplies Component"
-    - "Inbox Page with Chat"
-  stuck_tasks: []
+  stuck_tasks:
+    - "FileUpload Component"
+    - "QuickReplies Component"
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
     message: "Completed P0 tasks: RealtimeProvider now wraps the app, FileUpload and QuickReplies components are functional. Please test the following flows: 1) Login as Admin Tenant 2) Open a conversation 3) Test FileUpload button (paperclip) 4) Test QuickReplies button (zap icon) 5) Test realtime indicator. Credentials: admin@minhaempresa.com / 123456"
+  - agent: "testing"
+    message: "Testing completed. CRITICAL ISSUES FOUND: FileUpload and QuickReplies buttons are visible but not functional. The buttons appear in the chat input area but clicking them does not trigger their respective panels to open. All other features (login, conversations list, chat interface, realtime indicator) are working correctly. The UI components are implemented but the click handlers may not be properly connected."
