@@ -87,7 +87,16 @@ export const useAppStore = create((set, get) => ({
   },
 
   testConnection: async (id) => {
-    return await ConnectionsAPI.testConnection(id);
+    const result = await ConnectionsAPI.testConnection(id);
+    // If connected, update the connection status
+    if (result.success && !result.qrcode) {
+      set(state => ({
+        connections: state.connections.map(c => 
+          c.id === id ? { ...c, status: 'connected' } : c
+        )
+      }));
+    }
+    return result;
   },
 
   updateConnectionStatus: async (id, status) => {
