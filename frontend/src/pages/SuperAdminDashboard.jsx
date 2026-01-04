@@ -66,12 +66,14 @@ const SuperAdminDashboard = () => {
     setNewTenantName('');
     setNewTenantSlug('');
     fetchTenants();
+    toast.success('Tenant criado!', { description: `${newTenantName} foi adicionado com sucesso.` });
   };
 
-  const handleDeleteTenant = async (id) => {
+  const handleDeleteTenant = async (id, name) => {
     if (window.confirm('Tem certeza que deseja excluir este tenant?')) {
       await deleteTenant(id);
       fetchTenants();
+      toast.success('Tenant removido', { description: `${name} foi excluído.` });
     }
   };
 
