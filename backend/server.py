@@ -41,7 +41,24 @@ async def health_check():
 async def root():
     return {"message": "WhatsApp CRM API", "status": "running"}
 
-# Create a router with the /api prefix
+@app.get("/debug-routes")
+async def debug_routes():
+    """List all registered routes to verify paths"""
+    routes = []
+    for route in app.routes:
+        routes.append({
+            "path": route.path,
+            "name": route.name,
+            "methods": list(route.methods) if hasattr(route, "methods") else None
+        })
+    return {"routes": routes}
+
+@app.post("/test-login")
+async def test_login(data: dict):
+    """Direct login test endpoint outside router"""
+    return {"message": "Direct login endpoint works", "received": data}
+
+# Create a router with the /api prefix, ensuring trailing slash handling
 api_router = APIRouter(prefix="/api")
 
 # Security
