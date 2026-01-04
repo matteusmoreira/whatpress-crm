@@ -257,4 +257,36 @@ export const EvolutionAPI = {
   }
 };
 
+// Upload API
+export const UploadAPI = {
+  async uploadFile(file, conversationId) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('conversation_id', conversationId);
+    
+    const response = await apiClient.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+
+  async sendMediaMessage(conversationId, mediaType, mediaUrl, mediaName, content = '') {
+    const formData = new FormData();
+    formData.append('conversation_id', conversationId);
+    formData.append('media_type', mediaType);
+    formData.append('media_url', mediaUrl);
+    formData.append('media_name', mediaName);
+    formData.append('content', content);
+    
+    const response = await apiClient.post('/messages/media', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  }
+};
+
 export default apiClient;
