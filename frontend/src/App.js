@@ -18,6 +18,7 @@ import { useAuthStore } from "./store/authStore";
 
 // Context
 import { ThemeProvider } from "./context/ThemeContext";
+import { RealtimeProvider } from "./context/RealtimeContext";
 
 // Toast
 import { GlassToaster } from "./components/ui/glass-toaster";
