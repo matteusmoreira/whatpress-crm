@@ -58,6 +58,31 @@ async def test_login(data: dict):
     """Direct login test endpoint outside router"""
     return {"message": "Direct login endpoint works", "received": data}
 
+# DIRECT ROUTE FOR LOGIN (FIX FOR 405)
+@app.post("/api/auth/login", response_model=LoginResponse)
+async def direct_login(request: LoginRequest):
+    """Direct Login path to avoid Router/Prefix issues"""
+    print(f"Login attempt for: {request.email}")
+    result = supabase.table('users').select('*').eq('email', request.email).eq('password_hash', request.password).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+    
+    user = result.data[0]
+    token = create_token(user['id'], user['email'], user['role'])
+    
+    user_response = {
+        'id': user['id'],
+        'email': user['email'],
+        'name': user['name'],
+        'role': user['role'],
+        'tenantId': user['tenant_id'],
+        'avatar': user['avatar'],
+        'createdAt': user['created_at']
+    }
+    
+    return {"user": user_response, "token": token}
+
 # Create a router with the /api prefix, ensuring trailing slash handling
 api_router = APIRouter(prefix="/api")
 
@@ -237,28 +262,11 @@ def get_user_tenant_id(payload: dict) -> str:
 
 # ==================== AUTH ROUTES ====================
 
-@api_router.post("/auth/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
-    """Login with email and password"""
-    result = supabase.table('users').select('*').eq('email', request.email).eq('password_hash', request.password).execute()
-    
-    if not result.data:
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-    
-    user = result.data[0]
-    token = create_token(user['id'], user['email'], user['role'])
-    
-    user_response = {
-        'id': user['id'],
-        'email': user['email'],
-        'name': user['name'],
-        'role': user['role'],
-        'tenantId': user['tenant_id'],
-        'avatar': user['avatar'],
-        'createdAt': user['created_at']
-    }
-    
-    return {"user": user_response, "token": token}
+# MOVED: Login logic moved to main app route below to fix 405 error
+# @api_router.post("/auth/login", response_model=LoginResponse)
+# async def login(request: LoginRequest):
+#     """Login with email and password"""
+#     ...
 
 @api_router.post("/auth/register")
 async def register_tenant(data: TenantRegister):
