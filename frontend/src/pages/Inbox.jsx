@@ -34,17 +34,11 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from '../components/ui/glass-toaster';
 import FileUpload from '../components/FileUpload';
 import QuickRepliesPanel from '../components/QuickRepliesPanel';
+import LabelsManager from '../components/LabelsManager';
+import TypingIndicator, { useTypingIndicator } from '../components/TypingIndicator';
 import { AgentsAPI, LabelsAPI, ConversationsAPI } from '../lib/api';
 
-// Default labels
-const DEFAULT_LABELS = [
-  { id: 'urgent', name: 'Urgente', color: '#EF4444' },
-  { id: 'vip', name: 'VIP', color: '#F59E0B' },
-  { id: 'new', name: 'Novo Cliente', color: '#10B981' },
-  { id: 'followup', name: 'Follow-up', color: '#3B82F6' },
-  { id: 'complaint', name: 'Reclamação', color: '#EF4444' },
-  { id: 'sale', name: 'Venda', color: '#8B5CF6' }
-];
+// Labels are now loaded from the database
 
 const Inbox = () => {
   const { user } = useAuthStore();
@@ -68,15 +62,22 @@ const Inbox = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [selectedConnectionFilter, setSelectedConnectionFilter] = useState('all');
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState('all');
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showLabelsMenu, setShowLabelsMenu] = useState(false);
   const [showAssignMenu, setShowAssignMenu] = useState(false);
+  const [showLabelsManager, setShowLabelsManager] = useState(false);
   const [agents, setAgents] = useState([]);
+  const [labels, setLabels] = useState([]);
+  const [selectedLabelFilter, setSelectedLabelFilter] = useState('all');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   const tenantId = user?.tenantId || 'tenant-1';
+
+  // Typing indicator hook
+  const { setTyping, getTypingContact } = useTypingIndicator();
 
   // Load agents for assignment
   const loadAgents = useCallback(async () => {
@@ -88,12 +89,23 @@ const Inbox = () => {
     }
   }, [tenantId]);
 
+  // Load labels from database
+  const loadLabels = useCallback(async () => {
+    try {
+      const data = await LabelsAPI.list(tenantId);
+      setLabels(data);
+    } catch (error) {
+      console.error('Error loading labels:', error);
+    }
+  }, [tenantId]);
+
   // Fetch initial data
   useEffect(() => {
     fetchConversations(tenantId);
     fetchConnections(tenantId);
     loadAgents();
-  }, [tenantId, fetchConversations, fetchConnections, loadAgents]);
+    loadLabels();
+  }, [tenantId, fetchConversations, fetchConnections, loadAgents, loadLabels]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -120,13 +132,50 @@ const Inbox = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Agent heartbeat - keep online status
+  useEffect(() => {
+    const sendHeartbeat = async () => {
+      try {
+        await AgentsAPI.heartbeat();
+      } catch (error) {
+        console.error('Heartbeat error:', error);
+      }
+    };
+
+    // Send heartbeat on mount and every 30 seconds
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 30000);
+
+    // Set offline on unmount
+    return () => {
+      clearInterval(interval);
+      AgentsAPI.setOffline().catch(() => { });
+    };
+  }, []);
+
   const filteredConversations = conversations.filter(conv => {
     const matchesSearch = conv.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.contactPhone.includes(searchQuery);
     const matchesStatus = conversationFilter === 'all' || conv.status === conversationFilter;
     const matchesConnection = selectedConnectionFilter === 'all' || conv.connectionId === selectedConnectionFilter;
-    return matchesSearch && matchesStatus && matchesConnection;
+    const matchesLabel = selectedLabelFilter === 'all' || (conv.labels || []).includes(selectedLabelFilter);
+    const matchesAgent = selectedAgentFilter === 'all' ||
+      (selectedAgentFilter === 'mine' && conv.assignedTo === user?.id) ||
+      conv.assignedTo === selectedAgentFilter;
+    return matchesSearch && matchesStatus && matchesConnection && matchesLabel && matchesAgent;
   });
+
+  // Helper to get label info by ID
+  const getLabelById = (labelId) => labels.find(l => l.id === labelId);
+
+  // Helper to get agent status color
+  const getAgentStatusColor = (status) => {
+    switch (status) {
+      case 'online': return 'bg-emerald-500';
+      case 'busy': return 'bg-amber-500';
+      default: return 'bg-gray-400';
+    }
+  };
 
   const handleSendMessage = async (e) => {
     e?.preventDefault();
@@ -231,7 +280,7 @@ const Inbox = () => {
               {realtimeConnected ? 'Ao vivo' : 'Offline'}
             </div>
           </div>
-          
+
           {/* Search */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -264,16 +313,46 @@ const Inbox = () => {
         </div>
 
         {/* Connection filter */}
-        <div className="p-3 border-b border-white/10">
+        <div className="p-3 border-b border-white/10 flex gap-2">
           <select
             value={selectedConnectionFilter}
             onChange={(e) => setSelectedConnectionFilter(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
           >
-            <option value="all" className="bg-emerald-900">Todas as conexões</option>
+            <option value="all" className="bg-emerald-900">Todas conexões</option>
             {connections.map(conn => (
               <option key={conn.id} value={conn.id} className="bg-emerald-900">
                 {conn.phoneNumber}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedLabelFilter}
+            onChange={(e) => setSelectedLabelFilter(e.target.value)}
+            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          >
+            <option value="all" className="bg-emerald-900">Todas labels</option>
+            {labels.map(label => (
+              <option key={label.id} value={label.id} className="bg-emerald-900">
+                {label.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Agent filter */}
+        <div className="p-3 border-b border-white/10">
+          <select
+            value={selectedAgentFilter}
+            onChange={(e) => setSelectedAgentFilter(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          >
+            <option value="all" className="bg-emerald-900">Todos os agentes</option>
+            <option value="mine" className="bg-emerald-900">Minhas conversas</option>
+            <option value="" className="bg-emerald-900">Não atribuídas</option>
+            {agents.map(agent => (
+              <option key={agent.id} value={agent.id} className="bg-emerald-900">
+                {agent.name} {agent.status === 'online' ? '🟢' : '⚫'}
               </option>
             ))}
           </select>
@@ -319,7 +398,26 @@ const Inbox = () => {
                       <span className="text-white/40 text-xs">{formatTime(conv.lastMessageAt)}</span>
                     </div>
                     <p className="text-white/50 text-sm truncate">{conv.lastMessagePreview}</p>
-                    <p className="text-white/30 text-xs mt-1">{conv.contactPhone}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-white/30 text-xs">{conv.contactPhone}</span>
+                      {/* Labels badges */}
+                      {(conv.labels || []).slice(0, 2).map(labelId => {
+                        const label = getLabelById(labelId);
+                        if (!label) return null;
+                        return (
+                          <span
+                            key={labelId}
+                            className="text-xs px-1.5 py-0.5 rounded-full text-white/90"
+                            style={{ backgroundColor: label.color + '40' }}
+                          >
+                            {label.name}
+                          </span>
+                        );
+                      })}
+                      {(conv.labels || []).length > 2 && (
+                        <span className="text-xs text-white/40">+{conv.labels.length - 2}</span>
+                      )}
+                    </div>
                   </div>
                   {conv.unreadCount > 0 && (
                     <span className="bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[24px] text-center animate-pulse">
@@ -365,7 +463,7 @@ const Inbox = () => {
 
                   {/* Assign button */}
                   <div className="relative">
-                    <button 
+                    <button
                       onClick={() => setShowAssignMenu(!showAssignMenu)}
                       className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
                       title="Atribuir"
@@ -373,19 +471,49 @@ const Inbox = () => {
                       <Users className="w-5 h-5" />
                     </button>
                     {showAssignMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-48 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
+                      <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
                         <div className="p-2">
                           <p className="text-white/50 text-xs px-2 mb-2">Atribuir para:</p>
-                          {agents.map(agent => (
+                          {/* Sort agents: online first */}
+                          {[...agents]
+                            .sort((a, b) => (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1))
+                            .map(agent => (
+                              <button
+                                key={agent.id}
+                                onClick={() => handleAssign(agent.id)}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
+                              >
+                                <div className="relative">
+                                  <img src={agent.avatar} alt={agent.name} className="w-6 h-6 rounded-full" />
+                                  <span
+                                    className={cn(
+                                      'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-emerald-900',
+                                      getAgentStatusColor(agent.status)
+                                    )}
+                                  />
+                                </div>
+                                <span className="flex-1 text-left">{agent.name}</span>
+                                <span className="text-xs text-white/40 capitalize">{agent.status || 'offline'}</span>
+                              </button>
+                            ))}
+                          {/* Unassign option */}
+                          {selectedConversation?.assignedTo && (
                             <button
-                              key={agent.id}
-                              onClick={() => handleAssign(agent.id)}
-                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
+                              onClick={async () => {
+                                try {
+                                  await ConversationsAPI.unassign(selectedConversation.id);
+                                  toast.success('Conversa desatribuída');
+                                  setShowAssignMenu(false);
+                                } catch (error) {
+                                  toast.error('Erro ao desatribuir');
+                                }
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-400 text-sm mt-2 border-t border-white/10 pt-2"
                             >
-                              <img src={agent.avatar} alt={agent.name} className="w-6 h-6 rounded-full" />
-                              {agent.name}
+                              <X className="w-4 h-4" />
+                              Remover atribuição
                             </button>
-                          ))}
+                          )}
                         </div>
                       </div>
                     )}
@@ -393,7 +521,7 @@ const Inbox = () => {
 
                   {/* Labels button */}
                   <div className="relative">
-                    <button 
+                    <button
                       onClick={() => setShowLabelsMenu(!showLabelsMenu)}
                       className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
                       title="Labels"
@@ -401,10 +529,10 @@ const Inbox = () => {
                       <Tag className="w-5 h-5" />
                     </button>
                     {showLabelsMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-48 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
+                      <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
                         <div className="p-2">
                           <p className="text-white/50 text-xs px-2 mb-2">Adicionar label:</p>
-                          {DEFAULT_LABELS.map(label => (
+                          {labels.map(label => (
                             <button
                               key={label.id}
                               onClick={() => handleAddLabel(label.id)}
@@ -414,6 +542,18 @@ const Inbox = () => {
                               {label.name}
                             </button>
                           ))}
+                          <div className="border-t border-white/10 mt-2 pt-2">
+                            <button
+                              onClick={() => {
+                                setShowLabelsMenu(false);
+                                setShowLabelsManager(true);
+                              }}
+                              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-sm"
+                            >
+                              <Tag className="w-4 h-4" />
+                              Gerenciar Labels
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -489,6 +629,15 @@ const Inbox = () => {
               </div>
             )}
 
+            {/* Typing Indicator */}
+            {selectedConversation && getTypingContact(selectedConversation.id) && (
+              <div className="px-4 pb-2">
+                <TypingIndicator
+                  contactName={getTypingContact(selectedConversation.id)}
+                />
+              </div>
+            )}
+
             {/* Input */}
             <div className="p-4 border-t border-white/10 backdrop-blur-sm bg-black/20 relative">
               {/* Quick Replies Panel */}
@@ -505,8 +654,8 @@ const Inbox = () => {
                   onClick={() => setShowFileUpload(!showFileUpload)}
                   className={cn(
                     'p-2 rounded-lg transition-colors',
-                    showFileUpload 
-                      ? 'bg-emerald-500 text-white' 
+                    showFileUpload
+                      ? 'bg-emerald-500 text-white'
                       : 'hover:bg-white/10 text-white/60 hover:text-white'
                   )}
                 >
@@ -517,8 +666,8 @@ const Inbox = () => {
                   onClick={() => setShowQuickReplies(!showQuickReplies)}
                   className={cn(
                     'p-2 rounded-lg transition-colors',
-                    showQuickReplies 
-                      ? 'bg-emerald-500 text-white' 
+                    showQuickReplies
+                      ? 'bg-emerald-500 text-white'
                       : 'hover:bg-white/10 text-white/60 hover:text-white'
                   )}
                   title="Respostas rápidas (Ctrl+/)"
@@ -563,6 +712,13 @@ const Inbox = () => {
           </div>
         )}
       </div>
+
+      {/* Labels Manager Modal */}
+      <LabelsManager
+        isOpen={showLabelsManager}
+        onClose={() => setShowLabelsManager(false)}
+        onLabelsChange={loadLabels}
+      />
     </div>
   );
 };

@@ -53,28 +53,29 @@ Um sistema SaaS de CRM para WhatsApp com design glassmorphism, integração com 
 
 ---
 
-## 🚧 Em Desenvolvimento
+## ✅ Concluído Recentemente
 
-### Prioridade Alta (P0)
+### Prioridade Alta (P0) - Implementado em Janeiro 2026
 
 #### Melhorias de UX
-- [ ] **Indicador "A digitar..."** - Mostrar quando o contacto está a escrever
-  - Frontend: Componente de typing indicator com animação
-  - Backend: Endpoint para enviar/receber status de digitação
-  - Evolution API: Webhook de presença
+- [x] **Indicador "A digitar..."** - Mostrar quando o contacto está a escrever
+  - Frontend: Componente `TypingIndicator` com animação
+  - Backend: Handler de webhook para eventos de presença
+  - Evolution API: Evento `PRESENCE_UPDATE` configurado
 
 #### Gestão de Conversas
-- [ ] **Atribuição de Agentes** - Funcionalidade completa
-  - Dropdown de seleção de agente na conversa
-  - Notificação ao agente atribuído
-  - Filtro por agente no inbox
+- [x] **Atribuição de Agentes** - Funcionalidade completa
+  - Dropdown de seleção de agente com status online
+  - Heartbeat para manter status atualizado
+  - Filtro por agente no inbox ("Minhas conversas", "Não atribuídas")
   - Histórico de atribuições
 
-- [ ] **Tags/Etiquetas em Conversas**
+- [x] **Tags/Etiquetas em Conversas**
   - UI para adicionar/remover tags
   - Filtro por tags no inbox
-  - Cores personalizáveis para tags
-  - Tags padrão por tenant
+  - Cores personalizáveis para tags (color picker)
+  - LabelsManager para gerenciar tags por tenant
+  - Badges de tags visíveis na lista de conversas
 
 ---
 

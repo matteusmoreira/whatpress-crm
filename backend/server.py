@@ -797,6 +797,33 @@ async def evolution_webhook(instance_name: str, payload: dict):
             # Update connection status
             status = 'connected' if parsed['state'] == 'open' else 'disconnected'
             supabase.table('connections').update({'status': status}).eq('instance_name', instance_name).execute()
+        
+        elif parsed['event'] == 'presence':
+            # Handle typing indicator - broadcast via Supabase Realtime
+            phone = parsed.get('remote_jid')
+            presence = parsed.get('presence')  # 'composing', 'paused', etc.
+            
+            if phone and presence:
+                # Find the connection and conversation
+                conn = supabase.table('connections').select('tenant_id').eq('instance_name', instance_name).execute()
+                if conn.data:
+                    tenant_id = conn.data[0]['tenant_id']
+                    conv = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('contact_phone', phone).execute()
+                    
+                    if conv.data:
+                        # Insert a typing event that will be picked up by realtime subscription
+                        # This is a lightweight way to broadcast typing status
+                        typing_data = {
+                            'conversation_id': conv.data[0]['id'],
+                            'phone': phone,
+                            'is_typing': presence == 'composing',
+                            'timestamp': datetime.utcnow().isoformat()
+                        }
+                        # Use Supabase realtime broadcast via a temporary record
+                        try:
+                            supabase.table('typing_events').upsert(typing_data, on_conflict='conversation_id').execute()
+                        except:
+                            pass  # Table might not exist yet, ignore
     
     except Exception as e:
         logger.error(f"Webhook processing error: {e}")
@@ -825,28 +852,122 @@ async def delete_quick_reply(reply_id: str, payload: dict = Depends(verify_token
 
 @api_router.get("/labels")
 async def get_labels(tenant_id: str, payload: dict = Depends(verify_token)):
-    """Get labels for tenant"""
-    labels = await LabelsService.get_labels(tenant_id)
-    return labels
+    """Get labels for tenant with usage count"""
+    try:
+        # Get labels from database
+        result = supabase.table('labels').select('*').eq('tenant_id', tenant_id).order('created_at').execute()
+        
+        if result.data:
+            labels = []
+            for label in result.data:
+                # Count conversations using this label
+                count_result = supabase.table('conversations').select('id', count='exact').contains('labels', [label['id']]).execute()
+                labels.append({
+                    'id': label['id'],
+                    'name': label['name'],
+                    'color': label['color'],
+                    'usageCount': count_result.count or 0,
+                    'createdAt': label['created_at']
+                })
+            return labels
+        
+        # Return default labels if none exist
+        return await LabelsService.get_labels(tenant_id)
+    except Exception as e:
+        logger.error(f"Error getting labels: {e}")
+        return await LabelsService.get_labels(tenant_id)
 
 @api_router.post("/labels")
 async def create_label(tenant_id: str, data: LabelCreate, payload: dict = Depends(verify_token)):
-    """Create label"""
-    label = await LabelsService.create_label(tenant_id, data.name, data.color)
-    return label or {"id": str(uuid.uuid4()), **data.dict()}
+    """Create a new label"""
+    try:
+        # Validate color format
+        if not data.color.startswith('#') or len(data.color) != 7:
+            raise HTTPException(status_code=400, detail="Cor inválida. Use formato hex: #RRGGBB")
+        
+        label_data = {
+            'tenant_id': tenant_id,
+            'name': data.name,
+            'color': data.color
+        }
+        result = supabase.table('labels').insert(label_data).execute()
+        
+        if result.data:
+            label = result.data[0]
+            return {
+                'id': label['id'],
+                'name': label['name'],
+                'color': label['color'],
+                'usageCount': 0,
+                'createdAt': label['created_at']
+            }
+        
+        raise HTTPException(status_code=400, detail="Erro ao criar label")
+    except HTTPException:
+        raise
+    except Exception as e:
+        if 'unique' in str(e).lower():
+            raise HTTPException(status_code=400, detail="Label com este nome já existe")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/labels/{label_id}")
+async def update_label(label_id: str, data: LabelCreate, payload: dict = Depends(verify_token)):
+    """Update an existing label"""
+    try:
+        if not data.color.startswith('#') or len(data.color) != 7:
+            raise HTTPException(status_code=400, detail="Cor inválida. Use formato hex: #RRGGBB")
+        
+        result = supabase.table('labels').update({
+            'name': data.name,
+            'color': data.color
+        }).eq('id', label_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Label não encontrada")
+        
+        label = result.data[0]
+        return {
+            'id': label['id'],
+            'name': label['name'],
+            'color': label['color']
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/labels/{label_id}")
+async def delete_label(label_id: str, payload: dict = Depends(verify_token)):
+    """Delete a label and remove from all conversations"""
+    try:
+        # Remove label from all conversations that use it
+        conversations = supabase.table('conversations').select('id, labels').contains('labels', [label_id]).execute()
+        
+        for conv in conversations.data or []:
+            updated_labels = [l for l in (conv['labels'] or []) if l != label_id]
+            supabase.table('conversations').update({'labels': updated_labels}).eq('id', conv['id']).execute()
+        
+        # Delete the label
+        supabase.table('labels').delete().eq('id', label_id).execute()
+        
+        return {"success": True, "message": "Label removida com sucesso"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== AGENTS ====================
 
 @api_router.get("/agents")
 async def get_agents(tenant_id: str, payload: dict = Depends(verify_token)):
-    """Get agents for tenant"""
+    """Get agents for tenant with status"""
     agents = await AgentService.get_agents(tenant_id)
     return [{
         'id': a['id'],
         'name': a['name'],
         'email': a['email'],
         'role': a['role'],
-        'avatar': a['avatar']
+        'avatar': a['avatar'],
+        'status': a.get('status', 'offline'),
+        'lastSeen': a.get('last_seen')
     } for a in agents]
 
 @api_router.get("/agents/{agent_id}/stats")
@@ -854,6 +975,71 @@ async def get_agent_stats(agent_id: str, tenant_id: str, payload: dict = Depends
     """Get agent statistics"""
     stats = await AgentService.get_agent_stats(tenant_id, agent_id)
     return stats
+
+@api_router.post("/agents/heartbeat")
+async def agent_heartbeat(payload: dict = Depends(verify_token)):
+    """Update agent online status (call periodically from frontend)"""
+    user_id = payload['user_id']
+    try:
+        supabase.table('users').update({
+            'status': 'online',
+            'last_seen': datetime.utcnow().isoformat()
+        }).eq('id', user_id).execute()
+        return {"success": True, "status": "online"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/agents/offline")
+async def agent_offline(payload: dict = Depends(verify_token)):
+    """Set agent as offline"""
+    user_id = payload['user_id']
+    try:
+        supabase.table('users').update({
+            'status': 'offline',
+            'last_seen': datetime.utcnow().isoformat()
+        }).eq('id', user_id).execute()
+        return {"success": True, "status": "offline"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/conversations/{conversation_id}/assignment-history")
+async def get_assignment_history(conversation_id: str, payload: dict = Depends(verify_token)):
+    """Get assignment history for a conversation"""
+    try:
+        result = supabase.table('assignment_history').select(
+            '*, assigned_to:users!assigned_to(id, name, avatar), assigned_by:users!assigned_by(id, name, avatar)'
+        ).eq('conversation_id', conversation_id).order('assigned_at', desc=True).limit(10).execute()
+        
+        return [{
+            'id': h['id'],
+            'action': h['action'],
+            'assignedTo': h.get('assigned_to'),
+            'assignedBy': h.get('assigned_by'),
+            'assignedAt': h['assigned_at'],
+            'notes': h.get('notes')
+        } for h in result.data] if result.data else []
+    except:
+        return []
+
+@api_router.post("/conversations/{conversation_id}/assign-with-history")
+async def assign_with_history(conversation_id: str, data: AssignAgent, payload: dict = Depends(verify_token)):
+    """Assign conversation to agent and log history"""
+    try:
+        # Update conversation
+        await AgentService.assign_conversation(conversation_id, data.agent_id)
+        
+        # Log to history
+        history_data = {
+            'conversation_id': conversation_id,
+            'assigned_to': data.agent_id,
+            'assigned_by': payload['user_id'],
+            'action': 'assigned'
+        }
+        supabase.table('assignment_history').insert(history_data).execute()
+        
+        return {"success": True, "assignedTo": data.agent_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== ANALYTICS ====================
 

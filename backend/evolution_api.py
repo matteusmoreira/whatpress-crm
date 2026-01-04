@@ -64,7 +64,8 @@ class EvolutionAPI:
                     'MESSAGES_UPSERT',
                     'MESSAGES_UPDATE',
                     'CONNECTION_UPDATE',
-                    'QRCODE_UPDATED'
+                    'QRCODE_UPDATED',
+                    'PRESENCE_UPDATE'
                 ]
             }
         
@@ -391,6 +392,17 @@ class EvolutionAPI:
                 'event': 'qrcode',
                 'instance': instance,
                 'qrcode': data.get('qrcode', {}).get('base64')
+            }
+        
+        elif event == 'presence.update':
+            # Handle typing indicator
+            presence_data = data.get('presences', [{}])[0] if data.get('presences') else data
+            return {
+                'event': 'presence',
+                'instance': instance,
+                'remote_jid': presence_data.get('id', '').replace('@s.whatsapp.net', ''),
+                'presence': presence_data.get('presence'),  # 'composing', 'paused', 'available', 'unavailable'
+                'participant': presence_data.get('participant')
             }
         
         return {'event': event, 'instance': instance, 'data': data}

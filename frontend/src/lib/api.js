@@ -220,6 +220,16 @@ export const LabelsAPI = {
   async create(tenantId, data) {
     const response = await apiClient.post('/labels', data, { params: { tenant_id: tenantId } });
     return response.data;
+  },
+
+  async update(labelId, data) {
+    const response = await apiClient.put(`/labels/${labelId}`, data);
+    return response.data;
+  },
+
+  async delete(labelId) {
+    const response = await apiClient.delete(`/labels/${labelId}`);
+    return response.data;
   }
 };
 
@@ -232,6 +242,26 @@ export const AgentsAPI = {
 
   async getStats(tenantId, agentId) {
     const response = await apiClient.get(`/agents/${agentId}/stats`, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async heartbeat() {
+    const response = await apiClient.post('/agents/heartbeat');
+    return response.data;
+  },
+
+  async setOffline() {
+    const response = await apiClient.post('/agents/offline');
+    return response.data;
+  },
+
+  async getAssignmentHistory(conversationId) {
+    const response = await apiClient.get(`/conversations/${conversationId}/assignment-history`);
+    return response.data;
+  },
+
+  async assignWithHistory(conversationId, agentId) {
+    const response = await apiClient.post(`/conversations/${conversationId}/assign-with-history`, { agent_id: agentId });
     return response.data;
   }
 };
@@ -263,7 +293,7 @@ export const UploadAPI = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('conversation_id', conversationId);
-    
+
     const response = await apiClient.post('/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
@@ -279,7 +309,7 @@ export const UploadAPI = {
     formData.append('media_url', mediaUrl);
     formData.append('media_name', mediaName);
     formData.append('content', content);
-    
+
     const response = await apiClient.post('/messages/media', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
