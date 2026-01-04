@@ -10,14 +10,19 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  X
+  X,
+  QrCode,
+  Smartphone,
+  Globe
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
+import { EvolutionAPI, ConnectionsAPI } from '../lib/api';
+import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
 
-const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
+const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR }) => {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
@@ -26,10 +31,16 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
     setTestResult(null);
     try {
       const result = await onTest(connection.id);
-      setTestResult({ success: true, message: result.message });
-      setTimeout(() => onToggle(connection.id, 'connected'), 500);
+      if (result.qrcode) {
+        // Show QR Code modal
+        onShowQR(result.qrcode, result.pairingCode);
+        setTestResult({ success: true, message: 'Escaneie o QR Code para conectar' });
+      } else {
+        setTestResult({ success: true, message: result.message });
+        setTimeout(() => onToggle(connection.id, 'connected'), 500);
+      }
     } catch (error) {
-      setTestResult({ success: false, message: error.message });
+      setTestResult({ success: false, message: error.response?.data?.detail || error.message });
     } finally {
       setTesting(false);
     }
@@ -37,10 +48,12 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
 
   const handleDisconnect = async () => {
     await onToggle(connection.id, 'disconnected');
+    toast.success('Desconectado');
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
+    toast.success('Copiado!');
   };
 
   const getProviderInfo = (provider) => {
@@ -49,25 +62,25 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
         return {
           name: 'Evolution API',
           color: 'from-green-500/30 to-emerald-600/30',
-          icon: '🟢'
+          icon: <Globe className="w-4 h-4" />
         };
       case 'wuzapi':
         return {
           name: 'Wuzapi',
           color: 'from-blue-500/30 to-cyan-600/30',
-          icon: '🔵'
+          icon: <Smartphone className="w-4 h-4" />
         };
       case 'pastorini':
         return {
           name: 'Pastorini',
           color: 'from-purple-500/30 to-violet-600/30',
-          icon: '🟣'
+          icon: <Plug className="w-4 h-4" />
         };
       default:
         return {
           name: provider,
           color: 'from-gray-500/30 to-slate-600/30',
-          icon: '⚪'
+          icon: <Plug className="w-4 h-4" />
         };
     }
   };
@@ -107,7 +120,7 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
         'bg-gradient-to-r',
         providerInfo.color
       )}>
-        <span>{providerInfo.icon}</span>
+        {providerInfo.icon}
         <span className="text-white font-medium">{providerInfo.name}</span>
       </div>
 
@@ -165,8 +178,17 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
             loading={testing}
             className="flex-1 flex items-center justify-center gap-2"
           >
-            <RefreshCw className="w-4 h-4" />
-            Testar Conexão
+            {connection.provider === 'evolution' ? (
+              <>
+                <QrCode className="w-4 h-4" />
+                Conectar
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Testar
+              </>
+            )}
           </GlassButton>
         )}
         <button
@@ -176,6 +198,140 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete }) => {
           <Trash2 className="w-5 h-5" />
         </button>
       </div>
+    </GlassCard>
+  );
+};
+
+// QR Code Modal Component
+const QRCodeModal = ({ qrcode, pairingCode, onClose }) => {
+  if (!qrcode) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <GlassCard className="w-full max-w-md text-center" hover={false}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white">Conectar WhatsApp</h2>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl mb-6">
+          <img
+            src={qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`}
+            alt="QR Code"
+            className="w-full h-auto"
+          />
+        </div>
+
+        {pairingCode && (
+          <div className="mb-6">
+            <p className="text-white/60 text-sm mb-2">Ou use o código de pareamento:</p>
+            <p className="text-2xl font-mono font-bold text-emerald-400 tracking-wider">
+              {pairingCode}
+            </p>
+          </div>
+        )}
+
+        <div className="text-white/60 text-sm space-y-2">
+          <p>1. Abra o WhatsApp no seu celular</p>
+          <p>2. Toque em <strong>Configurações</strong> → <strong>Dispositivos conectados</strong></p>
+          <p>3. Toque em <strong>Conectar dispositivo</strong></p>
+          <p>4. Escaneie o QR Code acima</p>
+        </div>
+
+        <GlassButton onClick={onClose} variant="secondary" className="w-full mt-6">
+          Fechar
+        </GlassButton>
+      </GlassCard>
+    </div>
+  );
+};
+
+// Evolution Instances Component
+const EvolutionInstances = () => {
+  const [instances, setInstances] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadInstances();
+  }, []);
+
+  const loadInstances = async () => {
+    try {
+      const data = await EvolutionAPI.listInstances();
+      setInstances(data);
+    } catch (error) {
+      console.error('Error loading Evolution instances:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
+
+  const connectedInstances = instances.filter(i => i.status === 'open');
+
+  return (
+    <GlassCard className="p-6 mb-8" hover={false}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Globe className="w-5 h-5 text-emerald-400" />
+          Instâncias Evolution API
+        </h3>
+        <GlassBadge variant="success">
+          {connectedInstances.length} conectadas
+        </GlassBadge>
+      </div>
+      
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {instances.slice(0, 12).map((instance) => (
+          <div
+            key={instance.id}
+            className={cn(
+              'p-3 rounded-xl border transition-all',
+              instance.status === 'open'
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-white/5 border-white/10'
+            )}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              {instance.profilePicUrl ? (
+                <img
+                  src={instance.profilePicUrl}
+                  alt={instance.name}
+                  className="w-8 h-8 rounded-full"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                  <Smartphone className="w-4 h-4 text-white/40" />
+                </div>
+              )}
+              <div className={cn(
+                'w-2 h-2 rounded-full',
+                instance.status === 'open' ? 'bg-emerald-500' : 'bg-red-500'
+              )} />
+            </div>
+            <p className="text-white text-sm font-medium truncate">{instance.name}</p>
+            <p className="text-white/40 text-xs truncate">{instance.profileName || 'Sem nome'}</p>
+          </div>
+        ))}
+      </div>
+      
+      {instances.length > 12 && (
+        <p className="text-white/40 text-sm mt-4 text-center">
+          +{instances.length - 12} outras instâncias
+        </p>
+      )}
     </GlassCard>
   );
 };
@@ -193,6 +349,8 @@ const Connections = () => {
   } = useAppStore();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState({ qrcode: null, pairingCode: null });
   const [newConnection, setNewConnection] = useState({
     provider: 'evolution',
     instanceName: '',
@@ -207,28 +365,39 @@ const Connections = () => {
 
   const handleCreateConnection = async (e) => {
     e.preventDefault();
-    await createConnection({
-      tenantId,
-      ...newConnection
-    });
-    setShowCreateModal(false);
-    setNewConnection({ provider: 'evolution', instanceName: '', phoneNumber: '' });
+    try {
+      await createConnection({
+        tenantId,
+        ...newConnection
+      });
+      setShowCreateModal(false);
+      setNewConnection({ provider: 'evolution', instanceName: '', phoneNumber: '' });
+      toast.success('Conexão criada!', { description: 'Configure-a para começar a receber mensagens.' });
+    } catch (error) {
+      toast.error('Erro ao criar conexão', { description: error.message });
+    }
   };
 
   const handleDeleteConnection = async (id) => {
     if (window.confirm('Tem certeza que deseja excluir esta conexão?')) {
       await deleteConnection(id);
+      toast.success('Conexão removida');
     }
   };
 
+  const handleShowQR = (qrcode, pairingCode) => {
+    setQrCodeData({ qrcode, pairingCode });
+    setShowQRModal(true);
+  };
+
   const providers = [
-    { id: 'evolution', name: 'Evolution API', description: 'API oficial para WhatsApp Business' },
-    { id: 'wuzapi', name: 'Wuzapi', description: 'Solução alternativa para WhatsApp' },
-    { id: 'pastorini', name: 'Pastorini', description: 'Gateway WhatsApp brasileiro' }
+    { id: 'evolution', name: 'Evolution API', description: 'API oficial para WhatsApp' },
+    { id: 'wuzapi', name: 'Wuzapi', description: 'Solução alternativa' },
+    { id: 'pastorini', name: 'Pastorini', description: 'Gateway brasileiro' }
   ];
 
   return (
-    <div className="min-h-screen p-6 lg:p-8">
+    <div className="min-h-screen p-6 lg:p-8 overflow-auto">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
         <div>
@@ -240,6 +409,9 @@ const Connections = () => {
           Nova Conexão
         </GlassButton>
       </div>
+
+      {/* Evolution Instances Overview */}
+      <EvolutionInstances />
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -285,7 +457,7 @@ const Connections = () => {
       {/* Connections Grid */}
       {connectionsLoading ? (
         <div className="flex items-center justify-center p-12">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
         </div>
       ) : connections.length === 0 ? (
         <GlassCard className="p-12 text-center" hover={false}>
@@ -308,9 +480,19 @@ const Connections = () => {
               onTest={testConnection}
               onToggle={updateConnectionStatus}
               onDelete={handleDeleteConnection}
+              onShowQR={handleShowQR}
             />
           ))}
         </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <QRCodeModal
+          qrcode={qrCodeData.qrcode}
+          pairingCode={qrCodeData.pairingCode}
+          onClose={() => setShowQRModal(false)}
+        />
       )}
 
       {/* Create Connection Modal */}
