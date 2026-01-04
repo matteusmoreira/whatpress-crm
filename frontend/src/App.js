@@ -8,12 +8,19 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import Inbox from "./pages/Inbox";
 import Connections from "./pages/Connections";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 
 // Layout
 import MainLayout from "./components/Layout/MainLayout";
 
 // Store
 import { useAuthStore } from "./store/authStore";
+
+// Context
+import { ThemeProvider } from "./context/ThemeContext";
+
+// Toast
+import { GlassToaster } from "./components/ui/glass-toaster";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user } = useAuthStore();
