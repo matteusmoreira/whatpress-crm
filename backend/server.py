@@ -407,7 +407,7 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
             
             if state.get('instance', {}).get('state') == 'open':
                 # Already connected
-                webhook_url = f"https://whatsapp-crm-60.preview.emergentagent.com/api/webhooks/evolution/{connection['instance_name']}"
+                webhook_url = f"https://easy-wapp.preview.emergentagent.com/api/webhooks/evolution/{connection['instance_name']}"
                 supabase.table('connections').update({
                     'status': 'connected',
                     'webhook_url': webhook_url
@@ -426,7 +426,7 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
         except Exception as e:
             # Instance might not exist, try to create it
             try:
-                webhook_url = f"https://whatsapp-crm-60.preview.emergentagent.com/api/webhooks/evolution/{connection['instance_name']}"
+                webhook_url = f"https://easy-wapp.preview.emergentagent.com/api/webhooks/evolution/{connection['instance_name']}"
                 create_result = await evolution_api.create_instance(
                     connection['instance_name'],
                     webhook_url
@@ -907,7 +907,7 @@ async def list_evolution_instances(payload: dict = Depends(verify_token)):
 async def create_evolution_instance(name: str, payload: dict = Depends(verify_token)):
     """Create new Evolution API instance"""
     try:
-        webhook_url = f"https://whatsapp-crm-60.preview.emergentagent.com/api/webhooks/evolution/{name}"
+        webhook_url = f"https://easy-wapp.preview.emergentagent.com/api/webhooks/evolution/{name}"
         result = await evolution_api.create_instance(name, webhook_url)
         return result
     except Exception as e:
