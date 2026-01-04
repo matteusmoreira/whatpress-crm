@@ -50,6 +50,14 @@ const Sidebar = () => {
 
   return (
     <>
+      {/* Search Modal */}
+      <SearchModal
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+        conversations={conversations}
+        onSelectConversation={handleSelectConversation}
+      />
+
       {/* Mobile toggle button */}
       <button
         onClick={toggleSidebar}
@@ -90,6 +98,28 @@ const Sidebar = () => {
           </div>
         </div>
 
+        {/* Search Button */}
+        {!isSuperAdmin && (
+          <div className="p-4 border-b border-white/10">
+            <button
+              onClick={() => setShowSearch(true)}
+              className={cn(
+                'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
+                'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white',
+                'transition-all duration-200 group'
+              )}
+            >
+              <Search className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
+              {!sidebarCollapsed && (
+                <>
+                  <span className="flex-1 text-left text-sm">Buscar...</span>
+                  <kbd className="hidden lg:inline px-1.5 py-0.5 rounded bg-white/10 text-xs">\u2318K</kbd>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => (
@@ -99,14 +129,14 @@ const Sidebar = () => {
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-4 py-3 rounded-xl',
-                  'transition-all duration-200',
+                  'transition-all duration-200 group',
                   isActive
                     ? 'bg-emerald-500/30 text-white shadow-lg'
                     : 'text-white/70 hover:bg-white/10 hover:text-white'
                 )
               }
             >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
+              <item.icon className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
               {!sidebarCollapsed && <span className="font-medium">{item.label}</span>}
             </NavLink>
           ))}
@@ -114,11 +144,20 @@ const Sidebar = () => {
 
         {/* User section */}
         <div className="p-4 border-t border-white/10">
-          <div className="flex items-center gap-3 mb-4 px-2">
+          <NavLink
+            to={isSuperAdmin ? '/superadmin' : '/app/profile'}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 mb-4 px-2 py-2 rounded-xl transition-all',
+                'hover:bg-white/10 cursor-pointer group',
+                isActive && 'bg-white/10'
+              )
+            }
+          >
             <img
               src={user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
               alt={user?.name}
-              className="w-10 h-10 rounded-full border-2 border-emerald-500/50"
+              className="w-10 h-10 rounded-full border-2 border-emerald-500/50 group-hover:border-emerald-500 transition-colors"
             />
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
@@ -126,15 +165,15 @@ const Sidebar = () => {
                 <p className="text-white/50 text-sm truncate">{user?.email}</p>
               </div>
             )}
-          </div>
+          </NavLink>
           <button
             onClick={handleLogout}
             className={cn(
               'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
-              'text-red-400 hover:bg-red-500/20 transition-all duration-200'
+              'text-red-400 hover:bg-red-500/20 transition-all duration-200 group'
             )}
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
             {!sidebarCollapsed && <span>Sair</span>}
           </button>
         </div>
