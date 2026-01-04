@@ -22,11 +22,11 @@ load_dotenv(ROOT_DIR / '.env')
 # Create the main app
 app = FastAPI(title="WhatsApp CRM API")
 
-# Configure CORS immediately
-origins = os.getenv("CORS_ORIGINS", "*").split(",")
+# Configure CORS immediately - Fix for Railway deployment
+# allow_origins=["*"] fails with allow_credentials=True in some browsers/proxies
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origin_regex=".*",  # Allow all origins via regex to support credentials
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
