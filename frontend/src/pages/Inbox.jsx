@@ -48,6 +48,7 @@ const DEFAULT_LABELS = [
 
 const Inbox = () => {
   const { user } = useAuthStore();
+  const { isConnected: realtimeConnected } = useRealtime();
   const {
     conversations,
     selectedConversation,
@@ -72,29 +73,27 @@ const Inbox = () => {
   const [showLabelsMenu, setShowLabelsMenu] = useState(false);
   const [showAssignMenu, setShowAssignMenu] = useState(false);
   const [agents, setAgents] = useState([]);
-  const [realtimeConnected, setRealtimeConnected] = useState(false);
-  const [typingIndicator, setTypingIndicator] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   const tenantId = user?.tenantId || 'tenant-1';
 
-  // Fetch initial data
-  useEffect(() => {
-    fetchConversations(tenantId);
-    fetchConnections(tenantId);
-    loadAgents();
-  }, [tenantId, fetchConversations, fetchConnections]);
-
   // Load agents for assignment
-  const loadAgents = async () => {
+  const loadAgents = useCallback(async () => {
     try {
       const data = await AgentsAPI.list(tenantId);
       setAgents(data);
     } catch (error) {
       console.error('Error loading agents:', error);
     }
-  };
+  }, [tenantId]);
+
+  // Fetch initial data
+  useEffect(() => {
+    fetchConversations(tenantId);
+    fetchConnections(tenantId);
+    loadAgents();
+  }, [tenantId, fetchConversations, fetchConnections, loadAgents]);
 
   // Subscribe to realtime updates
   useEffect(() => {
