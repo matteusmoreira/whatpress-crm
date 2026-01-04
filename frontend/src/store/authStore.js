@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthRepository } from '../lib/storage';
+import { AuthAPI } from '../lib/api';
 
 export const useAuthStore = create(
   persist(
     (set, get) => ({
       user: null,
+      token: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
@@ -13,17 +14,18 @@ export const useAuthStore = create(
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          const user = await AuthRepository.login(email, password);
-          set({ user, isAuthenticated: true, isLoading: false });
+          const { user, token } = await AuthAPI.login(email, password);
+          set({ user, token, isAuthenticated: true, isLoading: false });
           return user;
         } catch (error) {
-          set({ error: error.message, isLoading: false });
-          throw error;
+          const message = error.response?.data?.detail || 'Erro ao fazer login';
+          set({ error: message, isLoading: false });
+          throw new Error(message);
         }
       },
 
       logout: () => {
-        set({ user: null, isAuthenticated: false, error: null });
+        set({ user: null, token: null, isAuthenticated: false, error: null });
       },
 
       clearError: () => {
@@ -32,7 +34,11 @@ export const useAuthStore = create(
     }),
     {
       name: 'whatsapp-crm-auth',
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated })
+      partialize: (state) => ({ 
+        user: state.user, 
+        token: state.token,
+        isAuthenticated: state.isAuthenticated 
+      })
     }
   )
 );
