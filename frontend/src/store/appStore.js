@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { TenantsRepository, ConnectionsRepository, ConversationsRepository, MessagesRepository } from '../lib/storage';
+import { TenantsAPI, ConnectionsAPI, ConversationsAPI, MessagesAPI } from '../lib/api';
 
 export const useAppStore = create((set, get) => ({
   // Tenants State
@@ -25,27 +25,32 @@ export const useAppStore = create((set, get) => ({
   // Sidebar State
   sidebarCollapsed: false,
 
+  // Error State
+  error: null,
+
   // Tenants Actions
   fetchTenants: async () => {
-    set({ tenantsLoading: true });
+    set({ tenantsLoading: true, error: null });
     try {
-      const tenants = await TenantsRepository.list();
-      const stats = await TenantsRepository.getStats();
+      const [tenants, stats] = await Promise.all([
+        TenantsAPI.list(),
+        TenantsAPI.getStats()
+      ]);
       set({ tenants, stats, tenantsLoading: false });
     } catch (error) {
       console.error('Error fetching tenants:', error);
-      set({ tenantsLoading: false });
+      set({ tenantsLoading: false, error: error.message });
     }
   },
 
   createTenant: async (tenantData) => {
-    const newTenant = await TenantsRepository.create(tenantData);
+    const newTenant = await TenantsAPI.create(tenantData);
     set(state => ({ tenants: [...state.tenants, newTenant] }));
     return newTenant;
   },
 
   updateTenant: async (id, updates) => {
-    const updatedTenant = await TenantsRepository.update(id, updates);
+    const updatedTenant = await TenantsAPI.update(id, updates);
     set(state => ({
       tenants: state.tenants.map(t => t.id === id ? updatedTenant : t)
     }));
@@ -53,7 +58,7 @@ export const useAppStore = create((set, get) => ({
   },
 
   deleteTenant: async (id) => {
-    await TenantsRepository.delete(id);
+    await TenantsAPI.delete(id);
     set(state => ({
       tenants: state.tenants.filter(t => t.id !== id)
     }));
@@ -65,28 +70,28 @@ export const useAppStore = create((set, get) => ({
 
   // Connections Actions
   fetchConnections: async (tenantId) => {
-    set({ connectionsLoading: true });
+    set({ connectionsLoading: true, error: null });
     try {
-      const connections = await ConnectionsRepository.list(tenantId);
+      const connections = await ConnectionsAPI.list(tenantId);
       set({ connections, connectionsLoading: false });
     } catch (error) {
       console.error('Error fetching connections:', error);
-      set({ connectionsLoading: false });
+      set({ connectionsLoading: false, error: error.message });
     }
   },
 
   createConnection: async (connectionData) => {
-    const newConnection = await ConnectionsRepository.create(connectionData);
+    const newConnection = await ConnectionsAPI.create(connectionData);
     set(state => ({ connections: [...state.connections, newConnection] }));
     return newConnection;
   },
 
   testConnection: async (id) => {
-    return await ConnectionsRepository.testConnection(id);
+    return await ConnectionsAPI.testConnection(id);
   },
 
   updateConnectionStatus: async (id, status) => {
-    const updatedConnection = await ConnectionsRepository.updateStatus(id, status);
+    const updatedConnection = await ConnectionsAPI.updateStatus(id, status);
     set(state => ({
       connections: state.connections.map(c => c.id === id ? updatedConnection : c)
     }));
@@ -94,7 +99,7 @@ export const useAppStore = create((set, get) => ({
   },
 
   deleteConnection: async (id) => {
-    await ConnectionsRepository.delete(id);
+    await ConnectionsAPI.delete(id);
     set(state => ({
       connections: state.connections.filter(c => c.id !== id)
     }));
@@ -102,28 +107,33 @@ export const useAppStore = create((set, get) => ({
 
   // Conversations Actions
   fetchConversations: async (tenantId, filters = {}) => {
-    set({ conversationsLoading: true });
+    set({ conversationsLoading: true, error: null });
     try {
-      const conversations = await ConversationsRepository.list(tenantId, filters);
+      const conversations = await ConversationsAPI.list(tenantId, filters);
       set({ conversations, conversationsLoading: false });
     } catch (error) {
       console.error('Error fetching conversations:', error);
-      set({ conversationsLoading: false });
+      set({ conversationsLoading: false, error: error.message });
     }
   },
 
   setSelectedConversation: async (conversation) => {
     set({ selectedConversation: conversation, messagesLoading: true });
     if (conversation) {
-      await ConversationsRepository.markAsRead(conversation.id);
-      const messages = await MessagesRepository.list(conversation.id);
-      set(state => ({
-        messages,
-        messagesLoading: false,
-        conversations: state.conversations.map(c => 
-          c.id === conversation.id ? { ...c, unreadCount: 0 } : c
-        )
-      }));
+      try {
+        await ConversationsAPI.markAsRead(conversation.id);
+        const messages = await MessagesAPI.list(conversation.id);
+        set(state => ({
+          messages,
+          messagesLoading: false,
+          conversations: state.conversations.map(c => 
+            c.id === conversation.id ? { ...c, unreadCount: 0 } : c
+          )
+        }));
+      } catch (error) {
+        console.error('Error loading messages:', error);
+        set({ messagesLoading: false });
+      }
     } else {
       set({ messages: [], messagesLoading: false });
     }
@@ -134,16 +144,18 @@ export const useAppStore = create((set, get) => ({
   },
 
   updateConversationStatus: async (id, status) => {
-    const updated = await ConversationsRepository.updateStatus(id, status);
+    const updated = await ConversationsAPI.updateStatus(id, status);
     set(state => ({
-      conversations: state.conversations.map(c => c.id === id ? updated : c),
-      selectedConversation: state.selectedConversation?.id === id ? updated : state.selectedConversation
+      conversations: state.conversations.map(c => c.id === id ? { ...c, status } : c),
+      selectedConversation: state.selectedConversation?.id === id 
+        ? { ...state.selectedConversation, status } 
+        : state.selectedConversation
     }));
   },
 
   // Messages Actions
   sendMessage: async (conversationId, content) => {
-    const newMessage = await MessagesRepository.send(conversationId, content);
+    const newMessage = await MessagesAPI.send(conversationId, content);
     set(state => ({
       messages: [...state.messages, newMessage],
       conversations: state.conversations.map(c => 
@@ -158,5 +170,9 @@ export const useAppStore = create((set, get) => ({
   // UI Actions
   toggleSidebar: () => {
     set(state => ({ sidebarCollapsed: !state.sidebarCollapsed }));
+  },
+
+  clearError: () => {
+    set({ error: null });
   }
 }));
