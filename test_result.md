@@ -242,3 +242,5 @@ agent_communication:
     message: "Testing completed. CRITICAL ISSUES FOUND: FileUpload and QuickReplies buttons are visible but not functional. The buttons appear in the chat input area but clicking them does not trigger their respective panels to open. All other features (login, conversations list, chat interface, realtime indicator) are working correctly. The UI components are implemented but the click handlers may not be properly connected."
   - agent: "main"
     message: "P0 COMPLETED. Re-tested FileUpload and QuickReplies using correct SVG selectors (svg.lucide-paperclip and svg.lucide-zap). Both components work correctly. The testing agent was using wrong button selectors. Screenshots confirm both panels open properly."
+  - agent: "main"
+    message: "P1 INTEGRATION WITH EVOLUTION API COMPLETE. Backend endpoints for sending/receiving messages via Evolution API are fully implemented. The webhook for receiving messages is configured at /api/webhooks/evolution/{instance_name}. Connections page shows Evolution API instances. Note: For full functionality, users need to configure connections with real Evolution API instance names."
