@@ -116,6 +116,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Login with Admin Tenant credentials works correctly"
+      - working: true
+        agent: "testing"
+        comment: "✅ Authentication tested successfully. Login endpoint returns valid token and user data for admin@minhaempresa.com. User: Carlos Silva, Tenant: 252159f5-fc48-4414-a574-2f5814046bea"
 
   - task: "Conversations API"
     implemented: true
@@ -128,6 +131,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Conversations are fetched from Supabase and displayed correctly"
+      - working: true
+        agent: "testing"
+        comment: "✅ Conversations API tested successfully. Retrieved 2 conversations for tenant. API returns proper conversation data with IDs, contact info, and metadata."
 
   - task: "Messages API"
     implemented: true
@@ -140,6 +146,45 @@ backend:
       - working: true
         agent: "main"
         comment: "Messages are fetched and displayed in chat"
+      - working: true
+        agent: "testing"
+        comment: "✅ Messages API tested successfully. Retrieved 3 messages for conversation 9df42848-53a6-43d4-99af-7bb367a8634b. API returns proper message data with content, type, direction, and timestamps."
+
+  - task: "File Upload API (P2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ File Upload (P2) tested successfully. POST /api/upload endpoint accepts multipart form data, validates file size (10MB max), and returns file metadata. Uses base64 fallback when Supabase storage bucket not found. Returns proper response with id, url, name, type, and size fields."
+
+  - task: "Media Message API (P2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ Media Message (P2) tested successfully. POST /api/messages/media endpoint accepts form data with conversation_id, media_type, media_url, and content. Creates message record in database and attempts WhatsApp delivery via Evolution API. Returns proper message object with all required fields."
+
+  - task: "Health Check API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ Health Check tested successfully. GET /api/health returns status: healthy with database: supabase and whatsapp: evolution-api indicators."
 
 frontend:
   - task: "Login Page"
