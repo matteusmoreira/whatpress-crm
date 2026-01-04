@@ -3,6 +3,7 @@ import { Upload, X, Image, FileText, Film, Mic, Loader2 } from 'lucide-react';
 import { GlassButton } from './GlassCard';
 import { cn } from '../lib/utils';
 import { toast } from './ui/glass-toaster';
+import { UploadAPI } from '../lib/api';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -29,10 +30,11 @@ const getFileIcon = (type) => {
   }
 };
 
-const FileUpload = ({ onUpload, onCancel, disabled }) => {
+const FileUpload = ({ conversationId, onUpload, onCancel, disabled }) => {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
 
@@ -64,28 +66,49 @@ const FileUpload = ({ onUpload, onCancel, disabled }) => {
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !conversationId) {
+      toast.error('Erro', { description: 'Selecione uma conversa primeiro' });
+      return;
+    }
 
     setUploading(true);
+    setUploadProgress(10);
+    
     try {
-      // Convert file to base64 for sending
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target.result;
-        await onUpload({
-          type: file.type,
-          name: file.name,
-          data: base64,
-          mimeType: file.file.type
-        });
-        setFile(null);
-        setPreview(null);
-      };
-      reader.readAsDataURL(file.file);
+      // Upload file to backend
+      setUploadProgress(30);
+      const uploadResult = await UploadAPI.uploadFile(file.file, conversationId);
+      setUploadProgress(70);
+      
+      // Send media message
+      const messageResult = await UploadAPI.sendMediaMessage(
+        conversationId,
+        file.type,
+        uploadResult.url,
+        file.name
+      );
+      setUploadProgress(100);
+      
+      toast.success('Arquivo enviado!', { description: file.name });
+      
+      // Notify parent
+      await onUpload?.({
+        type: file.type,
+        name: file.name,
+        url: uploadResult.url,
+        message: messageResult
+      });
+      
+      setFile(null);
+      setPreview(null);
     } catch (error) {
-      toast.error('Erro ao enviar arquivo', { description: error.message });
+      console.error('Upload error:', error);
+      toast.error('Erro ao enviar arquivo', { 
+        description: error.response?.data?.detail || error.message 
+      });
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -122,12 +145,22 @@ const FileUpload = ({ onUpload, onCancel, disabled }) => {
             <button
               onClick={handleCancel}
               disabled={uploading}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors"
+              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors disabled:opacity-50"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        {/* Progress bar */}
+        {uploading && (
+          <div className="mt-3 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        )}
 
         {/* Send button */}
         <div className="mt-4 flex justify-end">
@@ -137,7 +170,7 @@ const FileUpload = ({ onUpload, onCancel, disabled }) => {
             className="flex items-center gap-2"
           >
             {uploading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+              <><Loader2 className="w-4 h-4 animate-spin" /> Enviando ({uploadProgress}%)...</>
             ) : (
               <><Upload className="w-4 h-4" /> Enviar Arquivo</>
             )}
