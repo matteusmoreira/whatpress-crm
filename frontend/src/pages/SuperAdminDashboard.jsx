@@ -14,20 +14,24 @@ import {
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
 import { cn } from '../lib/utils';
+import { toast } from '../components/ui/glass-toaster';
+import AnimatedCounter from '../components/AnimatedCounter';
 
 const KPICard = ({ icon: Icon, label, value, trend, color }) => (
   <GlassCard className="p-5">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-white/60 text-sm mb-1">{label}</p>
-        <p className="text-3xl font-bold text-white">{value}</p>
+        <p className="text-3xl font-bold text-white">
+          <AnimatedCounter value={value} duration={800} />
+        </p>
         {trend && (
           <p className="text-emerald-400 text-sm mt-1 flex items-center gap-1">
             <TrendingUp className="w-4 h-4" /> {trend}
           </p>
         )}
       </div>
-      <div className={cn('p-3 rounded-xl', color)}>
+      <div className={cn('p-3 rounded-xl transition-transform hover:scale-110', color)}>
         <Icon className="w-6 h-6 text-white" />
       </div>
     </div>
