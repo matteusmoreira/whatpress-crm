@@ -6,7 +6,8 @@ import {
   Palette,
   Globe,
   CreditCard,
-  ChevronRight
+  ChevronRight,
+  Plug
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GlassCard } from '../components/GlassCard';
@@ -25,14 +26,14 @@ const SettingItem = ({ icon: Icon, title, description, to, external }) => {
         'hover:bg-white/10 cursor-pointer group'
       )}
     >
-      <div className="p-3 rounded-xl bg-emerald-500/20">
+      <div className="p-3 rounded-xl bg-emerald-500/20 group-hover:bg-emerald-500/30 transition-colors">
         <Icon className="w-5 h-5 text-emerald-400" />
       </div>
       <div className="flex-1">
         <h3 className="text-white font-medium">{title}</h3>
         <p className="text-white/50 text-sm">{description}</p>
       </div>
-      <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-white/60 transition-colors" />
+      <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-1 transition-all" />
     </Component>
   );
 };
@@ -51,16 +52,22 @@ const Settings = () => {
           to: '/app/settings/profile'
         },
         {
+          icon: Plug,
+          title: 'Conexões WhatsApp',
+          description: 'Configure seus provedores de mensagens',
+          to: '/app/settings/connections'
+        },
+        {
           icon: Bell,
           title: 'Notificações',
           description: 'Configure alertas e notificações',
-          to: '/app/settings/notifications'
+          to: '/app/settings/profile'
         },
         {
           icon: Shield,
           title: 'Segurança',
           description: 'Senha e autenticação de dois fatores',
-          to: '/app/settings/security'
+          to: '/app/settings/profile'
         }
       ]
     },
@@ -71,13 +78,13 @@ const Settings = () => {
           icon: Palette,
           title: 'Aparência',
           description: 'Tema, cores e personalização',
-          to: '/app/settings/appearance'
+          to: '/app/settings/profile'
         },
         {
           icon: Globe,
           title: 'Idioma e Região',
           description: 'Idioma, fuso horário e formato de data',
-          to: '/app/settings/language'
+          to: '/app/settings/profile'
         }
       ]
     },
@@ -88,7 +95,7 @@ const Settings = () => {
           icon: CreditCard,
           title: 'Plano e Faturamento',
           description: 'Gerencie sua assinatura e pagamentos',
-          to: '/app/settings/billing'
+          to: '/app/settings/profile'
         }
       ]
     }
