@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Search,
   Filter,
@@ -27,13 +27,13 @@ import {
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
+import { useRealtime } from '../context/RealtimeContext';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '../components/ui/glass-toaster';
 import FileUpload from '../components/FileUpload';
 import QuickRepliesPanel from '../components/QuickRepliesPanel';
-import { subscribeToMessages, subscribeToConversations } from '../lib/supabase';
 import { AgentsAPI, LabelsAPI, ConversationsAPI } from '../lib/api';
 
 // Default labels
