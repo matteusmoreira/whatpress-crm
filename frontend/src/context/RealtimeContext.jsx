@@ -97,11 +97,12 @@ export const RealtimeProvider = ({ children }) => {
     // Subscribe to connection status
     const unsubConnections = subscribeToConnectionStatus(tenantId, handleConnectionUpdate);
     
-    setUnsubscribers([unsubConversations, unsubConnections]);
+    const newUnsubscribers = [unsubConversations, unsubConnections];
+    setUnsubscribers(newUnsubscribers);
     setIsConnected(true);
 
     return () => {
-      unsubscribers.forEach(unsub => unsub?.());
+      newUnsubscribers.forEach(unsub => unsub?.());
       setIsConnected(false);
     };
   }, [isAuthenticated, tenantId, handleConversationUpdate, handleConnectionUpdate]);
