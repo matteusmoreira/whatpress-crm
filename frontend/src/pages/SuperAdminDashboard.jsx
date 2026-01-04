@@ -225,7 +225,7 @@ const SuperAdminDashboard = () => {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteTenant(tenant.id)}
+                          onClick={() => handleDeleteTenant(tenant.id, tenant.name)}
                           className="p-2 rounded-lg hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
