@@ -50,55 +50,57 @@ const PublicRoute = ({ children }) => {
 function App() {
   return (
     <ThemeProvider>
-      <div className="App">
-        <GlassToaster />
-        <BrowserRouter>
-          <Routes>
-            {/* Public Routes */}
-            <Route
-              path="/sign-in"
-              element={
-                <PublicRoute>
-                  <SignIn />
-                </PublicRoute>
-              }
-            />
+      <RealtimeProvider>
+        <div className="App">
+          <GlassToaster />
+          <BrowserRouter>
+            <Routes>
+              {/* Public Routes */}
+              <Route
+                path="/sign-in"
+                element={
+                  <PublicRoute>
+                    <SignIn />
+                  </PublicRoute>
+                }
+              />
 
-            {/* SuperAdmin Routes */}
-            <Route
-              path="/superadmin"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin']}>
-                  <MainLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<SuperAdminDashboard />} />
-              <Route path="tenants" element={<SuperAdminDashboard />} />
-            </Route>
+              {/* SuperAdmin Routes */}
+              <Route
+                path="/superadmin"
+                element={
+                  <ProtectedRoute allowedRoles={['superadmin']}>
+                    <MainLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<SuperAdminDashboard />} />
+                <Route path="tenants" element={<SuperAdminDashboard />} />
+              </Route>
 
-            {/* App Routes (Admin/Agent) */}
-            <Route
-              path="/app"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'agent']}>
-                  <MainLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="/app/inbox" replace />} />
-              <Route path="inbox" element={<Inbox />} />
-              <Route path="settings/connections" element={<Connections />} />
-              <Route path="settings/profile" element={<Profile />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="profile" element={<Profile />} />
-            </Route>
+              {/* App Routes (Admin/Agent) */}
+              <Route
+                path="/app"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'agent']}>
+                    <MainLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/app/inbox" replace />} />
+                <Route path="inbox" element={<Inbox />} />
+                <Route path="settings/connections" element={<Connections />} />
+                <Route path="settings/profile" element={<Profile />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="profile" element={<Profile />} />
+              </Route>
 
-            {/* Default redirect */}
-            <Route path="*" element={<Navigate to="/sign-in" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </div>
+              {/* Default redirect */}
+              <Route path="*" element={<Navigate to="/sign-in" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </div>
+      </RealtimeProvider>
     </ThemeProvider>
   );
 }
