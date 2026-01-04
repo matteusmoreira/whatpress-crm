@@ -22,6 +22,16 @@ load_dotenv(ROOT_DIR / '.env')
 # Create the main app
 app = FastAPI(title="WhatsApp CRM API")
 
+# Configure CORS immediately
+origins = os.getenv("CORS_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Healthcheck endpoint (required for Railway)
 @app.get("/health")
 async def health_check():
@@ -2428,13 +2438,7 @@ async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, m
 # Include the router in the main app
 app.include_router(api_router)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 @app.on_event("startup")
 async def startup_event():
