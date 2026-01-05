@@ -609,13 +609,29 @@ const Inbox = () => {
               ) : (
                 <>
                   {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={cn(
-                        'flex group',
-                        msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
-                      )}
-                    >
+                    <div key={msg.id}>
+                      {(() => {
+                        const rawContent = typeof msg.content === 'string'
+                          ? msg.content
+                          : msg.content == null
+                            ? ''
+                            : String(msg.content);
+                        const hasContent = rawContent.trim().length > 0;
+                        const fallback =
+                          msg.type === 'audio' ? '[Áudio]' :
+                          msg.type === 'image' ? '[Imagem]' :
+                          msg.type === 'video' ? '[Vídeo]' :
+                          msg.type === 'document' ? '[Documento]' :
+                          '[Mensagem]';
+                        const displayContent = hasContent ? rawContent : fallback;
+
+                        return (
+                          <div
+                            className={cn(
+                              'flex group',
+                              msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
+                            )}
+                          >
                       {/* Reply button - appears on hover (left side for outbound) */}
                       {msg.direction === 'outbound' && (
                         <button
@@ -642,7 +658,9 @@ const Inbox = () => {
                             <span className="text-xs capitalize">{msg.type}</span>
                           </div>
                         )}
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                        <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
+                          {displayContent}
+                        </p>
                         <div className={cn(
                           'flex items-center justify-end gap-1 mt-1',
                           msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
@@ -664,6 +682,9 @@ const Inbox = () => {
                           <Reply className="w-4 h-4" />
                         </button>
                       )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
@@ -702,7 +723,11 @@ const Inbox = () => {
                         Respondendo a {replyToMessage.direction === 'inbound' ? selectedConversation?.contactName : 'você'}
                       </span>
                     </div>
-                    <p className="text-white/60 text-sm truncate">{replyToMessage.content}</p>
+                    <p className="text-white/60 text-sm truncate">
+                      {(typeof replyToMessage.content === 'string' && replyToMessage.content.trim().length > 0)
+                        ? replyToMessage.content
+                        : '[Mensagem]'}
+                    </p>
                   </div>
                   <button
                     onClick={() => setReplyToMessage(null)}

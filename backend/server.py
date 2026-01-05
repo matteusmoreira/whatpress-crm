@@ -1399,6 +1399,9 @@ async def evolution_webhook(instance_name: str, payload: dict):
             if '@g.us' in raw_jid:
                 logger.info(f"Ignoring group message from {raw_jid}")
                 return {"success": True, "ignored": "group_message"}
+            if '@broadcast' in raw_jid:
+                logger.info(f"Ignoring broadcast message from {raw_jid}")
+                return {"success": True, "ignored": "broadcast_message"}
             
             # Find connection by instance name
             conn = supabase.table('connections').select('*, tenants(*)').eq('instance_name', instance_name).execute()
@@ -1407,9 +1410,19 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 connection = conn.data[0]
                 tenant_id = connection['tenant_id']
                 phone = parsed['remote_jid']
+                if not phone or phone in ['status', 'broadcast']:
+                    logger.info(f"Ignoring message with invalid remote_jid: {phone} raw_jid={raw_jid}")
+                    return {"success": True, "ignored": "invalid_remote_jid"}
                 
                 # Find or create conversation
-                conv = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('contact_phone', phone).execute()
+                conv = (
+                    supabase.table('conversations')
+                    .select('*')
+                    .eq('tenant_id', tenant_id)
+                    .eq('connection_id', connection['id'])
+                    .eq('contact_phone', phone)
+                    .execute()
+                )
                 
                 if conv.data:
                     conversation = conv.data[0]

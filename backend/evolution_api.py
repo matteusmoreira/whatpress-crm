@@ -356,6 +356,50 @@ class EvolutionAPI:
                 msg = messages[0] if isinstance(messages[0], dict) else {}
                 key = msg.get('key') or {}
                 message_content = msg.get('message') or {}
+                if not isinstance(message_content, dict):
+                    message_content = {}
+
+                def unwrap_content(content: dict) -> dict:
+                    cur = content
+                    for _ in range(8):
+                        if not isinstance(cur, dict):
+                            return {}
+
+                        ephemeral = cur.get('ephemeralMessage')
+                        if isinstance(ephemeral, dict) and isinstance(ephemeral.get('message'), dict):
+                            cur = ephemeral.get('message')
+                            continue
+
+                        view_once = cur.get('viewOnceMessage')
+                        if isinstance(view_once, dict) and isinstance(view_once.get('message'), dict):
+                            cur = view_once.get('message')
+                            continue
+
+                        view_once_v2 = cur.get('viewOnceMessageV2')
+                        if isinstance(view_once_v2, dict) and isinstance(view_once_v2.get('message'), dict):
+                            cur = view_once_v2.get('message')
+                            continue
+
+                        view_once_v2_ext = cur.get('viewOnceMessageV2Extension')
+                        if isinstance(view_once_v2_ext, dict) and isinstance(view_once_v2_ext.get('message'), dict):
+                            cur = view_once_v2_ext.get('message')
+                            continue
+
+                        document_with_caption = cur.get('documentWithCaptionMessage')
+                        if isinstance(document_with_caption, dict) and isinstance(document_with_caption.get('message'), dict):
+                            cur = document_with_caption.get('message')
+                            continue
+
+                        edited = cur.get('editedMessage')
+                        if isinstance(edited, dict) and isinstance(edited.get('message'), dict):
+                            cur = edited.get('message')
+                            continue
+
+                        return cur if isinstance(cur, dict) else {}
+
+                    return cur if isinstance(cur, dict) else {}
+
+                message_content = unwrap_content(message_content)
                 
                 # Extract text content
                 text = None
@@ -366,6 +410,26 @@ class EvolutionAPI:
                     text = message_content['conversation']
                 elif 'extendedTextMessage' in message_content:
                     text = message_content['extendedTextMessage'].get('text')
+                elif 'buttonsResponseMessage' in message_content:
+                    br = message_content.get('buttonsResponseMessage') or {}
+                    if isinstance(br, dict):
+                        text = br.get('selectedDisplayText') or br.get('selectedButtonId')
+                elif 'listResponseMessage' in message_content:
+                    lr = message_content.get('listResponseMessage') or {}
+                    if isinstance(lr, dict):
+                        text = lr.get('title')
+                        if not text:
+                            ssr = lr.get('singleSelectReply') or {}
+                            if isinstance(ssr, dict):
+                                text = ssr.get('selectedRowId')
+                elif 'templateButtonReplyMessage' in message_content:
+                    tbr = message_content.get('templateButtonReplyMessage') or {}
+                    if isinstance(tbr, dict):
+                        text = tbr.get('selectedDisplayText') or tbr.get('selectedId')
+                elif 'reactionMessage' in message_content:
+                    rx = message_content.get('reactionMessage') or {}
+                    if isinstance(rx, dict):
+                        text = rx.get('text')
                 elif 'imageMessage' in message_content:
                     msg_type = 'image'
                     text = message_content['imageMessage'].get('caption', '')
@@ -381,12 +445,35 @@ class EvolutionAPI:
                     msg_type = 'document'
                     text = message_content['documentMessage'].get('fileName', 'document')
                     media_url = message_content['documentMessage'].get('url')
+                elif 'stickerMessage' in message_content:
+                    text = '[Sticker]'
+                elif 'locationMessage' in message_content:
+                    text = '[Localização]'
+                elif 'contactMessage' in message_content:
+                    text = '[Contato]'
+                elif 'contactsArrayMessage' in message_content:
+                    text = '[Contatos]'
+
+                if msg_type == 'audio' and not (text or '').strip():
+                    text = '[Áudio]'
+                if msg_type == 'image' and not (text or '').strip():
+                    text = '[Imagem]'
+                if msg_type == 'video' and not (text or '').strip():
+                    text = '[Vídeo]'
+                if msg_type == 'document' and not (text or '').strip():
+                    text = '[Documento]'
+                if msg_type == 'text' and not (text or '').strip():
+                    text = '[Mensagem]'
                 
                 remote_jid_raw = ''
                 if isinstance(key, dict):
                     remote_jid_raw = key.get('remoteJid') or key.get('remote_jid') or ''
                 if not remote_jid_raw and isinstance(msg, dict):
                     remote_jid_raw = msg.get('remoteJid') or msg.get('remote_jid') or ''
+                if not remote_jid_raw and isinstance(data, dict):
+                    data_key = data.get('key') or {}
+                    if isinstance(data_key, dict):
+                        remote_jid_raw = data_key.get('remoteJid') or data_key.get('remote_jid') or ''
 
                 remote_id = remote_jid_raw
                 if isinstance(remote_id, str):
