@@ -151,7 +151,14 @@ export const ConnectionsAPI = {
   },
 
   async create(data) {
-    const response = await apiClient.post('/connections', data);
+    // Converter camelCase para snake_case para o backend
+    const payload = {
+      tenant_id: data.tenantId,
+      provider: data.provider,
+      instance_name: data.instanceName,
+      phone_number: data.phoneNumber || ''
+    };
+    const response = await apiClient.post('/connections', payload);
     return response.data;
   },
 
