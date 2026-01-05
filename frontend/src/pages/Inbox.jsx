@@ -41,6 +41,44 @@ import { AgentsAPI, LabelsAPI, ConversationsAPI } from '../lib/api';
 
 // Labels are now loaded from the database
 
+const getInitials = (name) => {
+  const safe = (name || '').trim();
+  if (!safe) return '?';
+  const parts = safe.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] || '';
+  const last = (parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || '';
+  return (first + last).toUpperCase() || '?';
+};
+
+const ContactAvatar = ({ src, name, sizeClassName, className }) => {
+  const [failed, setFailed] = useState(false);
+  const normalizedSrc = typeof src === 'string' && src.includes('api.dicebear.com') ? '' : (src || '');
+  const showImage = Boolean(normalizedSrc) && !failed;
+
+  return (
+    <div
+      className={cn(
+        sizeClassName,
+        'rounded-full overflow-hidden flex items-center justify-center bg-white/10 text-white/80 font-semibold select-none',
+        className
+      )}
+    >
+      {showImage ? (
+        <img
+          src={normalizedSrc}
+          alt={name || 'Contato'}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="text-sm">{getInitials(name)}</span>
+      )}
+    </div>
+  );
+};
+
 const Inbox = () => {
   const { user } = useAuthStore();
   const { isConnected: realtimeConnected } = useRealtime();
@@ -295,9 +333,9 @@ const Inbox = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col lg:flex-row">
+    <div className="h-full min-h-0 flex flex-col lg:flex-row">
       {/* Conversations List */}
-      <div className="w-full lg:w-96 border-r border-white/10 flex flex-col bg-black/20">
+      <div className="w-full lg:w-96 min-h-0 border-r border-white/10 flex flex-col bg-black/20">
         {/* Header */}
         <div className="p-4 border-b border-white/10">
           <div className="flex items-center justify-between mb-4">
@@ -413,10 +451,10 @@ const Inbox = () => {
               >
                 <div className="flex items-start gap-3">
                   <div className="relative">
-                    <img
+                    <ContactAvatar
                       src={conv.contactAvatar}
-                      alt={conv.contactName}
-                      className="w-12 h-12 rounded-full"
+                      name={conv.contactName}
+                      sizeClassName="w-12 h-12"
                     />
                     <div className={cn(
                       'absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-emerald-900',
@@ -463,17 +501,17 @@ const Inbox = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col bg-gradient-to-br from-emerald-950/50 to-teal-950/50">
+      <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-br from-emerald-950/50 to-teal-950/50">
         {selectedConversation ? (
           <>
             {/* Chat Header */}
             <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <img
+                  <ContactAvatar
                     src={selectedConversation.contactAvatar}
-                    alt={selectedConversation.contactName}
-                    className="w-10 h-10 rounded-full"
+                    name={selectedConversation.contactName}
+                    sizeClassName="w-10 h-10"
                   />
                   <div>
                     <h2 className="text-white font-medium">{selectedConversation.contactName}</h2>
@@ -601,7 +639,7 @@ const Inbox = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
               {messagesLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />

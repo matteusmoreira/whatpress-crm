@@ -15,13 +15,13 @@ const MainLayout = () => {
 
   return (
     <div className={cn(
-      "min-h-screen flex transition-colors duration-300",
+      "h-[100dvh] flex overflow-hidden transition-colors duration-300",
       theme === 'dark' 
         ? "bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900" 
         : "bg-gradient-to-br from-slate-100 via-emerald-50 to-teal-50"
     )}>
       <Sidebar />
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <Outlet />
       </main>
     </div>

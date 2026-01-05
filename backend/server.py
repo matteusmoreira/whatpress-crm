@@ -15,6 +15,7 @@ from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_Q
 import jwt
 import json
 import base64
+import asyncio
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -74,6 +75,29 @@ def create_token(user_id: str, email: str, role: str):
         "exp": datetime.utcnow().timestamp() + 86400 * 7  # 7 days
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+def extract_profile_picture_url(data: Any) -> Optional[str]:
+    if not isinstance(data, dict):
+        return None
+    for key in [
+        "profilePictureUrl",
+        "profilePicUrl",
+        "pictureUrl",
+        "avatarUrl",
+        "url",
+        "profile_picture_url",
+        "profile_pic_url",
+    ]:
+        val = data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    for container_key in ["data", "result", "response"]:
+        container = data.get(container_key)
+        if isinstance(container, dict):
+            nested = extract_profile_picture_url(container)
+            if nested:
+                return nested
+    return None
 
 @app.post("/test-login")
 async def test_login(data: dict):
@@ -1127,16 +1151,78 @@ async def list_conversations(tenant_id: str, status: Optional[str] = None, conne
         query = query.eq('connection_id', connection_id)
     
     result = query.order('last_message_at', desc=True).execute()
-    
+
+    connection_by_id: Dict[str, Dict[str, Any]] = {}
+    try:
+        connections = supabase.table('connections').select('id, instance_name, provider').eq('tenant_id', tenant_id).execute()
+        connection_by_id = {c['id']: c for c in (connections.data or []) if c.get('id')}
+    except:
+        connection_by_id = {}
+
+    def needs_avatar_refresh(conv_row: dict) -> bool:
+        avatar = conv_row.get('contact_avatar')
+        if not avatar:
+            return True
+        if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
+            return True
+        return False
+
+    to_refresh = [c for c in (result.data or []) if needs_avatar_refresh(c)]
+    refreshed: Dict[str, Optional[str]] = {}
+
+    async def refresh_avatar(conv_row: dict) -> Optional[str]:
+        conn = connection_by_id.get(conv_row.get('connection_id'))
+        avatar = conv_row.get('contact_avatar')
+
+        if not conn or conn.get('provider') != 'evolution' or not conn.get('instance_name'):
+            if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
+                try:
+                    supabase.table('conversations').update({'contact_avatar': None}).eq('id', conv_row['id']).execute()
+                except:
+                    pass
+            return None
+
+        try:
+            data = await evolution_api.get_profile_picture(conn['instance_name'], conv_row.get('contact_phone') or '')
+            url = extract_profile_picture_url(data)
+        except:
+            url = None
+
+        if url:
+            try:
+                supabase.table('conversations').update({'contact_avatar': url}).eq('id', conv_row['id']).execute()
+            except:
+                pass
+            return url
+
+        if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
+            try:
+                supabase.table('conversations').update({'contact_avatar': None}).eq('id', conv_row['id']).execute()
+            except:
+                pass
+
+        return None
+
+    if to_refresh:
+        results = await asyncio.gather(*(refresh_avatar(c) for c in to_refresh), return_exceptions=True)
+        for row, res in zip(to_refresh, results):
+            if isinstance(res, str) and res.strip():
+                refreshed[row['id']] = res.strip()
+            else:
+                refreshed[row['id']] = None
+
     conversations = []
-    for c in result.data:
+    for c in (result.data or []):
+        avatar = refreshed.get(c['id']) if c.get('id') in refreshed else c.get('contact_avatar')
+        if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
+            avatar = None
         conversations.append({
             'id': c['id'],
             'tenantId': c['tenant_id'],
             'connectionId': c['connection_id'],
             'contactPhone': c['contact_phone'],
             'contactName': c['contact_name'],
-            'contactAvatar': c['contact_avatar'],
+            'contactAvatar': avatar,
             'status': c['status'],
             'assignedTo': c['assigned_to'],
             'lastMessageAt': c['last_message_at'],
@@ -1145,7 +1231,7 @@ async def list_conversations(tenant_id: str, status: Optional[str] = None, conne
             'labels': c.get('labels', []),
             'createdAt': c['created_at']
         })
-    
+
     return conversations
 
 @api_router.patch("/conversations/{conversation_id}/status")
@@ -1434,12 +1520,18 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     }).eq('id', conversation['id']).execute()
                 else:
                     # Create new conversation
+                    avatar_url = None
+                    try:
+                        data = await evolution_api.get_profile_picture(instance_name, phone)
+                        avatar_url = extract_profile_picture_url(data)
+                    except Exception:
+                        avatar_url = None
                     conv_data = {
                         'tenant_id': tenant_id,
                         'connection_id': connection['id'],
                         'contact_phone': phone,
                         'contact_name': parsed.get('push_name') or phone,
-                        'contact_avatar': f"https://api.dicebear.com/7.x/avataaars/svg?seed={phone}",
+                        'contact_avatar': avatar_url,
                         'status': 'open',
                         'unread_count': 1,
                         'last_message_preview': (parsed['content'] or '')[:50]

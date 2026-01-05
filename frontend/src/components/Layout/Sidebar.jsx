@@ -92,7 +92,7 @@ const Sidebar = () => {
       <aside
         className={cn(
           'fixed lg:static inset-y-0 left-0 z-40',
-          'w-72 min-h-screen',
+          'w-72 h-full overflow-y-auto',
           'backdrop-blur-xl border-r',
           'flex flex-col',
           'transition-all duration-300 ease-in-out',

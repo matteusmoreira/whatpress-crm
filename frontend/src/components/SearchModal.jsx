@@ -3,6 +3,43 @@ import { Search, X, MessageSquare, User, Building2, Clock, ArrowRight } from 'lu
 import { GlassInput } from './GlassCard';
 import { cn } from '../lib/utils';
 
+const getInitials = (name) => {
+  const safe = (name || '').trim();
+  if (!safe) return '?';
+  const parts = safe.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] || '';
+  const last = (parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || '';
+  return (first + last).toUpperCase() || '?';
+};
+
+const ContactAvatar = ({ src, name, className }) => {
+  const [failed, setFailed] = useState(false);
+  const normalizedSrc = typeof src === 'string' && src.includes('api.dicebear.com') ? '' : (src || '');
+  const showImage = Boolean(normalizedSrc) && !failed;
+
+  return (
+    <div
+      className={cn(
+        'w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-white/10 text-white/80 font-semibold select-none',
+        className
+      )}
+    >
+      {showImage ? (
+        <img
+          src={normalizedSrc}
+          alt={name || 'Contato'}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="text-sm">{getInitials(name)}</span>
+      )}
+    </div>
+  );
+};
+
 const SearchModal = ({ isOpen, onClose, conversations, onSelectConversation }) => {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
@@ -112,11 +149,7 @@ const SearchModal = ({ isOpen, onClose, conversations, onSelectConversation }) =
                     onClick={() => handleSelect(conv)}
                     className="w-full p-4 flex items-center gap-4 hover:bg-white/5 transition-colors text-left group"
                   >
-                    <img
-                      src={conv.contactAvatar}
-                      alt={conv.contactName}
-                      className="w-12 h-12 rounded-full"
-                    />
+                    <ContactAvatar src={conv.contactAvatar} name={conv.contactName} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-white font-medium">{conv.contactName}</span>
