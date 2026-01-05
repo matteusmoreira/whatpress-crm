@@ -25,7 +25,7 @@ export const GlassInput = React.forwardRef(({ className, ...props }, ref) => {
       className={cn(
         'w-full px-4 py-3 rounded-xl',
         'bg-white/10 backdrop-blur-sm border border-white/20',
-        'text-white placeholder:text-white/50',
+        'text-foreground placeholder:text-muted-foreground',
         'focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50',
         'transition-all duration-200',
         className
@@ -39,9 +39,9 @@ GlassInput.displayName = 'GlassInput';
 export const GlassButton = ({ children, className, variant = 'primary', loading = false, ...props }) => {
   const variants = {
     primary: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30',
-    secondary: 'bg-white/10 hover:bg-white/20 text-white border border-white/20',
+    secondary: 'bg-white/10 hover:bg-white/20 text-foreground border border-white/20',
     danger: 'bg-red-500/80 hover:bg-red-600/80 text-white',
-    ghost: 'bg-transparent hover:bg-white/10 text-white'
+    ghost: 'bg-transparent hover:bg-white/10 text-foreground'
   };
 
   return (
@@ -72,7 +72,7 @@ export const GlassButton = ({ children, className, variant = 'primary', loading 
 
 export const GlassBadge = ({ children, variant = 'default', className }) => {
   const variants = {
-    default: 'bg-white/20 text-white',
+    default: 'bg-white/20 text-foreground',
     success: 'bg-emerald-500/30 text-emerald-300',
     warning: 'bg-amber-500/30 text-amber-300',
     danger: 'bg-red-500/30 text-red-300',

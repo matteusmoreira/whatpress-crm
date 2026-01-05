@@ -18,8 +18,8 @@ const KPICard = ({ icon: Icon, label, value, trend, color }) => (
   <GlassCard className="p-5">
     <div className="flex items-start justify-between">
       <div>
-        <p className="text-white/60 text-sm mb-1">{label}</p>
-        <p className="text-3xl font-bold text-white">
+        <p className="text-muted-foreground text-sm mb-1">{label}</p>
+        <p className="text-3xl font-bold text-foreground">
           <AnimatedCounter value={value} duration={800} />
         </p>
         {trend && (
@@ -43,10 +43,10 @@ const QuickAccessCard = ({ to, icon: Icon, label, description, color }) => (
           <Icon className="w-6 h-6 text-white" />
         </div>
         <div className="flex-1">
-          <h3 className="text-white font-semibold mb-1">{label}</h3>
-          <p className="text-white/50 text-sm">{description}</p>
+          <h3 className="text-foreground font-semibold mb-1">{label}</h3>
+          <p className="text-muted-foreground text-sm">{description}</p>
         </div>
-        <ArrowRight className="w-5 h-5 text-white/30 group-hover:text-white/70 group-hover:translate-x-1 transition-all" />
+        <ArrowRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-foreground/70 group-hover:translate-x-1 transition-all" />
       </div>
     </GlassCard>
   </Link>
@@ -63,8 +63,8 @@ const SuperAdminDashboard = () => {
     <div className="min-h-screen p-6 lg:p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Dashboard SuperAdmin</h1>
-        <p className="text-white/60">Visão geral do sistema e acesso rápido às funcionalidades</p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard SuperAdmin</h1>
+        <p className="text-muted-foreground">Visão geral do sistema e acesso rápido às funcionalidades</p>
       </div>
 
       {/* KPIs */}
@@ -98,7 +98,7 @@ const SuperAdminDashboard = () => {
 
       {/* Quick Access */}
       <div className="mb-8">
-        <h2 className="text-xl font-semibold text-white mb-4">Acesso Rápido</h2>
+        <h2 className="text-xl font-semibold text-foreground mb-4">Acesso Rápido</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <QuickAccessCard
             to="/superadmin/tenants"
