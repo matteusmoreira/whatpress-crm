@@ -17,6 +17,7 @@ import {
   User,
   Users,
   X,
+  Link2,
   Image,
   FileText,
   Mic,
@@ -34,6 +35,7 @@ import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '../components/ui/glass-toaster';
+import { Dialog, DialogContent } from '../components/ui/dialog';
 import FileUpload from '../components/FileUpload';
 import QuickRepliesPanel from '../components/QuickRepliesPanel';
 import LabelsManager from '../components/LabelsManager';
@@ -49,6 +51,51 @@ const getInitials = (name) => {
   const first = parts[0]?.[0] || '';
   const last = (parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || '';
   return (first + last).toUpperCase() || '?';
+};
+
+const URL_REGEX = /https?:\/\/[^\s<>()]+/gi;
+
+const extractUrls = (text) => {
+  if (!text) return [];
+  const found = text.match(URL_REGEX);
+  return Array.isArray(found) ? found : [];
+};
+
+const shortenUrl = (url) => {
+  try {
+    const u = new URL(url);
+    const host = u.host.replace(/^www\./, '');
+    const path = u.pathname.length > 20 ? u.pathname.slice(0, 20) + '…' : u.pathname;
+    return host + (path && path !== '/' ? path : '');
+  } catch {
+    return url.length > 34 ? url.slice(0, 34) + '…' : url;
+  }
+};
+
+const renderTextWithLinks = (text) => {
+  if (!text) return null;
+  const parts = text.split(URL_REGEX);
+  const urls = extractUrls(text);
+  if (urls.length === 0) return text;
+  const nodes = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i]) nodes.push(<React.Fragment key={`t-${i}`}>{parts[i]}</React.Fragment>);
+    const url = urls[i];
+    if (url) {
+      nodes.push(
+        <a
+          key={`u-${i}`}
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 break-all"
+        >
+          {shortenUrl(url)}
+        </a>
+      );
+    }
+  }
+  return nodes;
 };
 
 const ContactAvatar = ({ src, name, sizeClassName, className }) => {
@@ -116,6 +163,7 @@ const Inbox = () => {
   const [labels, setLabels] = useState([]);
   const [selectedLabelFilter, setSelectedLabelFilter] = useState('all');
   const [replyToMessage, setReplyToMessage] = useState(null);
+  const [mediaViewer, setMediaViewer] = useState({ open: false, url: '', title: '' });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -745,6 +793,11 @@ const Inbox = () => {
                           msg.type === 'document' ? '[Documento]' :
                           '[Mensagem]';
                         const displayContent = hasContent ? rawContent : fallback;
+                        const mediaUrl = typeof msg.mediaUrl === 'string' && msg.mediaUrl.trim() ? msg.mediaUrl.trim() : '';
+                        const isMediaType = ['image', 'video', 'audio', 'document'].includes(msg.type);
+                        const canInlineMedia = Boolean(mediaUrl) && isMediaType;
+                        const urls = extractUrls(displayContent);
+                        const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
 
                         return (
                           <div
@@ -787,9 +840,91 @@ const Inbox = () => {
                             <span className="text-xs capitalize">{msg.type}</span>
                           </div>
                         )}
-                        <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
-                          {displayContent}
-                        </p>
+                        {canInlineMedia && msg.type === 'image' && (
+                          <button
+                            type="button"
+                            onClick={() => setMediaViewer({ open: true, url: mediaUrl, title: displayContent })}
+                            className="block w-full rounded-xl overflow-hidden bg-black/20 focus:outline-none focus:ring-2 focus:ring-white/30"
+                            aria-label="Abrir imagem"
+                          >
+                            <img
+                              src={mediaUrl}
+                              alt={displayContent || 'Imagem'}
+                              className="w-full h-auto max-h-80 object-cover"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          </button>
+                        )}
+                        {canInlineMedia && msg.type === 'video' && (
+                          <video
+                            className="w-full max-h-80 rounded-xl bg-black/20"
+                            controls
+                            preload="metadata"
+                            playsInline
+                            src={mediaUrl}
+                            aria-label="Reprodutor de vídeo"
+                          />
+                        )}
+                        {canInlineMedia && msg.type === 'audio' && (
+                          <audio
+                            className="w-full"
+                            controls
+                            preload="metadata"
+                            src={mediaUrl}
+                            aria-label="Reprodutor de áudio"
+                          />
+                        )}
+                        {canInlineMedia && msg.type === 'document' && (
+                          <a
+                            href={mediaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={cn(
+                              'flex items-center gap-3 p-3 rounded-xl border w-full',
+                              msg.direction === 'outbound'
+                                ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                : 'bg-black/20 border-white/10 hover:bg-black/30'
+                            )}
+                          >
+                            <FileText className="w-5 h-5 opacity-80" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{displayContent || 'Documento'}</p>
+                              <p className="text-xs opacity-70 truncate">{shortenUrl(mediaUrl)}</p>
+                            </div>
+                          </a>
+                        )}
+                        {msg.type === 'text' && hasOnlyUrl && (
+                          <a
+                            href={urls[0]}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={cn(
+                              'flex items-center gap-3 p-3 rounded-xl border w-full',
+                              msg.direction === 'outbound'
+                                ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                : 'bg-black/20 border-white/10 hover:bg-black/30'
+                            )}
+                          >
+                            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+                              <Link2 className="w-5 h-5 opacity-80" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{shortenUrl(urls[0])}</p>
+                              <p className="text-xs opacity-70 truncate">{urls[0]}</p>
+                            </div>
+                          </a>
+                        )}
+                        {(!canInlineMedia && !(msg.type === 'text' && hasOnlyUrl)) && (
+                          <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
+                            {renderTextWithLinks(displayContent)}
+                          </p>
+                        )}
+                        {canInlineMedia && hasContent && msg.type !== 'document' && (
+                          <p className="whitespace-pre-wrap mt-2">
+                            {renderTextWithLinks(rawContent)}
+                          </p>
+                        )}
                         <div className={cn(
                           'flex items-center justify-end gap-1 mt-1',
                           msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
@@ -951,6 +1086,17 @@ const Inbox = () => {
           </div>
         )}
       </div>
+
+      <Dialog open={mediaViewer.open} onOpenChange={(open) => setMediaViewer(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-4xl bg-black/80 border border-white/10 p-3">
+          <img
+            src={mediaViewer.url}
+            alt={mediaViewer.title || 'Imagem'}
+            className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+            referrerPolicy="no-referrer"
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Labels Manager Modal */}
       <LabelsManager

@@ -22,17 +22,21 @@ import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
 
 const Profile = () => {
-  const { user } = useAuthStore();
+  const { user, updateCurrentUser } = useAuthStore();
   const { theme, toggleTheme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
-  const [tenantLoading, setTenantLoading] = useState(true);
-  const [tenantName, setTenantName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
     phone: user?.phone || '',
     company: '',
-    bio: user?.bio || ''
+    bio: user?.bio || '',
+    jobTitle: user?.jobTitle || '',
+    department: user?.department || '',
+    signatureEnabled: user?.signatureEnabled ?? true,
+    signatureIncludeTitle: user?.signatureIncludeTitle ?? false,
+    signatureIncludeDepartment: user?.signatureIncludeDepartment ?? false
   });
 
   const [notifications, setNotifications] = useState({
@@ -48,25 +52,68 @@ const Profile = () => {
       if (user?.tenantId) {
         try {
           const tenant = await TenantsAPI.getById(user.tenantId);
-          setTenantName(tenant.name || tenant.companyName || '');
           setFormData(prev => ({ ...prev, company: tenant.name || tenant.companyName || '' }));
         } catch (error) {
           console.error('Error loading tenant:', error);
-        } finally {
-          setTenantLoading(false);
         }
-      } else {
-        setTenantLoading(false);
       }
     };
     loadTenant();
   }, [user?.tenantId]);
 
-  const handleSave = () => {
-    setIsEditing(false);
-    toast.success('Perfil atualizado com sucesso!', {
-      description: 'Suas alterações foram salvas.'
-    });
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      name: user?.name || '',
+      email: user?.email || '',
+      phone: user?.phone || '',
+      bio: user?.bio || '',
+      jobTitle: user?.jobTitle || '',
+      department: user?.department || '',
+      signatureEnabled: user?.signatureEnabled ?? true,
+      signatureIncludeTitle: user?.signatureIncludeTitle ?? false,
+      signatureIncludeDepartment: user?.signatureIncludeDepartment ?? false
+    }));
+  }, [user]);
+
+  const handleSave = async () => {
+    const name = (formData.name || '').trim();
+    if (!name) {
+      toast.error('Nome é obrigatório');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updatedUser = await updateCurrentUser({
+        name,
+        job_title: formData.jobTitle || '',
+        department: formData.department || '',
+        signature_enabled: Boolean(formData.signatureEnabled),
+        signature_include_title: Boolean(formData.signatureIncludeTitle),
+        signature_include_department: Boolean(formData.signatureIncludeDepartment)
+      });
+
+      setFormData(prev => ({
+        ...prev,
+        name: updatedUser?.name || prev.name,
+        email: updatedUser?.email || prev.email,
+        jobTitle: updatedUser?.jobTitle || '',
+        department: updatedUser?.department || '',
+        signatureEnabled: updatedUser?.signatureEnabled ?? true,
+        signatureIncludeTitle: updatedUser?.signatureIncludeTitle ?? false,
+        signatureIncludeDepartment: updatedUser?.signatureIncludeDepartment ?? false
+      }));
+
+      setIsEditing(false);
+      toast.success('Perfil atualizado com sucesso!', {
+        description: 'Suas alterações foram salvas.'
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao salvar perfil');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAvatarChange = () => {
@@ -135,9 +182,9 @@ const Profile = () => {
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-white">Informações Pessoais</h3>
             {isEditing ? (
-              <GlassButton onClick={handleSave} className="flex items-center gap-2">
-                <Save className="w-4 h-4" />
-                Salvar
+              <GlassButton onClick={handleSave} className="flex items-center gap-2" disabled={isSaving}>
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? 'Salvando...' : 'Salvar'}
               </GlassButton>
             ) : (
               <GlassButton variant="secondary" onClick={() => setIsEditing(true)}>
@@ -169,7 +216,7 @@ const Profile = () => {
                 <GlassInput
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled
                 />
               ) : (
                 <p className="text-white py-3">{formData.email}</p>
@@ -183,7 +230,7 @@ const Profile = () => {
               {isEditing ? (
                 <GlassInput
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  disabled
                 />
               ) : (
                 <p className="text-white py-3">{formData.phone}</p>
@@ -197,7 +244,7 @@ const Profile = () => {
               {isEditing ? (
                 <GlassInput
                   value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  disabled
                 />
               ) : (
                 <p className="text-white py-3">{formData.company}</p>
@@ -209,13 +256,120 @@ const Profile = () => {
               {isEditing ? (
                 <textarea
                   value={formData.bio}
-                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                  disabled
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
                 />
               ) : (
                 <p className="text-white/80 py-3">{formData.bio}</p>
               )}
+            </div>
+
+            <div className="space-y-4 md:col-span-2 pt-6 border-t border-white/10">
+              <h4 className="text-white font-semibold">Assinatura</h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-white/70 text-sm font-medium">Cargo</label>
+                  {isEditing ? (
+                    <GlassInput
+                      value={formData.jobTitle}
+                      onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+                      disabled={isSaving}
+                    />
+                  ) : (
+                    <p className="text-white/80 py-3">{formData.jobTitle || '—'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-white/70 text-sm font-medium">Departamento</label>
+                  {isEditing ? (
+                    <GlassInput
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      disabled={isSaving}
+                    />
+                  ) : (
+                    <p className="text-white/80 py-3">{formData.department || '—'}</p>
+                  )}
+                </div>
+
+                <div className="md:col-span-2 flex items-center justify-between p-4 rounded-xl bg-white/5">
+                  <div>
+                    <p className="text-white font-medium">Ativar assinatura</p>
+                    <p className="text-white/50 text-sm">Inclui seu nome no início das mensagens</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!isEditing || isSaving) return;
+                      setFormData(prev => ({ ...prev, signatureEnabled: !prev.signatureEnabled }));
+                    }}
+                    className={cn(
+                      'relative w-11 h-6 rounded-full transition-all duration-300',
+                      formData.signatureEnabled ? 'bg-emerald-500' : 'bg-white/20',
+                      (!isEditing || isSaving) && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300',
+                        formData.signatureEnabled ? 'left-6' : 'left-1'
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                  <div>
+                    <p className="text-white font-medium">Incluir cargo</p>
+                    <p className="text-white/50 text-sm">Exibe o cargo junto ao seu nome</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!isEditing || isSaving || !formData.signatureEnabled) return;
+                      setFormData(prev => ({ ...prev, signatureIncludeTitle: !prev.signatureIncludeTitle }));
+                    }}
+                    className={cn(
+                      'relative w-11 h-6 rounded-full transition-all duration-300',
+                      formData.signatureEnabled && formData.signatureIncludeTitle ? 'bg-emerald-500' : 'bg-white/20',
+                      (!isEditing || isSaving || !formData.signatureEnabled) && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300',
+                        formData.signatureEnabled && formData.signatureIncludeTitle ? 'left-6' : 'left-1'
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                  <div>
+                    <p className="text-white font-medium">Incluir departamento</p>
+                    <p className="text-white/50 text-sm">Exibe o departamento junto ao seu nome</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!isEditing || isSaving || !formData.signatureEnabled) return;
+                      setFormData(prev => ({ ...prev, signatureIncludeDepartment: !prev.signatureIncludeDepartment }));
+                    }}
+                    className={cn(
+                      'relative w-11 h-6 rounded-full transition-all duration-300',
+                      formData.signatureEnabled && formData.signatureIncludeDepartment ? 'bg-emerald-500' : 'bg-white/20',
+                      (!isEditing || isSaving || !formData.signatureEnabled) && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300',
+                        formData.signatureEnabled && formData.signatureIncludeDepartment ? 'left-6' : 'left-1'
+                      )}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </GlassCard>

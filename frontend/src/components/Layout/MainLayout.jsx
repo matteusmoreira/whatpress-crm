@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuthStore } from '../../store/authStore';
@@ -6,8 +6,12 @@ import { useTheme } from '../../context/ThemeContext';
 import { cn } from '../../lib/utils';
 
 const MainLayout = () => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, refreshCurrentUser } = useAuthStore();
   const { theme } = useTheme();
+
+  useEffect(() => {
+    refreshCurrentUser?.();
+  }, [refreshCurrentUser]);
 
   if (!isAuthenticated) {
     return <Navigate to="/sign-in" replace />;

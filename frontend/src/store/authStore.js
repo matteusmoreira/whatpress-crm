@@ -28,6 +28,24 @@ export const useAuthStore = create(
         set({ user: null, token: null, isAuthenticated: false, error: null });
       },
 
+      refreshCurrentUser: async () => {
+        if (!get().token) return null;
+        try {
+          const user = await AuthAPI.getCurrentUser();
+          set({ user, isAuthenticated: true });
+          return user;
+        } catch (error) {
+          return null;
+        }
+      },
+
+      updateCurrentUser: async (data) => {
+        if (!get().token) return null;
+        const user = await AuthAPI.updateCurrentUser(data);
+        set({ user });
+        return user;
+      },
+
       clearError: () => {
         set({ error: null });
       }

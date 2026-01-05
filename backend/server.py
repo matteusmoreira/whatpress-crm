@@ -129,6 +129,11 @@ async def direct_login(request: LoginRequest):
         'role': user['role'],
         'tenantId': user['tenant_id'],
         'avatar': user['avatar'],
+        'jobTitle': user.get('job_title'),
+        'department': user.get('department'),
+        'signatureEnabled': user.get('signature_enabled', True),
+        'signatureIncludeTitle': user.get('signature_include_title', False),
+        'signatureIncludeDepartment': user.get('signature_include_department', False),
         'createdAt': user['created_at']
     }
     
@@ -236,6 +241,29 @@ class LabelCreate(BaseModel):
 class AssignAgent(BaseModel):
     agent_id: str
 
+class ConversationTransferCreate(BaseModel):
+    to_agent_id: str
+    reason: Optional[str] = None
+
+class UserProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    job_title: Optional[str] = None
+    department: Optional[str] = None
+    signature_enabled: Optional[bool] = None
+    signature_include_title: Optional[bool] = None
+    signature_include_department: Optional[bool] = None
+
+class ContactUpsertByPhone(BaseModel):
+    tenant_id: str
+    phone: str
+    full_name: Optional[str] = None
+    avatar: Optional[str] = None
+
+class ContactUpdate(BaseModel):
+    full_name: Optional[str] = None
+    social_links: Optional[dict] = None
+    notes_html: Optional[str] = None
+
 class AutoMessageCreate(BaseModel):
     type: str  # 'welcome', 'away', 'keyword'
     name: str
@@ -339,6 +367,46 @@ def get_user_tenant_id(payload: dict) -> str:
         return user.data[0]['tenant_id']
     return None
 
+def safe_insert_audit_log(
+    tenant_id: Optional[str],
+    actor_user_id: Optional[str],
+    action: str,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    metadata: Optional[dict] = None
+):
+    try:
+        supabase.table('audit_logs').insert({
+            'tenant_id': tenant_id,
+            'actor_user_id': actor_user_id,
+            'action': action,
+            'entity_type': entity_type,
+            'entity_id': entity_id,
+            'metadata': metadata or {}
+        }).execute()
+    except Exception:
+        return
+
+def build_user_signature_prefix(user_row: dict) -> str:
+    enabled = user_row.get('signature_enabled', True)
+    if enabled is False:
+        return ''
+
+    name = (user_row.get('name') or '').strip()
+    if not name:
+        return ''
+
+    extras: List[str] = []
+    if user_row.get('signature_include_title') and (user_row.get('job_title') or '').strip():
+        extras.append((user_row.get('job_title') or '').strip())
+    if user_row.get('signature_include_department') and (user_row.get('department') or '').strip():
+        extras.append((user_row.get('department') or '').strip())
+
+    first_line = f"*{name}*"
+    if extras:
+        first_line += f" ({' / '.join(extras)})"
+    return first_line + "\n"
+
 # ==================== AUTH ROUTES ====================
 
 # MOVED: Login logic moved to main app route below to fix 405 error
@@ -420,7 +488,66 @@ async def get_current_user(payload: dict = Depends(verify_token)):
         'name': user['name'],
         'role': user['role'],
         'tenantId': user['tenant_id'],
-        'avatar': user['avatar']
+        'avatar': user['avatar'],
+        'jobTitle': user.get('job_title'),
+        'department': user.get('department'),
+        'signatureEnabled': user.get('signature_enabled', True),
+        'signatureIncludeTitle': user.get('signature_include_title', False),
+        'signatureIncludeDepartment': user.get('signature_include_department', False),
+    }
+
+@api_router.patch("/auth/me")
+async def update_current_user_profile(data: UserProfileUpdate, payload: dict = Depends(verify_token)):
+    user_id = payload['user_id']
+    update_data: Dict[str, Any] = {}
+    if data.name is not None:
+        update_data['name'] = data.name
+    if data.job_title is not None:
+        update_data['job_title'] = data.job_title
+    if data.department is not None:
+        update_data['department'] = data.department
+    if data.signature_enabled is not None:
+        update_data['signature_enabled'] = data.signature_enabled
+    if data.signature_include_title is not None:
+        update_data['signature_include_title'] = data.signature_include_title
+    if data.signature_include_department is not None:
+        update_data['signature_include_department'] = data.signature_include_department
+
+    if not update_data:
+        result = supabase.table('users').select('*').eq('id', user_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        u = result.data[0]
+        return {
+            'id': u['id'],
+            'email': u['email'],
+            'name': u['name'],
+            'role': u['role'],
+            'tenantId': u['tenant_id'],
+            'avatar': u['avatar'],
+            'jobTitle': u.get('job_title'),
+            'department': u.get('department'),
+            'signatureEnabled': u.get('signature_enabled', True),
+            'signatureIncludeTitle': u.get('signature_include_title', False),
+            'signatureIncludeDepartment': u.get('signature_include_department', False),
+        }
+
+    result = supabase.table('users').update(update_data).eq('id', user_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    u = result.data[0]
+    return {
+        'id': u['id'],
+        'email': u['email'],
+        'name': u['name'],
+        'role': u['role'],
+        'tenantId': u['tenant_id'],
+        'avatar': u['avatar'],
+        'jobTitle': u.get('job_title'),
+        'department': u.get('department'),
+        'signatureEnabled': u.get('signature_enabled', True),
+        'signatureIncludeTitle': u.get('signature_include_title', False),
+        'signatureIncludeDepartment': u.get('signature_include_department', False),
     }
 
 # ==================== TENANTS ROUTES ====================
@@ -1240,6 +1367,12 @@ async def list_conversations(
             'contactAvatar': avatar,
             'status': c['status'],
             'assignedTo': c['assigned_to'],
+            'transferStatus': c.get('transfer_status'),
+            'transferTo': c.get('transfer_to'),
+            'transferReason': c.get('transfer_reason'),
+            'transferInitiatedBy': c.get('transfer_initiated_by'),
+            'transferInitiatedAt': c.get('transfer_initiated_at'),
+            'transferCompletedAt': c.get('transfer_completed_at'),
             'lastMessageAt': c['last_message_at'],
             'unreadCount': c['unread_count'],
             'lastMessagePreview': c['last_message_preview'],
@@ -1290,6 +1423,114 @@ async def unassign_conversation(conversation_id: str, payload: dict = Depends(ve
     await AgentService.unassign_conversation(conversation_id)
     return {"success": True}
 
+@api_router.post("/conversations/{conversation_id}/transfer")
+async def transfer_conversation(conversation_id: str, data: ConversationTransferCreate, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+
+    conv = supabase.table('conversations').select('*').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    conversation = conv.data[0]
+    if user_tenant_id and conversation.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    to_user = supabase.table('users').select('id, name, tenant_id').eq('id', data.to_agent_id).execute()
+    if not to_user.data:
+        raise HTTPException(status_code=404, detail="Agente não encontrado")
+    to_agent = to_user.data[0]
+    if conversation.get('tenant_id') and to_agent.get('tenant_id') != conversation.get('tenant_id'):
+        raise HTTPException(status_code=400, detail="Agente não pertence ao mesmo tenant")
+
+    now = datetime.utcnow().isoformat()
+    reason = (data.reason or '').strip() or None
+
+    update_data = {
+        'assigned_to': data.to_agent_id,
+        'transfer_status': 'in_transfer',
+        'transfer_to': data.to_agent_id,
+        'transfer_reason': reason,
+        'transfer_initiated_by': payload.get('user_id'),
+        'transfer_initiated_at': now,
+        'transfer_completed_at': None
+    }
+
+    updated = supabase.table('conversations').update(update_data).eq('id', conversation_id).execute()
+    if not updated.data:
+        raise HTTPException(status_code=400, detail="Erro ao transferir conversa")
+
+    try:
+        supabase.table('assignment_history').insert({
+            'conversation_id': conversation_id,
+            'assigned_to': data.to_agent_id,
+            'assigned_by': payload.get('user_id'),
+            'action': 'transferred',
+            'notes': reason
+        }).execute()
+    except Exception:
+        pass
+
+    system_text = f"Transferência iniciada para {to_agent.get('name') or 'agente'}."
+    if reason:
+        system_text += f" Motivo: {reason}"
+
+    try:
+        msg_row = supabase.table('messages').insert({
+            'conversation_id': conversation_id,
+            'content': system_text,
+            'type': 'system',
+            'direction': 'outbound',
+            'status': 'sent'
+        }).execute()
+        if msg_row.data:
+            supabase.table('conversations').update({
+                'last_message_at': now,
+                'last_message_preview': system_text[:50]
+            }).eq('id', conversation_id).execute()
+    except Exception:
+        pass
+
+    safe_insert_audit_log(
+        tenant_id=conversation.get('tenant_id'),
+        actor_user_id=payload.get('user_id'),
+        action='conversation.transferred',
+        entity_type='conversation',
+        entity_id=conversation_id,
+        metadata={'to_agent_id': data.to_agent_id, 'reason': reason}
+    )
+
+    return {"success": True}
+
+@api_router.post("/conversations/{conversation_id}/transfer/accept")
+async def accept_conversation_transfer(conversation_id: str, payload: dict = Depends(verify_token)):
+    user_id = payload.get('user_id')
+    user_tenant_id = get_user_tenant_id(payload)
+
+    conv = supabase.table('conversations').select('*').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    conversation = conv.data[0]
+    if user_tenant_id and conversation.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    if conversation.get('transfer_to') and conversation.get('transfer_to') != user_id:
+        raise HTTPException(status_code=403, detail="Apenas o agente de destino pode aceitar")
+
+    now = datetime.utcnow().isoformat()
+    supabase.table('conversations').update({
+        'transfer_status': 'completed',
+        'transfer_completed_at': now
+    }).eq('id', conversation_id).execute()
+
+    safe_insert_audit_log(
+        tenant_id=conversation.get('tenant_id'),
+        actor_user_id=user_id,
+        action='conversation.transfer_accepted',
+        entity_type='conversation',
+        entity_id=conversation_id,
+        metadata={}
+    )
+
+    return {"success": True}
+
 @api_router.post("/conversations/{conversation_id}/labels/{label_id}")
 async def add_label(conversation_id: str, label_id: str, payload: dict = Depends(verify_token)):
     """Add label to conversation"""
@@ -1333,6 +1574,175 @@ async def clear_conversation_messages(conversation_id: str, payload: dict = Depe
         'unread_count': 0
     }).eq('id', conversation_id).execute()
     return {"success": True}
+
+# ==================== CONTACTS ROUTES ====================
+
+@api_router.get("/contacts/by-phone")
+async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+    if user_tenant_id and tenant_id != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    normalized_phone = (phone or '').strip()
+    if not normalized_phone:
+        raise HTTPException(status_code=400, detail="Telefone inválido")
+
+    existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+    if existing.data:
+        c = existing.data[0]
+        return {
+            'id': c['id'],
+            'tenantId': c['tenant_id'],
+            'phone': c['phone'],
+            'fullName': c['full_name'],
+            'socialLinks': c.get('social_links') or {},
+            'notesHtml': c.get('notes_html') or '',
+            'createdAt': c.get('created_at'),
+            'updatedAt': c.get('updated_at')
+        }
+
+    conv = supabase.table('conversations').select('contact_name, contact_avatar').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
+    fallback_name = None
+    fallback_avatar = None
+    if conv.data:
+        fallback_name = conv.data[0].get('contact_name')
+        fallback_avatar = conv.data[0].get('contact_avatar')
+
+    full_name = (fallback_name or '').strip() or normalized_phone
+    created = supabase.table('contacts').insert({
+        'tenant_id': tenant_id,
+        'phone': normalized_phone,
+        'full_name': full_name,
+        'avatar': fallback_avatar
+    }).execute()
+    if not created.data:
+        raise HTTPException(status_code=400, detail="Erro ao criar contato")
+
+    c = created.data[0]
+    safe_insert_audit_log(
+        tenant_id=tenant_id,
+        actor_user_id=payload.get('user_id'),
+        action='contact.created',
+        entity_type='contact',
+        entity_id=c.get('id'),
+        metadata={'phone': normalized_phone}
+    )
+    return {
+        'id': c['id'],
+        'tenantId': c['tenant_id'],
+        'phone': c['phone'],
+        'fullName': c['full_name'],
+        'socialLinks': c.get('social_links') or {},
+        'notesHtml': c.get('notes_html') or '',
+        'createdAt': c.get('created_at'),
+        'updatedAt': c.get('updated_at')
+    }
+
+@api_router.patch("/contacts/{contact_id}")
+async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+
+    existing = supabase.table('contacts').select('*').eq('id', contact_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    contact = existing.data[0]
+    if user_tenant_id and contact.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    update_data: Dict[str, Any] = {}
+    if data.full_name is not None:
+        name = (data.full_name or '').strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Nome completo é obrigatório")
+        update_data['full_name'] = name
+    if data.social_links is not None:
+        update_data['social_links'] = data.social_links
+    if data.notes_html is not None:
+        update_data['notes_html'] = data.notes_html
+
+    if not update_data:
+        return {"success": True}
+
+    update_data['updated_at'] = datetime.utcnow().isoformat()
+    updated = supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
+    if not updated.data:
+        raise HTTPException(status_code=400, detail="Erro ao atualizar contato")
+
+    after = updated.data[0]
+    try:
+        supabase.table('contact_history').insert({
+            'tenant_id': contact.get('tenant_id'),
+            'contact_id': contact_id,
+            'changed_by': payload.get('user_id'),
+            'action': 'updated',
+            'before': {
+                'full_name': contact.get('full_name'),
+                'social_links': contact.get('social_links'),
+                'notes_html': contact.get('notes_html')
+            },
+            'after': {
+                'full_name': after.get('full_name'),
+                'social_links': after.get('social_links'),
+                'notes_html': after.get('notes_html')
+            }
+        }).execute()
+    except Exception:
+        pass
+
+    if data.full_name is not None:
+        try:
+            supabase.table('conversations').update({'contact_name': after.get('full_name')}).eq('tenant_id', contact.get('tenant_id')).eq('contact_phone', contact.get('phone')).execute()
+        except Exception:
+            pass
+
+    safe_insert_audit_log(
+        tenant_id=contact.get('tenant_id'),
+        actor_user_id=payload.get('user_id'),
+        action='contact.updated',
+        entity_type='contact',
+        entity_id=contact_id,
+        metadata={'fields': list(update_data.keys())}
+    )
+
+    return {
+        'id': after['id'],
+        'tenantId': after['tenant_id'],
+        'phone': after['phone'],
+        'fullName': after['full_name'],
+        'socialLinks': after.get('social_links') or {},
+        'notesHtml': after.get('notes_html') or '',
+        'createdAt': after.get('created_at'),
+        'updatedAt': after.get('updated_at')
+    }
+
+@api_router.get("/contacts/{contact_id}/history")
+async def list_contact_history(contact_id: str, limit: int = 20, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+
+    contact = supabase.table('contacts').select('tenant_id').eq('id', contact_id).execute()
+    if not contact.data:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    tenant_id = contact.data[0].get('tenant_id')
+    if user_tenant_id and tenant_id != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    if limit < 1:
+        limit = 1
+    if limit > 200:
+        limit = 200
+
+    result = supabase.table('contact_history').select(
+        'id, action, before, after, created_at, changed_by:users!changed_by(id, name, avatar)'
+    ).eq('contact_id', contact_id).order('created_at', desc=True).limit(limit).execute()
+
+    return [{
+        'id': h['id'],
+        'action': h['action'],
+        'before': h.get('before'),
+        'after': h.get('after'),
+        'createdAt': h.get('created_at'),
+        'changedBy': h.get('changed_by')
+    } for h in (result.data or [])]
 
 # ==================== MESSAGES ROUTES ====================
 
@@ -1587,6 +1997,17 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
     if not content:
         raise HTTPException(status_code=400, detail="Mensagem vazia")
 
+    preview_content = content
+    if (message.type or 'text') != 'system':
+        try:
+            user_row = supabase.table('users').select('name, job_title, department, signature_enabled, signature_include_title, signature_include_department').eq('id', payload.get('user_id')).execute()
+            if user_row.data:
+                prefix = build_user_signature_prefix(user_row.data[0])
+                if prefix and not content.startswith(prefix) and not content.lstrip().startswith(f"*{(user_row.data[0].get('name') or '').strip()}*"):
+                    content = prefix + content
+        except Exception:
+            pass
+
     # Save message to database first
     data = {
         'conversation_id': message.conversation_id,
@@ -1601,7 +2022,7 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
     # Update conversation
     supabase.table('conversations').update({
         'last_message_at': datetime.utcnow().isoformat(),
-        'last_message_preview': content[:50]
+        'last_message_preview': preview_content[:50]
     }).eq('id', message.conversation_id).execute()
     
     # Update tenant message count
@@ -1610,6 +2031,15 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
         if tenant.data:
             new_count = tenant.data[0]['messages_this_month'] + 1
             supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
+
+    safe_insert_audit_log(
+        tenant_id=conversation.get('tenant_id'),
+        actor_user_id=payload.get('user_id'),
+        action='message.sent',
+        entity_type='message',
+        entity_id=(result.data[0]['id'] if result.data else None),
+        metadata={'conversation_id': message.conversation_id, 'type': message.type}
+    )
     
     connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
     connection_status = (connection.get('status') if isinstance(connection, dict) else None)
@@ -3351,6 +3781,16 @@ async def send_media_message(
     
     # Create message content
     message_content = content if content else f"📎 {media_name}"
+    preview_content = message_content
+    if (media_type or '').lower() != 'system':
+        try:
+            user_row = supabase.table('users').select('name, job_title, department, signature_enabled, signature_include_title, signature_include_department').eq('id', payload.get('user_id')).execute()
+            if user_row.data:
+                prefix = build_user_signature_prefix(user_row.data[0])
+                if prefix and not message_content.startswith(prefix) and not message_content.lstrip().startswith(f"*{(user_row.data[0].get('name') or '').strip()}*"):
+                    message_content = prefix + message_content
+        except Exception:
+            pass
     
     # Save message to database
     data = {
@@ -3367,15 +3807,24 @@ async def send_media_message(
     # Update conversation
     supabase.table('conversations').update({
         'last_message_at': datetime.utcnow().isoformat(),
-        'last_message_preview': message_content[:50]
+        'last_message_preview': preview_content[:50]
     }).eq('id', conversation_id).execute()
     
     # Update tenant message count
     if conversation.get('tenant_id'):
         tenant = supabase.table('tenants').select('messages_this_month').eq('id', conversation['tenant_id']).execute()
         if tenant.data:
-            new_count = tenant.data[0]['messages_this_month'] + 1
-            supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
+                new_count = tenant.data[0]['messages_this_month'] + 1
+                supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
+
+    safe_insert_audit_log(
+        tenant_id=conversation.get('tenant_id'),
+        actor_user_id=payload.get('user_id'),
+        action='message.media_sent',
+        entity_type='message',
+        entity_id=(result.data[0]['id'] if result.data else None),
+        metadata={'conversation_id': conversation_id, 'type': media_type, 'media_url': media_url}
+    )
     
     # Send via WhatsApp if Evolution API connection
     if connection and connection.get('provider') == 'evolution' and connection.get('status') == 'connected':

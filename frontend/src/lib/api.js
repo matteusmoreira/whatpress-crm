@@ -65,6 +65,11 @@ export const AuthAPI = {
   async getCurrentUser() {
     const response = await apiClient.get('/auth/me');
     return response.data;
+  },
+
+  async updateCurrentUser(data) {
+    const response = await apiClient.patch('/auth/me', data);
+    return response.data;
   }
 };
 
@@ -249,6 +254,36 @@ export const ConversationsAPI = {
 
   async removeLabel(conversationId, labelId) {
     const response = await apiClient.delete(`/conversations/${conversationId}/labels/${labelId}`);
+    return response.data;
+  },
+
+  async transfer(conversationId, toAgentId, reason) {
+    const response = await apiClient.post(`/conversations/${conversationId}/transfer`, {
+      to_agent_id: toAgentId,
+      reason
+    });
+    return response.data;
+  },
+
+  async acceptTransfer(conversationId) {
+    const response = await apiClient.post(`/conversations/${conversationId}/transfer/accept`);
+    return response.data;
+  }
+};
+
+export const ContactsAPI = {
+  async getByPhone(tenantId, phone) {
+    const response = await apiClient.get('/contacts/by-phone', { params: { tenant_id: tenantId, phone } });
+    return response.data;
+  },
+
+  async update(contactId, data) {
+    const response = await apiClient.patch(`/contacts/${contactId}`, data);
+    return response.data;
+  },
+
+  async history(contactId, limit = 20) {
+    const response = await apiClient.get(`/contacts/${contactId}/history`, { params: { limit } });
     return response.data;
   }
 };
