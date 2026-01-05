@@ -145,7 +145,7 @@ export const useAppStore = create((set, get) => ({
     if (conversation) {
       try {
         await ConversationsAPI.markAsRead(conversation.id);
-        const messages = await MessagesAPI.list(conversation.id);
+        const messages = await MessagesAPI.list(conversation.id, { limit: 50, tail: true });
         set(state => ({
           messages,
           messagesLoading: false,
@@ -183,7 +183,9 @@ export const useAppStore = create((set, get) => ({
     try {
       const params = {};
       if (options.after) params.after = options.after;
+      if (options.before) params.before = options.before;
       if (options.limit) params.limit = options.limit;
+      if (options.tail) params.tail = options.tail;
 
       const nextMessages = await MessagesAPI.list(conversationId, params);
 

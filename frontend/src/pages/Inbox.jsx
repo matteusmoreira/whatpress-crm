@@ -150,6 +150,7 @@ const Inbox = () => {
   // Fallback: polling para atualizar conversas/mensagens quando realtime falhar
   useEffect(() => {
     if (!tenantId) return;
+    if (realtimeConnected) return;
 
     const pollConversations = () => {
       if (typeof document !== 'undefined' && document.hidden) return;
@@ -159,7 +160,15 @@ const Inbox = () => {
     const pollMessages = () => {
       if (!selectedConversation?.id) return;
       if (typeof document !== 'undefined' && document.hidden) return;
-      useAppStore.getState().fetchMessages(selectedConversation.id, { silent: true });
+      const state = useAppStore.getState();
+      const currentMessages = state.messages || [];
+      const last = currentMessages[currentMessages.length - 1];
+      const lastTs = last?.timestamp;
+      if (!lastTs) {
+        state.fetchMessages(selectedConversation.id, { silent: true, tail: true, limit: 50 });
+        return;
+      }
+      state.fetchMessages(selectedConversation.id, { silent: true, after: lastTs, append: true, limit: 200 });
     };
 
     pollConversations();
@@ -172,7 +181,7 @@ const Inbox = () => {
       clearInterval(conversationsInterval);
       clearInterval(messagesInterval);
     };
-  }, [tenantId, selectedConversation?.id, fetchConversations]);
+  }, [tenantId, selectedConversation?.id, fetchConversations, realtimeConnected]);
 
   // Auto-scroll to bottom
   useEffect(() => {

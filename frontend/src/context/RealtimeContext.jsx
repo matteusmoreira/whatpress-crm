@@ -26,13 +26,27 @@ export const RealtimeProvider = ({ children }) => {
       message.type === 'document' ? '[Documento]' :
       '[Mensagem]';
 
-    const raw = typeof message.content === 'string' ? message.content : '';
-    const preview = raw.trim() ? raw.slice(0, 50) : fallback;
+    const raw = (() => {
+      if (typeof message.content === 'string') return message.content;
+      if (!message.content || typeof message.content !== 'object') return '';
+      const c = message.content;
+      if (typeof c.content === 'string') return c.content;
+      if (typeof c.text === 'string') return c.text;
+      if (typeof c.conversation === 'string') return c.conversation;
+      const tm = c.textMessage;
+      if (tm && typeof tm === 'object' && typeof tm.text === 'string') return tm.text;
+      const etm = c.extendedTextMessage;
+      if (etm && typeof etm === 'object' && typeof etm.text === 'string') return etm.text;
+      return '';
+    })();
+    const normalizedContent = raw.trim() ? raw : fallback;
+    const preview = normalizedContent.slice(0, 50);
+    const normalizedMessage = raw.trim() ? { ...message, content: raw } : message;
 
     useAppStore.setState(state => {
       const isOpenConversation = state.selectedConversation?.id === message.conversationId;
       const alreadyInMessages = (state.messages || []).some(m => m.id === message.id);
-      const nextMessages = isOpenConversation && !alreadyInMessages ? [...(state.messages || []), message] : state.messages;
+      const nextMessages = isOpenConversation && !alreadyInMessages ? [...(state.messages || []), normalizedMessage] : state.messages;
 
       const updatedConversations = (state.conversations || []).map(c => {
         if (c.id !== message.conversationId) return c;

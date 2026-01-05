@@ -1308,7 +1308,9 @@ async def remove_label(conversation_id: str, label_id: str, payload: dict = Depe
 async def list_messages(
     conversation_id: str,
     after: Optional[str] = None,
+    before: Optional[str] = None,
     limit: int = 500,
+    tail: bool = False,
     payload: dict = Depends(verify_token)
 ):
     """List messages for a conversation"""
@@ -1321,24 +1323,89 @@ async def list_messages(
         if isinstance(content, str):
             return content
         if isinstance(content, dict):
-            if 'content' in content and isinstance(content.get('content'), str):
-                return content.get('content') or ''
-            if 'text' in content and isinstance(content.get('text'), str):
-                return content.get('text') or ''
-            if 'conversation' in content and isinstance(content.get('conversation'), str):
-                return content.get('conversation') or ''
-            etm = content.get('extendedTextMessage')
-            if isinstance(etm, dict) and isinstance(etm.get('text'), str):
-                return etm.get('text') or ''
-            img = content.get('imageMessage')
-            if isinstance(img, dict) and isinstance(img.get('caption'), str) and img.get('caption'):
-                return img.get('caption') or ''
-            vid = content.get('videoMessage')
-            if isinstance(vid, dict) and isinstance(vid.get('caption'), str) and vid.get('caption'):
-                return vid.get('caption') or ''
-            doc = content.get('documentMessage')
-            if isinstance(doc, dict) and isinstance(doc.get('fileName'), str) and doc.get('fileName'):
-                return doc.get('fileName') or ''
+            cur: Any = content
+            for _ in range(10):
+                if not isinstance(cur, dict):
+                    break
+                if isinstance(cur.get('message'), dict):
+                    cur = cur.get('message')
+                    continue
+                ephemeral = cur.get('ephemeralMessage')
+                if isinstance(ephemeral, dict) and isinstance(ephemeral.get('message'), dict):
+                    cur = ephemeral.get('message')
+                    continue
+                view_once = cur.get('viewOnceMessage')
+                if isinstance(view_once, dict) and isinstance(view_once.get('message'), dict):
+                    cur = view_once.get('message')
+                    continue
+                view_once_v2 = cur.get('viewOnceMessageV2')
+                if isinstance(view_once_v2, dict) and isinstance(view_once_v2.get('message'), dict):
+                    cur = view_once_v2.get('message')
+                    continue
+                view_once_v2_ext = cur.get('viewOnceMessageV2Extension')
+                if isinstance(view_once_v2_ext, dict) and isinstance(view_once_v2_ext.get('message'), dict):
+                    cur = view_once_v2_ext.get('message')
+                    continue
+                document_with_caption = cur.get('documentWithCaptionMessage')
+                if isinstance(document_with_caption, dict) and isinstance(document_with_caption.get('message'), dict):
+                    cur = document_with_caption.get('message')
+                    continue
+                break
+
+            if isinstance(cur, dict):
+                if isinstance(cur.get('content'), str):
+                    return cur.get('content') or ''
+                if isinstance(cur.get('text'), str):
+                    return cur.get('text') or ''
+                if isinstance(cur.get('conversation'), str):
+                    return cur.get('conversation') or ''
+
+                tm = cur.get('textMessage')
+                if isinstance(tm, dict) and isinstance(tm.get('text'), str):
+                    return tm.get('text') or ''
+
+                etm = cur.get('extendedTextMessage')
+                if isinstance(etm, dict) and isinstance(etm.get('text'), str):
+                    return etm.get('text') or ''
+
+                br = cur.get('buttonsResponseMessage')
+                if isinstance(br, dict):
+                    v = br.get('selectedDisplayText') or br.get('selectedButtonId')
+                    if isinstance(v, str):
+                        return v or ''
+
+                lr = cur.get('listResponseMessage')
+                if isinstance(lr, dict):
+                    title = lr.get('title')
+                    if isinstance(title, str) and title.strip():
+                        return title
+                    ssr = lr.get('singleSelectReply')
+                    if isinstance(ssr, dict) and isinstance(ssr.get('selectedRowId'), str):
+                        return ssr.get('selectedRowId') or ''
+
+                tbr = cur.get('templateButtonReplyMessage')
+                if isinstance(tbr, dict):
+                    v = tbr.get('selectedDisplayText') or tbr.get('selectedId')
+                    if isinstance(v, str):
+                        return v or ''
+
+                rx = cur.get('reactionMessage')
+                if isinstance(rx, dict) and isinstance(rx.get('text'), str):
+                    return rx.get('text') or ''
+
+                img = cur.get('imageMessage')
+                if isinstance(img, dict) and isinstance(img.get('caption'), str) and img.get('caption'):
+                    return img.get('caption') or ''
+                vid = cur.get('videoMessage')
+                if isinstance(vid, dict) and isinstance(vid.get('caption'), str) and vid.get('caption'):
+                    return vid.get('caption') or ''
+                doc = cur.get('documentMessage')
+                if isinstance(doc, dict):
+                    if isinstance(doc.get('fileName'), str) and doc.get('fileName'):
+                        return doc.get('fileName') or ''
+                    if isinstance(doc.get('title'), str) and doc.get('title'):
+                        return doc.get('title') or ''
+
             if msg_type == 'audio':
                 return '[Áudio]'
             if msg_type == 'image':
@@ -1353,12 +1420,21 @@ async def list_messages(
         return str(content)
 
     query = supabase.table('messages').select('*').eq('conversation_id', conversation_id)
+    descending = False
     if after:
         query = query.gt('timestamp', after)
-    result = query.order('timestamp', desc=False).limit(limit).execute()
+    else:
+        if before:
+            query = query.lt('timestamp', before)
+        if tail or before:
+            descending = True
+    result = query.order('timestamp', desc=descending).limit(limit).execute()
+    rows = result.data or []
+    if descending:
+        rows = list(reversed(rows))
     
     messages = []
-    for m in result.data:
+    for m in rows:
         messages.append({
             'id': m['id'],
             'conversationId': m['conversation_id'],
@@ -1383,10 +1459,14 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
     conversation = conv.data[0]
     connection = conversation.get('connections')
     
+    content = (message.content or '').strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Mensagem vazia")
+
     # Save message to database first
     data = {
         'conversation_id': message.conversation_id,
-        'content': message.content,
+        'content': content,
         'type': message.type,
         'direction': 'outbound',
         'status': 'sent'
@@ -1397,7 +1477,7 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
     # Update conversation
     supabase.table('conversations').update({
         'last_message_at': datetime.utcnow().isoformat(),
-        'last_message_preview': message.content[:50]
+        'last_message_preview': content[:50]
     }).eq('id', message.conversation_id).execute()
     
     # Update tenant message count
@@ -1407,16 +1487,26 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
             new_count = tenant.data[0]['messages_this_month'] + 1
             supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
     
+    connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
+    connection_status = (connection.get('status') if isinstance(connection, dict) else None)
+    is_evolution = str(connection_provider or '').lower() == 'evolution'
+    is_connected = str(connection_status or '').lower() in ['connected', 'open']
+
+    status = 'sent'
+
     # Send via WhatsApp if Evolution API connection
-    if connection and connection.get('provider') == 'evolution' and connection.get('status') == 'connected':
+    if connection and is_evolution and is_connected:
         background_tasks.add_task(
             send_whatsapp_message,
             connection['instance_name'],
             conversation['contact_phone'],
-            message.content,
+            content,
             message.type,
             result.data[0]['id']
         )
+    else:
+        supabase.table('messages').update({'status': 'failed'}).eq('id', result.data[0]['id']).execute()
+        status = 'failed'
     
     m = result.data[0]
     return {
@@ -1425,7 +1515,7 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
         'content': m['content'],
         'type': m['type'],
         'direction': m['direction'],
-        'status': m['status'],
+        'status': status,
         'mediaUrl': m['media_url'],
         'timestamp': m['timestamp']
     }

@@ -22,22 +22,39 @@ class EvolutionAPI:
     async def _request(self, method: str, endpoint: str, data: dict = None) -> dict:
         """Make HTTP request to Evolution API"""
         url = f"{self.base_url}{endpoint}"
+        candidates = [url]
+        last_segment = (self.base_url.rstrip('/').split('/')[-1] or '').lower()
+        if last_segment != 'v2':
+            candidates.append(f"{self.base_url}/v2{endpoint}")
         async with httpx.AsyncClient(timeout=30) as client:
-            try:
-                if method == 'GET':
-                    response = await client.get(url, headers=self.headers)
-                elif method == 'POST':
-                    response = await client.post(url, headers=self.headers, json=data)
-                elif method == 'PUT':
-                    response = await client.put(url, headers=self.headers, json=data)
-                elif method == 'DELETE':
-                    response = await client.delete(url, headers=self.headers)
-                
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logger.error(f"Evolution API error: {e}")
-                raise Exception(f"Evolution API error: {str(e)}")
+            last_error = None
+            for idx, candidate_url in enumerate(candidates):
+                try:
+                    if method == 'GET':
+                        response = await client.get(candidate_url, headers=self.headers)
+                    elif method == 'POST':
+                        response = await client.post(candidate_url, headers=self.headers, json=data)
+                    elif method == 'PUT':
+                        response = await client.put(candidate_url, headers=self.headers, json=data)
+                    elif method == 'DELETE':
+                        response = await client.delete(candidate_url, headers=self.headers)
+                    else:
+                        raise Exception(f"Unsupported method: {method}")
+                    
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError as e:
+                    last_error = e
+                    if e.response is not None and e.response.status_code == 404 and idx < len(candidates) - 1:
+                        continue
+                    logger.error(f"Evolution API error: {e}")
+                    raise Exception(f"Evolution API error: {str(e)}")
+                except httpx.HTTPError as e:
+                    last_error = e
+                    logger.error(f"Evolution API error: {e}")
+                    raise Exception(f"Evolution API error: {str(e)}")
+            
+            raise Exception(f"Evolution API error: {str(last_error)}")
     
     # ==================== INSTANCE MANAGEMENT ====================
     
@@ -122,7 +139,8 @@ class EvolutionAPI:
         
         data = {
             'number': number,
-            'text': message
+            'text': message,
+            'message': message
         }
         
         return await self._request('POST', f'/message/sendText/{instance_name}', data)
@@ -340,20 +358,21 @@ class EvolutionAPI:
             s = value.strip()
             if not s or len(s) < 8:
                 return value
-            if len(s) % 4 != 0:
-                return value
-            try:
-                decoded = base64.b64decode(s)
-            except Exception:
-                return value
-            try:
-                decoded_text = decoded.decode('utf-8')
-            except Exception:
-                return value
-            try:
-                return json.loads(decoded_text)
-            except Exception:
-                return value
+            padded = s + ('=' * ((-len(s)) % 4))
+            for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+                try:
+                    decoded = decoder(padded)
+                except Exception:
+                    continue
+                try:
+                    decoded_text = decoded.decode('utf-8')
+                except Exception:
+                    continue
+                try:
+                    return json.loads(decoded_text)
+                except Exception:
+                    continue
+            return value
 
         raw_event = payload.get('event')
         event = str(raw_event or '').strip()
