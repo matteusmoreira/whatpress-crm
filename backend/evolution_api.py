@@ -371,6 +371,10 @@ class EvolutionAPI:
                 try:
                     return json.loads(decoded_text)
                 except Exception:
+                    clean = decoded_text.strip()
+                    if clean and '\x00' not in clean and len(clean) <= 4000:
+                        if all((ch.isprintable() or ch in '\r\n\t') for ch in clean):
+                            return clean
                     continue
             return value
 
@@ -382,6 +386,21 @@ class EvolutionAPI:
                 if decoded is not value:
                     return deep_decode(decoded, depth + 1)
                 return value
+            if isinstance(value, dict) and value.get('type') == 'Buffer' and isinstance(value.get('data'), list):
+                try:
+                    b = bytes((int(x) & 0xFF) for x in (value.get('data') or []))
+                    decoded_text = b.decode('utf-8')
+                    try:
+                        decoded_json = json.loads(decoded_text)
+                        return deep_decode(decoded_json, depth + 1)
+                    except Exception:
+                        clean = decoded_text.strip()
+                        if clean and '\x00' not in clean and len(clean) <= 4000:
+                            if all((ch.isprintable() or ch in '\r\n\t') for ch in clean):
+                                return clean
+                        return decoded_text
+                except Exception:
+                    return value
             if isinstance(value, list):
                 return [deep_decode(v, depth + 1) for v in value]
             if isinstance(value, dict):
@@ -472,13 +491,14 @@ class EvolutionAPI:
 
                 message_content = unwrap_content(message_content)
 
-                def extract_text_fallback(content: Any) -> Optional[str]:
+                def extract_text_fallback(content: Any, *, ignore_keys: Optional[set] = None) -> Optional[str]:
                     if content is None:
                         return None
                     if isinstance(content, (int, float, bool)):
                         return str(content)
                     if isinstance(content, str):
-                        return content
+                        s = content.strip()
+                        return s if s else None
                     if not isinstance(content, dict):
                         return None
 
@@ -494,6 +514,8 @@ class EvolutionAPI:
 
                     if not isinstance(cur, dict):
                         return None
+                    
+                    ignored = ignore_keys or set()
 
                     direct_keys = [
                         'conversation',
@@ -504,7 +526,8 @@ class EvolutionAPI:
                         'selectedButtonId',
                         'selectedId',
                         'fileName',
-                        'displayText'
+                        'displayText',
+                        'body'
                     ]
                     for k in direct_keys:
                         v = cur.get(k)
@@ -544,13 +567,23 @@ class EvolutionAPI:
                     if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
                         return nested.get('text')
 
-                    for v in cur.values():
+                    for k, v in cur.items():
+                        if k in ignored:
+                            continue
                         if isinstance(v, str) and v.strip():
-                            return v
+                            s = v.strip()
+                            if '@s.whatsapp.net' in s or '@g.us' in s:
+                                continue
+                            return s
                         if isinstance(v, dict):
-                            inner = extract_text_fallback(v)
+                            inner = extract_text_fallback(v, ignore_keys=ignored)
                             if isinstance(inner, str) and inner.strip():
                                 return inner
+                        if isinstance(v, list):
+                            for item in v:
+                                inner = extract_text_fallback(item, ignore_keys=ignored)
+                                if isinstance(inner, str) and inner.strip():
+                                    return inner
 
                     return None
                 
@@ -616,7 +649,24 @@ class EvolutionAPI:
                 if msg_type == 'document' and not (text or '').strip():
                     text = '[Documento]'
                 if msg_type == 'text' and not (text or '').strip():
-                    text = extract_text_fallback(message_content)
+                    ignored_keys = {
+                        'id',
+                        'remoteJid',
+                        'remote_jid',
+                        'participant',
+                        'fromMe',
+                        'from_me',
+                        'pushName',
+                        'push_name',
+                        'status',
+                        'device',
+                        'messageTimestamp'
+                    }
+                    text = extract_text_fallback(message_content, ignore_keys=ignored_keys)
+                if msg_type == 'text' and not (text or '').strip():
+                    text = extract_text_fallback(msg, ignore_keys=ignored_keys)
+                if msg_type == 'text' and not (text or '').strip():
+                    text = extract_text_fallback(data, ignore_keys=ignored_keys)
                 if msg_type == 'text' and not (text or '').strip():
                     text = '[Mensagem]'
                 

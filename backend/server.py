@@ -1652,6 +1652,60 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 if not phone or phone in ['status', 'broadcast']:
                     logger.info(f"Ignoring message with invalid remote_jid: {phone} raw_jid={raw_jid}")
                     return {"success": True, "ignored": "invalid_remote_jid"}
+
+                def is_placeholder_text(text: str) -> bool:
+                    t = (text or '').strip().lower()
+                    return t in ['[mensagem]', '[message]']
+
+                if is_placeholder_text(parsed.get('content') or ''):
+                    try:
+                        fetched = await evolution_api.fetch_messages(instance_name, phone, count=25)
+                        messages = []
+                        if isinstance(fetched, list):
+                            messages = fetched
+                        elif isinstance(fetched, dict):
+                            if isinstance(fetched.get('messages'), list):
+                                messages = fetched.get('messages') or []
+                            elif isinstance(fetched.get('data'), list):
+                                messages = fetched.get('data') or []
+                            elif isinstance(fetched.get('data'), dict) and isinstance(fetched.get('data', {}).get('messages'), list):
+                                messages = fetched.get('data', {}).get('messages') or []
+                            elif isinstance(fetched.get('response'), list):
+                                messages = fetched.get('response') or []
+
+                        target_id = parsed.get('message_id')
+                        candidate = None
+                        for m in messages:
+                            if not isinstance(m, dict):
+                                continue
+                            key = m.get('key') or {}
+                            m_id = key.get('id') if isinstance(key, dict) else None
+                            if target_id and m_id == target_id:
+                                candidate = m
+                                break
+                        if candidate is None and messages:
+                            candidate = messages[0] if isinstance(messages[0], dict) else None
+
+                        if candidate:
+                            reparsed = evolution_api.parse_webhook_message({
+                                'event': 'MESSAGES_UPSERT',
+                                'instance': instance_name,
+                                'data': {'messages': [candidate]}
+                            })
+                            if isinstance(reparsed, dict) and reparsed.get('event') == 'message':
+                                if not is_placeholder_text(reparsed.get('content') or ''):
+                                    parsed = {**parsed, **reparsed}
+                    except Exception as e:
+                        logger.warning(f"Fallback fetch_messages failed for {instance_name}: {e}")
+                
+                if is_placeholder_text(parsed.get('content') or ''):
+                    data_obj = payload.get('data')
+                    data_type = type(data_obj).__name__
+                    data_keys = list(data_obj.keys())[:25] if isinstance(data_obj, dict) else None
+                    logger.warning(
+                        f"Placeholder message content for {instance_name}: "
+                        f"msg_id={parsed.get('message_id')} data_type={data_type} data_keys={data_keys}"
+                    )
                 
                 # Find or create conversation
                 conv = (
@@ -1665,10 +1719,11 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 
                 if conv.data:
                     conversation = conv.data[0]
+                    preview = '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
                     # Update conversation
                     supabase.table('conversations').update({
                         'last_message_at': datetime.utcnow().isoformat(),
-                        'last_message_preview': (parsed['content'] or '')[:50],
+                        'last_message_preview': preview,
                         'unread_count': conversation['unread_count'] + 1
                     }).eq('id', conversation['id']).execute()
                 else:
@@ -1687,7 +1742,7 @@ async def evolution_webhook(instance_name: str, payload: dict):
                         'contact_avatar': avatar_url,
                         'status': 'open',
                         'unread_count': 1,
-                        'last_message_preview': (parsed['content'] or '')[:50]
+                        'last_message_preview': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
                     }
                     conv_result = supabase.table('conversations').insert(conv_data).execute()
                     conversation = conv_result.data[0]
@@ -1695,7 +1750,7 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 # Save message
                 msg_data = {
                     'conversation_id': conversation['id'],
-                    'content': parsed['content'] or '',
+                    'content': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or ''),
                     'type': parsed['type'],
                     'direction': 'inbound',
                     'status': 'delivered',
