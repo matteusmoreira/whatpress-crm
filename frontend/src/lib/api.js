@@ -616,8 +616,9 @@ export const ReportsAPI = {
 
 // Evolution API
 export const EvolutionAPI = {
-  async listInstances() {
-    const response = await apiClient.get('/evolution/instances');
+  async listInstances(tenantId = null) {
+    const params = tenantId ? { tenant_id: tenantId } : {};
+    const response = await apiClient.get('/evolution/instances', { params });
     return response.data;
   },
 

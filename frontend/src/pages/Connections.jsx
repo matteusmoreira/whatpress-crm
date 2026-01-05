@@ -252,17 +252,17 @@ const QRCodeModal = ({ qrcode, pairingCode, onClose }) => {
 };
 
 // Evolution Instances Component
-const EvolutionInstances = () => {
+const EvolutionInstances = ({ tenantId }) => {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadInstances();
-  }, []);
+  }, [tenantId]);
 
   const loadInstances = async () => {
     try {
-      const data = await EvolutionAPI.listInstances();
+      const data = await EvolutionAPI.listInstances(tenantId);
       setInstances(data);
     } catch (error) {
       console.error('Error loading Evolution instances:', error);
@@ -292,7 +292,7 @@ const EvolutionInstances = () => {
           {connectedInstances.length} conectadas
         </GlassBadge>
       </div>
-      
+
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {instances.slice(0, 12).map((instance) => (
           <div
@@ -326,7 +326,7 @@ const EvolutionInstances = () => {
           </div>
         ))}
       </div>
-      
+
       {instances.length > 12 && (
         <p className="text-white/40 text-sm mt-4 text-center">
           +{instances.length - 12} outras instâncias
@@ -411,7 +411,7 @@ const Connections = () => {
       </div>
 
       {/* Evolution Instances Overview */}
-      <EvolutionInstances />
+      <EvolutionInstances tenantId={tenantId} />
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

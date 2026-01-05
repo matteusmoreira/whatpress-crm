@@ -137,11 +137,11 @@ code {
 }
 
 .light .glass-card {
-  @apply bg-gradient-to-br from-white/80 to-white/60 border-slate-200/50 shadow-slate-300/20;
+  @apply bg-gradient-to-br from-white/90 to-white/70 border-slate-200/80 shadow-slate-200/50;
 }
 
 .light .glass-input {
-  @apply bg-white/70 border-slate-300/50 text-slate-900 placeholder:text-slate-500;
+  @apply bg-white/80 border-slate-300/60 text-slate-900 placeholder:text-slate-500;
 }
 
 /* Theme-aware background */
@@ -151,6 +151,84 @@ code {
 
 .light body {
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+/* Theme-aware text colors */
+.light .text-white {
+  @apply text-slate-900;
+}
+
+.light .text-white\/40,
+.light .text-white\/50,
+.light .text-white\/60,
+.light .text-white\/70,
+.light .text-white\/80 {
+  @apply text-slate-600;
+}
+
+/* Theme-aware backgrounds for glassmorphism */
+.light .bg-white\/5,
+.light .bg-white\/10 {
+  @apply bg-slate-100/80;
+}
+
+.light .bg-white\/20 {
+  @apply bg-slate-200/80;
+}
+
+/* Theme-aware borders */
+.light .border-white\/10,
+.light .border-white\/20 {
+  @apply border-slate-200;
+}
+
+/* Theme-aware hover states */
+.light .hover\:bg-white\/10:hover {
+  @apply bg-slate-200/80;
+}
+
+.light .hover\:bg-white\/20:hover {
+  @apply bg-slate-300/80;
+}
+
+/* Theme-aware emerald elements */
+.light .bg-emerald-900\/95,
+.light .bg-emerald-900 {
+  @apply bg-emerald-100;
+}
+
+.light .bg-emerald-500\/20 {
+  @apply bg-emerald-100;
+}
+
+.light .bg-emerald-500\/30 {
+  @apply bg-emerald-200;
+}
+
+/* Theme-aware status colors */
+.light .text-emerald-400 {
+  @apply text-emerald-600;
+}
+
+.light .text-amber-400 {
+  @apply text-amber-600;
+}
+
+.light .text-blue-400 {
+  @apply text-blue-600;
+}
+
+.light .text-purple-400 {
+  @apply text-purple-600;
+}
+
+.light .text-red-400 {
+  @apply text-red-600;
+}
+
+/* Light mode dropdown menus */
+.light .backdrop-blur-xl.bg-emerald-900\/95 {
+  @apply bg-white/95;
 }
 
 /* Theme transition */

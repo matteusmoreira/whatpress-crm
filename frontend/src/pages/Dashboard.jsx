@@ -161,7 +161,9 @@ const AgentCard = ({ agent }) => {
 
 const Dashboard = () => {
     const { user } = useAuthStore();
-    const [loading, setLoading] = useState(true);
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [chartsLoading, setChartsLoading] = useState(true);
+    const [agentsLoading, setAgentsLoading] = useState(true);
     const [overview, setOverview] = useState(null);
     const [messagesByDay, setMessagesByDay] = useState([]);
     const [agentPerformance, setAgentPerformance] = useState([]);
@@ -171,23 +173,27 @@ const Dashboard = () => {
     const tenantId = user?.tenantId || 'tenant-1';
 
     const loadData = useCallback(async () => {
-        try {
-            const [overviewData, messagesData, agentsData, statusData] = await Promise.all([
-                AnalyticsAPI.getOverview(tenantId),
-                AnalyticsAPI.getMessagesByDay(tenantId, 7),
-                AnalyticsAPI.getAgentPerformance(tenantId),
-                AnalyticsAPI.getConversationsByStatus(tenantId)
-            ]);
+        // Load stats first (fastest)
+        AnalyticsAPI.getOverview(tenantId).then(data => {
+            setOverview(data);
+            setStatsLoading(false);
+        }).catch(() => setStatsLoading(false));
 
-            setOverview(overviewData);
+        // Load charts
+        Promise.all([
+            AnalyticsAPI.getMessagesByDay(tenantId, 7),
+            AnalyticsAPI.getConversationsByStatus(tenantId)
+        ]).then(([messagesData, statusData]) => {
             setMessagesByDay(messagesData);
-            setAgentPerformance(agentsData);
             setConversationsByStatus(statusData);
-        } catch (error) {
-            console.error('Error loading dashboard data:', error);
-        } finally {
-            setLoading(false);
-        }
+            setChartsLoading(false);
+        }).catch(() => setChartsLoading(false));
+
+        // Load agents (potentially slowest)
+        AnalyticsAPI.getAgentPerformance(tenantId).then(data => {
+            setAgentPerformance(data);
+            setAgentsLoading(false);
+        }).catch(() => setAgentsLoading(false));
     }, [tenantId]);
 
     useEffect(() => {
@@ -200,17 +206,51 @@ const Dashboard = () => {
 
     const handleRefresh = async () => {
         setRefreshing(true);
+        setStatsLoading(true);
+        setChartsLoading(true);
+        setAgentsLoading(true);
         await loadData();
         setRefreshing(false);
     };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <div className="w-12 h-12 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+    // Skeleton Components
+    const StatSkeleton = () => (
+        <div className="p-6 rounded-2xl backdrop-blur-xl border bg-gradient-to-br from-white/10 to-white/5 border-white/20 animate-pulse">
+            <div className="flex items-start justify-between">
+                <div className="p-3 rounded-xl bg-white/10 w-12 h-12" />
             </div>
-        );
-    }
+            <div className="mt-4 space-y-2">
+                <div className="h-8 bg-white/10 rounded w-20" />
+                <div className="h-4 bg-white/10 rounded w-32" />
+            </div>
+        </div>
+    );
+
+    const ChartSkeleton = ({ height = 180 }) => (
+        <div className="animate-pulse">
+            <div className="flex items-end gap-2" style={{ height }}>
+                {[...Array(7)].map((_, i) => (
+                    <div key={i} className="flex-1 bg-white/10 rounded" style={{ height: `${30 + Math.random() * 70}%` }} />
+                ))}
+            </div>
+        </div>
+    );
+
+    const AgentSkeleton = () => (
+        <div className="flex items-center gap-4 p-4 bg-white/5 rounded-xl animate-pulse">
+            <div className="w-12 h-12 rounded-full bg-white/10" />
+            <div className="flex-1 space-y-2">
+                <div className="h-4 bg-white/10 rounded w-24" />
+                <div className="h-3 bg-white/10 rounded w-16" />
+            </div>
+            <div className="text-right space-y-2">
+                <div className="h-5 bg-white/10 rounded w-12" />
+                <div className="h-3 bg-white/10 rounded w-20" />
+            </div>
+        </div>
+    );
+
+
 
     return (
         <div className="p-6 space-y-6 overflow-y-auto h-full">
@@ -271,30 +311,41 @@ const Dashboard = () => {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                    icon={MessageSquare}
-                    label="Mensagens Hoje"
-                    value={overview?.messages?.today || 0}
-                    color="emerald"
-                />
-                <StatCard
-                    icon={TrendingUp}
-                    label="Mensagens este Mês"
-                    value={overview?.messages?.thisMonth || 0}
-                    color="blue"
-                />
-                <StatCard
-                    icon={Users}
-                    label="Conversas Abertas"
-                    value={overview?.conversations?.open || 0}
-                    color="amber"
-                />
-                <StatCard
-                    icon={Activity}
-                    label="Agentes Online"
-                    value={overview?.agents?.online || 0}
-                    color="purple"
-                />
+                {statsLoading ? (
+                    <>
+                        <StatSkeleton />
+                        <StatSkeleton />
+                        <StatSkeleton />
+                        <StatSkeleton />
+                    </>
+                ) : (
+                    <>
+                        <StatCard
+                            icon={MessageSquare}
+                            label="Mensagens Hoje"
+                            value={overview?.messages?.today || 0}
+                            color="emerald"
+                        />
+                        <StatCard
+                            icon={TrendingUp}
+                            label="Mensagens este Mês"
+                            value={overview?.messages?.thisMonth || 0}
+                            color="blue"
+                        />
+                        <StatCard
+                            icon={Users}
+                            label="Conversas Abertas"
+                            value={overview?.conversations?.open || 0}
+                            color="amber"
+                        />
+                        <StatCard
+                            icon={Activity}
+                            label="Agentes Online"
+                            value={overview?.agents?.online || 0}
+                            color="purple"
+                        />
+                    </>
+                )}
             </div>
 
             {/* Charts Row */}
@@ -314,7 +365,9 @@ const Dashboard = () => {
                             </div>
                         </div>
                     </div>
-                    {messagesByDay.length > 0 ? (
+                    {chartsLoading ? (
+                        <ChartSkeleton height={180} />
+                    ) : messagesByDay.length > 0 ? (
                         <BarChart data={messagesByDay} height={180} />
                     ) : (
                         <div className="h-[180px] flex items-center justify-center text-white/40">
@@ -351,9 +404,15 @@ const Dashboard = () => {
             <GlassCard className="p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-lg font-semibold text-white">Performance dos Agentes</h2>
-                    <span className="text-white/40 text-sm">{agentPerformance.length} agentes</span>
+                    <span className="text-white/40 text-sm">{agentsLoading ? '...' : `${agentPerformance.length} agentes`}</span>
                 </div>
-                {agentPerformance.length > 0 ? (
+                {agentsLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <AgentSkeleton />
+                        <AgentSkeleton />
+                        <AgentSkeleton />
+                    </div>
+                ) : agentPerformance.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {agentPerformance.map(agent => (
                             <AgentCard key={agent.id} agent={agent} />

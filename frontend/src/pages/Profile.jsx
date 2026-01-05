@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Mail,
@@ -11,11 +11,13 @@ import {
   Moon,
   Sun,
   Globe,
-  Key
+  Key,
+  Loader2
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../context/ThemeContext';
+import { TenantsAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
 
@@ -23,12 +25,14 @@ const Profile = () => {
   const { user } = useAuthStore();
   const { theme, toggleTheme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
+  const [tenantLoading, setTenantLoading] = useState(true);
+  const [tenantName, setTenantName] = useState('');
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    phone: '+55 21 99999-8888',
-    company: 'Minha Empresa',
-    bio: 'Gerente de atendimento ao cliente com foco em experiência do usuário.'
+    phone: user?.phone || '',
+    company: '',
+    bio: user?.bio || ''
   });
 
   const [notifications, setNotifications] = useState({
@@ -37,6 +41,26 @@ const Profile = () => {
     updates: false,
     marketing: false
   });
+
+  // Buscar dados do tenant
+  useEffect(() => {
+    const loadTenant = async () => {
+      if (user?.tenantId) {
+        try {
+          const tenant = await TenantsAPI.getById(user.tenantId);
+          setTenantName(tenant.name || tenant.companyName || '');
+          setFormData(prev => ({ ...prev, company: tenant.name || tenant.companyName || '' }));
+        } catch (error) {
+          console.error('Error loading tenant:', error);
+        } finally {
+          setTenantLoading(false);
+        }
+      } else {
+        setTenantLoading(false);
+      }
+    };
+    loadTenant();
+  }, [user?.tenantId]);
 
   const handleSave = () => {
     setIsEditing(false);
@@ -199,7 +223,7 @@ const Profile = () => {
         {/* Preferences Card */}
         <GlassCard className="lg:col-span-2 p-6" hover={false}>
           <h3 className="text-lg font-semibold text-white mb-6">Preferências</h3>
-          
+
           <div className="space-y-6">
             {/* Theme Toggle */}
             <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
@@ -267,7 +291,7 @@ const Profile = () => {
           <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
             <Bell className="w-5 h-5" /> Notificações
           </h3>
-          
+
           <div className="space-y-4">
             {[
               { key: 'newMessages', label: 'Novas mensagens', desc: 'Receber alerta de novas mensagens' },

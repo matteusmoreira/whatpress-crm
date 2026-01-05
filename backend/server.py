@@ -2663,10 +2663,26 @@ async def export_agents_report_csv(
 # ==================== EVOLUTION API INSTANCES ====================
 
 @api_router.get("/evolution/instances")
-async def list_evolution_instances(payload: dict = Depends(verify_token)):
-    """List all Evolution API instances"""
+async def list_evolution_instances(tenant_id: str = None, payload: dict = Depends(verify_token)):
+    """List Evolution API instances filtered by tenant"""
     try:
         instances = await evolution_api.fetch_instances()
+        
+        # If tenant_id is provided, filter instances to only show those belonging to the tenant
+        if tenant_id:
+            # Get connections for this tenant to find which instances belong to them
+            connections = supabase.table('connections').select('instance_name').eq('tenant_id', tenant_id).eq('provider', 'evolution').execute()
+            
+            if connections.data:
+                # Get list of instance names that belong to this tenant
+                tenant_instance_names = {conn['instance_name'] for conn in connections.data if conn.get('instance_name')}
+                
+                # Filter instances to only include those that match tenant's connections
+                instances = [i for i in instances if i.get('name') in tenant_instance_names]
+            else:
+                # No connections for this tenant, return empty list
+                instances = []
+        
         return [{
             'id': i['id'],
             'name': i['name'],
