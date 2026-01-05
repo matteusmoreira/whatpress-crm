@@ -1141,7 +1141,15 @@ async def delete_connection(connection_id: str, payload: dict = Depends(verify_t
 # ==================== CONVERSATIONS ROUTES ====================
 
 @api_router.get("/conversations")
-async def list_conversations(tenant_id: str, status: Optional[str] = None, connection_id: Optional[str] = None, payload: dict = Depends(verify_token)):
+async def list_conversations(
+    tenant_id: str,
+    status: Optional[str] = None,
+    connection_id: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    refresh_avatars: bool = False,
+    payload: dict = Depends(verify_token)
+):
     """List conversations for a tenant"""
     query = supabase.table('conversations').select('*').eq('tenant_id', tenant_id)
     
@@ -1150,7 +1158,14 @@ async def list_conversations(tenant_id: str, status: Optional[str] = None, conne
     if connection_id and connection_id != 'all':
         query = query.eq('connection_id', connection_id)
     
-    result = query.order('last_message_at', desc=True).execute()
+    if limit < 1:
+        limit = 1
+    if limit > 1000:
+        limit = 1000
+    if offset < 0:
+        offset = 0
+
+    result = query.order('last_message_at', desc=True).range(offset, offset + limit - 1).execute()
 
     connection_by_id: Dict[str, Dict[str, Any]] = {}
     try:
@@ -1167,7 +1182,7 @@ async def list_conversations(tenant_id: str, status: Optional[str] = None, conne
             return True
         return False
 
-    to_refresh = [c for c in (result.data or []) if needs_avatar_refresh(c)]
+    to_refresh = [c for c in (result.data or []) if needs_avatar_refresh(c)] if refresh_avatars else []
     refreshed: Dict[str, Optional[str]] = {}
 
     async def refresh_avatar(conv_row: dict) -> Optional[str]:
@@ -1203,7 +1218,7 @@ async def list_conversations(tenant_id: str, status: Optional[str] = None, conne
 
         return None
 
-    if to_refresh:
+    if refresh_avatars and to_refresh:
         results = await asyncio.gather(*(refresh_avatar(c) for c in to_refresh), return_exceptions=True)
         for row, res in zip(to_refresh, results):
             if isinstance(res, str) and res.strip():
@@ -1290,16 +1305,64 @@ async def remove_label(conversation_id: str, label_id: str, payload: dict = Depe
 # ==================== MESSAGES ROUTES ====================
 
 @api_router.get("/messages")
-async def list_messages(conversation_id: str, payload: dict = Depends(verify_token)):
+async def list_messages(
+    conversation_id: str,
+    after: Optional[str] = None,
+    limit: int = 500,
+    payload: dict = Depends(verify_token)
+):
     """List messages for a conversation"""
-    result = supabase.table('messages').select('*').eq('conversation_id', conversation_id).order('timestamp', desc=False).execute()
+
+    def normalize_message_content(content: Any, msg_type: str) -> str:
+        if content is None:
+            return ''
+        if isinstance(content, (int, float, bool)):
+            return str(content)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, dict):
+            if 'content' in content and isinstance(content.get('content'), str):
+                return content.get('content') or ''
+            if 'text' in content and isinstance(content.get('text'), str):
+                return content.get('text') or ''
+            if 'conversation' in content and isinstance(content.get('conversation'), str):
+                return content.get('conversation') or ''
+            etm = content.get('extendedTextMessage')
+            if isinstance(etm, dict) and isinstance(etm.get('text'), str):
+                return etm.get('text') or ''
+            img = content.get('imageMessage')
+            if isinstance(img, dict) and isinstance(img.get('caption'), str) and img.get('caption'):
+                return img.get('caption') or ''
+            vid = content.get('videoMessage')
+            if isinstance(vid, dict) and isinstance(vid.get('caption'), str) and vid.get('caption'):
+                return vid.get('caption') or ''
+            doc = content.get('documentMessage')
+            if isinstance(doc, dict) and isinstance(doc.get('fileName'), str) and doc.get('fileName'):
+                return doc.get('fileName') or ''
+            if msg_type == 'audio':
+                return '[Áudio]'
+            if msg_type == 'image':
+                return '[Imagem]'
+            if msg_type == 'video':
+                return '[Vídeo]'
+            if msg_type == 'document':
+                return '[Documento]'
+            return '[Mensagem]'
+        if isinstance(content, list):
+            return '[Mensagem]'
+        return str(content)
+
+    query = supabase.table('messages').select('*').eq('conversation_id', conversation_id)
+    if after:
+        query = query.gt('timestamp', after)
+    result = query.order('timestamp', desc=False).limit(limit).execute()
     
     messages = []
     for m in result.data:
         messages.append({
             'id': m['id'],
             'conversationId': m['conversation_id'],
-            'content': m['content'],
+            'content': normalize_message_content(m.get('content'), m.get('type') or 'text'),
             'type': m['type'],
             'direction': m['direction'],
             'status': m['status'],

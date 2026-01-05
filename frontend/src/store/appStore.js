@@ -128,9 +128,11 @@ export const useAppStore = create((set, get) => ({
   // Conversations Actions
   fetchConversations: async (tenantId, filters = {}, options = {}) => {
     const silent = options?.silent;
+    const limit = typeof options?.limit === 'number' ? options.limit : 200;
+    const offset = typeof options?.offset === 'number' ? options.offset : 0;
     if (!silent) set({ conversationsLoading: true, error: null });
     try {
-      const conversations = await ConversationsAPI.list(tenantId, filters);
+      const conversations = await ConversationsAPI.list(tenantId, filters, { limit, offset });
       set({ conversations, conversationsLoading: false });
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -179,9 +181,26 @@ export const useAppStore = create((set, get) => ({
     const silent = options?.silent;
     if (!silent) set({ messagesLoading: true, error: null });
     try {
-      const messages = await MessagesAPI.list(conversationId);
-      set({ messages, messagesLoading: false });
-      return messages;
+      const params = {};
+      if (options.after) params.after = options.after;
+      if (options.limit) params.limit = options.limit;
+
+      const nextMessages = await MessagesAPI.list(conversationId, params);
+
+      if (options.append) {
+        set(state => {
+          const existingById = new Set((state.messages || []).map(m => m.id));
+          const merged = [...(state.messages || [])];
+          for (const m of nextMessages || []) {
+            if (m?.id && !existingById.has(m.id)) merged.push(m);
+          }
+          return { messages: merged, messagesLoading: false };
+        });
+      } else {
+        set({ messages: nextMessages, messagesLoading: false });
+      }
+
+      return nextMessages;
     } catch (error) {
       console.error('Error fetching messages:', error);
       set({ messagesLoading: false, error: error.message });

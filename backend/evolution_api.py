@@ -2,6 +2,7 @@
 
 import httpx
 import logging
+import json
 from typing import Optional, Dict, Any, List
 import base64
 
@@ -333,6 +334,27 @@ class EvolutionAPI:
     
     def parse_webhook_message(self, payload: dict) -> dict:
         """Parse incoming webhook message"""
+        def decode_maybe_base64_json(value):
+            if not isinstance(value, str):
+                return value
+            s = value.strip()
+            if not s or len(s) < 8:
+                return value
+            if len(s) % 4 != 0:
+                return value
+            try:
+                decoded = base64.b64decode(s)
+            except Exception:
+                return value
+            try:
+                decoded_text = decoded.decode('utf-8')
+            except Exception:
+                return value
+            try:
+                return json.loads(decoded_text)
+            except Exception:
+                return value
+
         raw_event = payload.get('event')
         event = str(raw_event or '').strip()
         normalized_event = event.lower().replace('_', '.')
@@ -340,8 +362,10 @@ class EvolutionAPI:
         instance = payload.get('instance') or payload.get('instanceName') or payload.get('instance_name')
 
         data = payload.get('data') or {}
+        data = decode_maybe_base64_json(data)
         if isinstance(data, dict) and isinstance(data.get('data'), dict) and len(data.keys()) == 1:
             data = data.get('data') or {}
+        data = decode_maybe_base64_json(data)
         
         if normalized_event == 'messages.upsert':
             messages = []
@@ -353,9 +377,11 @@ class EvolutionAPI:
                 messages = [data]
 
             if messages:
-                msg = messages[0] if isinstance(messages[0], dict) else {}
+                raw_msg = decode_maybe_base64_json(messages[0])
+                msg = raw_msg if isinstance(raw_msg, dict) else {}
                 key = msg.get('key') or {}
                 message_content = msg.get('message') or {}
+                message_content = decode_maybe_base64_json(message_content)
                 if not isinstance(message_content, dict):
                     message_content = {}
 
@@ -400,6 +426,88 @@ class EvolutionAPI:
                     return cur if isinstance(cur, dict) else {}
 
                 message_content = unwrap_content(message_content)
+
+                def extract_text_fallback(content: Any) -> Optional[str]:
+                    if content is None:
+                        return None
+                    if isinstance(content, (int, float, bool)):
+                        return str(content)
+                    if isinstance(content, str):
+                        return content
+                    if not isinstance(content, dict):
+                        return None
+
+                    cur: Any = content
+                    for _ in range(6):
+                        if isinstance(cur, dict) and isinstance(cur.get('message'), dict):
+                            cur = cur.get('message')
+                            continue
+                        if isinstance(cur, dict) and isinstance(cur.get('data'), dict) and len(cur.keys()) == 1:
+                            cur = cur.get('data')
+                            continue
+                        break
+
+                    if not isinstance(cur, dict):
+                        return None
+
+                    direct_keys = [
+                        'conversation',
+                        'text',
+                        'caption',
+                        'title',
+                        'selectedDisplayText',
+                        'selectedButtonId',
+                        'selectedId',
+                        'fileName',
+                        'displayText'
+                    ]
+                    for k in direct_keys:
+                        v = cur.get(k)
+                        if isinstance(v, str) and v.strip():
+                            return v
+
+                    nested = cur.get('textMessage')
+                    if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
+                        return nested.get('text')
+
+                    nested = cur.get('extendedTextMessage')
+                    if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
+                        return nested.get('text')
+
+                    nested = cur.get('buttonsResponseMessage')
+                    if isinstance(nested, dict):
+                        v = nested.get('selectedDisplayText') or nested.get('selectedButtonId')
+                        if isinstance(v, str) and v.strip():
+                            return v
+
+                    nested = cur.get('listResponseMessage')
+                    if isinstance(nested, dict):
+                        v = nested.get('title')
+                        if isinstance(v, str) and v.strip():
+                            return v
+                        ssr = nested.get('singleSelectReply')
+                        if isinstance(ssr, dict) and isinstance(ssr.get('selectedRowId'), str) and ssr.get('selectedRowId').strip():
+                            return ssr.get('selectedRowId')
+
+                    nested = cur.get('templateButtonReplyMessage')
+                    if isinstance(nested, dict):
+                        v = nested.get('selectedDisplayText') or nested.get('selectedId')
+                        if isinstance(v, str) and v.strip():
+                            return v
+
+                    nested = cur.get('reactionMessage')
+                    if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
+                        return nested.get('text')
+
+                    for v in cur.values():
+                        if isinstance(v, str) and v.strip():
+                            return v
+                        if isinstance(v, dict):
+                            inner = extract_text_fallback(v)
+                            if isinstance(inner, str) and inner.strip():
+                                return inner
+
+                    return None
                 
                 # Extract text content
                 text = None
@@ -462,6 +570,8 @@ class EvolutionAPI:
                     text = '[Vídeo]'
                 if msg_type == 'document' and not (text or '').strip():
                     text = '[Documento]'
+                if msg_type == 'text' and not (text or '').strip():
+                    text = extract_text_fallback(message_content)
                 if msg_type == 'text' and not (text or '').strip():
                     text = '[Mensagem]'
                 

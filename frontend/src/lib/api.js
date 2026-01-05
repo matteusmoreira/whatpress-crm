@@ -204,8 +204,10 @@ export const ConnectionsAPI = {
 
 // Conversations API
 export const ConversationsAPI = {
-  async list(tenantId, filters = {}) {
+  async list(tenantId, filters = {}, options = {}) {
     const params = { tenant_id: tenantId, ...filters };
+    if (typeof options?.limit === 'number') params.limit = options.limit;
+    if (typeof options?.offset === 'number') params.offset = options.offset;
     const response = await apiClient.get('/conversations', { params });
     return response.data;
   },
@@ -243,8 +245,8 @@ export const ConversationsAPI = {
 
 // Messages API
 export const MessagesAPI = {
-  async list(conversationId) {
-    const response = await apiClient.get('/messages', { params: { conversation_id: conversationId } });
+  async list(conversationId, params = {}) {
+    const response = await apiClient.get('/messages', { params: { conversation_id: conversationId, ...params } });
     return response.data;
   },
 
