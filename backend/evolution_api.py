@@ -374,18 +374,44 @@ class EvolutionAPI:
                     continue
             return value
 
+        def deep_decode(value: Any, depth: int = 0) -> Any:
+            if depth > 8:
+                return value
+            if isinstance(value, str):
+                decoded = decode_maybe_base64_json(value)
+                if decoded is not value:
+                    return deep_decode(decoded, depth + 1)
+                return value
+            if isinstance(value, list):
+                return [deep_decode(v, depth + 1) for v in value]
+            if isinstance(value, dict):
+                return {k: deep_decode(v, depth + 1) for k, v in value.items()}
+            return value
+
+        def unwrap_single_data_container(value: Any) -> Any:
+            cur = value
+            for _ in range(6):
+                if isinstance(cur, dict) and len(cur.keys()) == 1 and 'data' in cur:
+                    cur = cur.get('data')
+                    continue
+                break
+            return cur
+
         raw_event = payload.get('event')
         event = str(raw_event or '').strip()
         normalized_event = event.lower().replace('_', '.')
 
         instance = payload.get('instance') or payload.get('instanceName') or payload.get('instance_name')
 
-        data = payload.get('data') or {}
-        data = decode_maybe_base64_json(data)
-        if isinstance(data, dict) and isinstance(data.get('data'), dict) and len(data.keys()) == 1:
-            data = data.get('data') or {}
-        data = decode_maybe_base64_json(data)
-        
+        data = deep_decode(payload.get('data') or {})
+        data = deep_decode(unwrap_single_data_container(data))
+        if isinstance(data, dict) and isinstance(data.get('data'), dict) and (
+            isinstance(data.get('messages'), list) is False and isinstance(data.get('message'), dict) is False
+        ):
+            inner = data.get('data')
+            if isinstance(inner, dict):
+                data = inner
+
         if normalized_event == 'messages.upsert':
             messages = []
             if isinstance(data, dict) and isinstance(data.get('messages'), list):
@@ -396,11 +422,11 @@ class EvolutionAPI:
                 messages = [data]
 
             if messages:
-                raw_msg = decode_maybe_base64_json(messages[0])
+                raw_msg = deep_decode(messages[0])
                 msg = raw_msg if isinstance(raw_msg, dict) else {}
                 key = msg.get('key') or {}
                 message_content = msg.get('message') or {}
-                message_content = decode_maybe_base64_json(message_content)
+                message_content = deep_decode(message_content)
                 if not isinstance(message_content, dict):
                     message_content = {}
 
