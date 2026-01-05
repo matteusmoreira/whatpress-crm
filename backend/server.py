@@ -53,10 +53,37 @@ async def debug_routes():
         })
     return {"routes": routes}
 
+# ==================== MODELS (defined early for login endpoint) ====================
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginResponse(BaseModel):
+    user: dict
+    token: str
+
+# JWT Secret (needed for login)
+JWT_SECRET = "whatsapp-crm-secret-key-2025"
+
+def create_token(user_id: str, email: str, role: str):
+    payload = {
+        "user_id": user_id,
+        "email": email,
+        "role": role,
+        "exp": datetime.utcnow().timestamp() + 86400 * 7  # 7 days
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
 @app.post("/test-login")
 async def test_login(data: dict):
     """Direct login test endpoint outside router"""
     return {"message": "Direct login endpoint works", "received": data}
+
+# OPTIONS handler for CORS preflight
+@app.options("/api/auth/login")
+async def login_options():
+    return {"message": "OK"}
 
 # DIRECT ROUTE FOR LOGIN (FIX FOR 405)
 @app.post("/api/auth/login", response_model=LoginResponse)
@@ -88,21 +115,14 @@ api_router = APIRouter(prefix="/api")
 
 # Security
 security = HTTPBearer(auto_error=False)
-JWT_SECRET = "whatsapp-crm-secret-key-2025"
+# JWT_SECRET already defined above
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ==================== MODELS ====================
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-class LoginResponse(BaseModel):
-    user: dict
-    token: str
+# Note: LoginRequest and LoginResponse are defined at the top of the file
 
 class TenantCreate(BaseModel):
     name: str
@@ -230,15 +250,7 @@ class TenantRegister(BaseModel):
     plan: str = "free"
 
 # ==================== AUTH ====================
-
-def create_token(user_id: str, email: str, role: str):
-    payload = {
-        "user_id": user_id,
-        "email": email,
-        "role": role,
-        "exp": datetime.utcnow().timestamp() + 86400 * 7  # 7 days
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+# Note: create_token is defined at the top of the file
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not credentials:
