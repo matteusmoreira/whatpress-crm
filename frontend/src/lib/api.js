@@ -1,7 +1,21 @@
 // API Client for WhatsApp CRM v2
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const resolveBackendUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  if (envUrl) return envUrl;
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+  }
+
+  return 'https://whatpress-crm-production.up.railway.app';
+};
+
+const BACKEND_URL = resolveBackendUrl();
 const API = `${BACKEND_URL}/api`;
 
 // Create axios instance

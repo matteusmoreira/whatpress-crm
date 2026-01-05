@@ -126,8 +126,9 @@ export const useAppStore = create((set, get) => ({
   },
 
   // Conversations Actions
-  fetchConversations: async (tenantId, filters = {}) => {
-    set({ conversationsLoading: true, error: null });
+  fetchConversations: async (tenantId, filters = {}, options = {}) => {
+    const silent = options?.silent;
+    if (!silent) set({ conversationsLoading: true, error: null });
     try {
       const conversations = await ConversationsAPI.list(tenantId, filters);
       set({ conversations, conversationsLoading: false });
@@ -174,6 +175,20 @@ export const useAppStore = create((set, get) => ({
   },
 
   // Messages Actions
+  fetchMessages: async (conversationId, options = {}) => {
+    const silent = options?.silent;
+    if (!silent) set({ messagesLoading: true, error: null });
+    try {
+      const messages = await MessagesAPI.list(conversationId);
+      set({ messages, messagesLoading: false });
+      return messages;
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      set({ messagesLoading: false, error: error.message });
+      return [];
+    }
+  },
+
   sendMessage: async (conversationId, content) => {
     const newMessage = await MessagesAPI.send(conversationId, content);
     set(state => ({

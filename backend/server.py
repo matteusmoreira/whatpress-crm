@@ -928,6 +928,10 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
             if state.get('instance', {}).get('state') == 'open':
                 # Already connected
                 webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
+                try:
+                    await evolution_api.set_webhook(connection['instance_name'], webhook_url)
+                except Exception as e:
+                    logger.warning(f"Could not set webhook for {connection['instance_name']}: {e}")
                 supabase.table('connections').update({
                     'status': 'connected',
                     'webhook_url': webhook_url
@@ -1020,6 +1024,10 @@ async def sync_connection_status(connection_id: str, payload: dict = Depends(ver
         update_data = {'status': new_status}
         if is_connected:
             update_data['webhook_url'] = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
+            try:
+                await evolution_api.set_webhook(connection['instance_name'], update_data['webhook_url'])
+            except Exception as e:
+                logger.warning(f"Could not set webhook for {connection['instance_name']}: {e}")
             
             # Tentar obter o número do telefone se conectado
             try:
@@ -1387,7 +1395,7 @@ async def evolution_webhook(instance_name: str, payload: dict):
         
         if parsed['event'] == 'message' and not parsed['from_me']:
             # Ignorar mensagens de grupos (grupos têm @g.us no JID)
-            raw_jid = payload.get('data', {}).get('key', {}).get('remoteJid', '')
+            raw_jid = parsed.get('remote_jid_raw') or payload.get('data', {}).get('key', {}).get('remoteJid', '')
             if '@g.us' in raw_jid:
                 logger.info(f"Ignoring group message from {raw_jid}")
                 return {"success": True, "ignored": "group_message"}

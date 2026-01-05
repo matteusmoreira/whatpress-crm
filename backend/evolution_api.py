@@ -56,9 +56,12 @@ class EvolutionAPI:
         
         if webhook_url:
             data['webhook'] = {
+                'enabled': True,
                 'url': webhook_url,
                 'byEvents': False,
+                'webhookByEvents': False,
                 'base64': True,
+                'webhookBase64': True,
                 'headers': {},
                 'events': [
                     'MESSAGES_UPSERT',
@@ -330,16 +333,29 @@ class EvolutionAPI:
     
     def parse_webhook_message(self, payload: dict) -> dict:
         """Parse incoming webhook message"""
-        event = payload.get('event')
-        instance = payload.get('instance')
-        data = payload.get('data', {})
+        raw_event = payload.get('event')
+        event = str(raw_event or '').strip()
+        normalized_event = event.lower().replace('_', '.')
+
+        instance = payload.get('instance') or payload.get('instanceName') or payload.get('instance_name')
+
+        data = payload.get('data') or {}
+        if isinstance(data, dict) and isinstance(data.get('data'), dict) and len(data.keys()) == 1:
+            data = data.get('data') or {}
         
-        if event == 'messages.upsert':
-            messages = data.get('messages', [])
+        if normalized_event == 'messages.upsert':
+            messages = []
+            if isinstance(data, dict) and isinstance(data.get('messages'), list):
+                messages = data.get('messages') or []
+            elif isinstance(data, dict) and isinstance(data.get('message'), dict):
+                messages = [data.get('message')]
+            elif isinstance(data, dict) and ('key' in data or 'message' in data):
+                messages = [data]
+
             if messages:
-                msg = messages[0]
-                key = msg.get('key', {})
-                message_content = msg.get('message', {})
+                msg = messages[0] if isinstance(messages[0], dict) else {}
+                key = msg.get('key') or {}
+                message_content = msg.get('message') or {}
                 
                 # Extract text content
                 text = None
@@ -366,12 +382,27 @@ class EvolutionAPI:
                     text = message_content['documentMessage'].get('fileName', 'document')
                     media_url = message_content['documentMessage'].get('url')
                 
+                remote_jid_raw = ''
+                if isinstance(key, dict):
+                    remote_jid_raw = key.get('remoteJid') or key.get('remote_jid') or ''
+                if not remote_jid_raw and isinstance(msg, dict):
+                    remote_jid_raw = msg.get('remoteJid') or msg.get('remote_jid') or ''
+
+                remote_id = remote_jid_raw
+                if isinstance(remote_id, str):
+                    if '@' in remote_id:
+                        remote_id = remote_id.split('@')[0]
+                    remote_id = remote_id.strip()
+                else:
+                    remote_id = ''
+
                 return {
                     'event': 'message',
                     'instance': instance,
-                    'message_id': key.get('id'),
-                    'from_me': key.get('fromMe', False),
-                    'remote_jid': key.get('remoteJid', '').replace('@s.whatsapp.net', ''),
+                    'message_id': key.get('id') if isinstance(key, dict) else None,
+                    'from_me': key.get('fromMe', False) if isinstance(key, dict) else False,
+                    'remote_jid': remote_id,
+                    'remote_jid_raw': remote_jid_raw,
                     'content': text,
                     'type': msg_type,
                     'media_url': media_url,
@@ -379,7 +410,7 @@ class EvolutionAPI:
                     'push_name': msg.get('pushName')
                 }
         
-        elif event == 'connection.update':
+        elif normalized_event == 'connection.update':
             # Evolution API v2 pode retornar o estado em diferentes formatos
             state = data.get('state', '')
             status_reason = data.get('statusReason')
@@ -399,25 +430,28 @@ class EvolutionAPI:
                 'raw_data': data
             }
         
-        elif event == 'qrcode.updated':
+        elif normalized_event == 'qrcode.updated':
             return {
                 'event': 'qrcode',
                 'instance': instance,
                 'qrcode': data.get('qrcode', {}).get('base64')
             }
         
-        elif event == 'presence.update':
+        elif normalized_event == 'presence.update':
             # Handle typing indicator
             presence_data = data.get('presences', [{}])[0] if data.get('presences') else data
+            presence_id = presence_data.get('id', '')
+            if isinstance(presence_id, str) and '@' in presence_id:
+                presence_id = presence_id.split('@')[0]
             return {
                 'event': 'presence',
                 'instance': instance,
-                'remote_jid': presence_data.get('id', '').replace('@s.whatsapp.net', ''),
+                'remote_jid': presence_id,
                 'presence': presence_data.get('presence'),  # 'composing', 'paused', 'available', 'unavailable'
                 'participant': presence_data.get('participant')
             }
         
-        return {'event': event, 'instance': instance, 'data': data}
+        return {'event': normalized_event or event, 'instance': instance, 'data': data}
 
 
 # Global instance

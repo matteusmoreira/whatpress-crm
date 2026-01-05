@@ -109,6 +109,33 @@ const Inbox = () => {
     loadLabels();
   }, [tenantId, fetchConversations, fetchConnections, loadAgents, loadLabels]);
 
+  // Fallback: polling para atualizar conversas/mensagens quando realtime falhar
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const pollConversations = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchConversations(tenantId, {}, { silent: true });
+    };
+
+    const pollMessages = () => {
+      if (!selectedConversation?.id) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      useAppStore.getState().fetchMessages(selectedConversation.id, { silent: true });
+    };
+
+    pollConversations();
+    pollMessages();
+
+    const conversationsInterval = setInterval(pollConversations, 10000);
+    const messagesInterval = setInterval(pollMessages, 4000);
+
+    return () => {
+      clearInterval(conversationsInterval);
+      clearInterval(messagesInterval);
+    };
+  }, [tenantId, selectedConversation?.id, fetchConversations]);
+
   // Auto-scroll to bottom
   useEffect(() => {
     if (messagesEndRef.current) {
