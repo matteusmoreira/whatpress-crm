@@ -91,7 +91,7 @@ export const useAppStore = create((set, get) => ({
     // If connected, update the connection status
     if (result.success && !result.qrcode) {
       set(state => ({
-        connections: state.connections.map(c => 
+        connections: state.connections.map(c =>
           c.id === id ? { ...c, status: 'connected' } : c
         )
       }));
@@ -112,6 +112,17 @@ export const useAppStore = create((set, get) => ({
     set(state => ({
       connections: state.connections.filter(c => c.id !== id)
     }));
+  },
+
+  syncConnection: async (id) => {
+    const result = await ConnectionsAPI.syncStatus(id);
+    // Atualizar o status no store
+    set(state => ({
+      connections: state.connections.map(c =>
+        c.id === id ? { ...c, status: result.status, phoneNumber: result.phoneNumber || c.phoneNumber } : c
+      )
+    }));
+    return result;
   },
 
   // Conversations Actions
@@ -135,7 +146,7 @@ export const useAppStore = create((set, get) => ({
         set(state => ({
           messages,
           messagesLoading: false,
-          conversations: state.conversations.map(c => 
+          conversations: state.conversations.map(c =>
             c.id === conversation.id ? { ...c, unreadCount: 0 } : c
           )
         }));
@@ -156,8 +167,8 @@ export const useAppStore = create((set, get) => ({
     const updated = await ConversationsAPI.updateStatus(id, status);
     set(state => ({
       conversations: state.conversations.map(c => c.id === id ? { ...c, status } : c),
-      selectedConversation: state.selectedConversation?.id === id 
-        ? { ...state.selectedConversation, status } 
+      selectedConversation: state.selectedConversation?.id === id
+        ? { ...state.selectedConversation, status }
         : state.selectedConversation
     }));
   },
@@ -167,8 +178,8 @@ export const useAppStore = create((set, get) => ({
     const newMessage = await MessagesAPI.send(conversationId, content);
     set(state => ({
       messages: [...state.messages, newMessage],
-      conversations: state.conversations.map(c => 
-        c.id === conversationId 
+      conversations: state.conversations.map(c =>
+        c.id === conversationId
           ? { ...c, lastMessageAt: newMessage.timestamp, lastMessagePreview: content.substring(0, 50) }
           : c
       )

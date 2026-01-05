@@ -927,7 +927,7 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
             
             if state.get('instance', {}).get('state') == 'open':
                 # Already connected
-                webhook_url = f"https://easy-wapp.preview.emergentagent.com/api/webhooks/evolution/{connection['instance_name']}"
+                webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
                 supabase.table('connections').update({
                     'status': 'connected',
                     'webhook_url': webhook_url
@@ -946,7 +946,7 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
         except Exception as e:
             # Instance might not exist, try to create it
             try:
-                webhook_url = f"https://easy-wapp.preview.emergentagent.com/api/webhooks/evolution/{connection['instance_name']}"
+                webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
                 create_result = await evolution_api.create_instance(
                     connection['instance_name'],
                     webhook_url
@@ -993,6 +993,64 @@ async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.post("/connections/{connection_id}/sync")
+async def sync_connection_status(connection_id: str, payload: dict = Depends(verify_token)):
+    """Sincronizar status da conexão com a Evolution API"""
+    conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
+    if not conn.data:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada")
+    
+    connection = conn.data[0]
+    
+    if connection['provider'] != 'evolution':
+        raise HTTPException(status_code=400, detail="Sincronização disponível apenas para Evolution API")
+    
+    try:
+        # Verificar estado atual na Evolution API
+        state = await evolution_api.get_connection_state(connection['instance_name'])
+        logger.info(f"Evolution API state for {connection['instance_name']}: {state}")
+        
+        # Determinar se está conectado
+        instance_state = state.get('instance', {}).get('state', '')
+        is_connected = instance_state.lower() in ['open', 'connected']
+        
+        new_status = 'connected' if is_connected else 'disconnected'
+        
+        # Atualizar banco de dados
+        update_data = {'status': new_status}
+        if is_connected:
+            update_data['webhook_url'] = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
+            
+            # Tentar obter o número do telefone se conectado
+            try:
+                instances = await evolution_api.fetch_instances()
+                for inst in instances:
+                    if inst.get('name') == connection['instance_name']:
+                        owner_jid = inst.get('owner', inst.get('ownerJid', ''))
+                        if owner_jid:
+                            # Extrair número do JID (formato: 5521999998888@s.whatsapp.net)
+                            phone_number = owner_jid.split('@')[0] if '@' in owner_jid else owner_jid
+                            if phone_number:
+                                update_data['phone_number'] = phone_number
+                        break
+            except Exception as e:
+                logger.warning(f"Could not get phone number: {e}")
+        
+        result = supabase.table('connections').update(update_data).eq('id', connection_id).execute()
+        
+        c = result.data[0] if result.data else connection
+        return {
+            'id': c['id'],
+            'status': new_status,
+            'instanceState': instance_state,
+            'phoneNumber': c.get('phone_number'),
+            'message': f"Status atualizado para: {new_status}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error syncing connection status: {e}")
+        raise HTTPException(status_code=400, detail=f"Erro ao sincronizar: {str(e)}")
+
 @api_router.patch("/connections/{connection_id}/status")
 async def update_connection_status(connection_id: str, status_update: ConnectionStatusUpdate, payload: dict = Depends(verify_token)):
     """Update connection status"""
@@ -1020,16 +1078,31 @@ async def update_connection_status(connection_id: str, status_update: Connection
 
 @api_router.delete("/connections/{connection_id}")
 async def delete_connection(connection_id: str, payload: dict = Depends(verify_token)):
-    """Delete a connection"""
-    conn = supabase.table('connections').select('tenant_id').eq('id', connection_id).execute()
+    """Delete a connection and its instance from Evolution API"""
+    conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     
-    if conn.data:
-        tenant_id = conn.data[0]['tenant_id']
-        tenant = supabase.table('tenants').select('connections_count').eq('id', tenant_id).execute()
-        if tenant.data and tenant.data[0]['connections_count'] > 0:
-            new_count = tenant.data[0]['connections_count'] - 1
-            supabase.table('tenants').update({'connections_count': new_count}).eq('id', tenant_id).execute()
+    if not conn.data:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada")
     
+    connection = conn.data[0]
+    tenant_id = connection['tenant_id']
+    
+    # Deletar instância na Evolution API se for provider evolution
+    if connection['provider'] == 'evolution' and connection.get('instance_name'):
+        try:
+            await evolution_api.delete_instance(connection['instance_name'])
+            logger.info(f"Evolution instance {connection['instance_name']} deleted")
+        except Exception as e:
+            logger.warning(f"Could not delete Evolution instance: {e}")
+            # Continua mesmo se falhar a exclusão na Evolution API
+    
+    # Atualizar contador do tenant
+    tenant = supabase.table('tenants').select('connections_count').eq('id', tenant_id).execute()
+    if tenant.data and tenant.data[0]['connections_count'] > 0:
+        new_count = tenant.data[0]['connections_count'] - 1
+        supabase.table('tenants').update({'connections_count': new_count}).eq('id', tenant_id).execute()
+    
+    # Deletar conexão do banco
     supabase.table('connections').delete().eq('id', connection_id).execute()
     return {"success": True}
 
@@ -1313,6 +1386,12 @@ async def evolution_webhook(instance_name: str, payload: dict):
         parsed = evolution_api.parse_webhook_message(payload)
         
         if parsed['event'] == 'message' and not parsed['from_me']:
+            # Ignorar mensagens de grupos (grupos têm @g.us no JID)
+            raw_jid = payload.get('data', {}).get('key', {}).get('remoteJid', '')
+            if '@g.us' in raw_jid:
+                logger.info(f"Ignoring group message from {raw_jid}")
+                return {"success": True, "ignored": "group_message"}
+            
             # Find connection by instance name
             conn = supabase.table('connections').select('*, tenants(*)').eq('instance_name', instance_name).execute()
             
@@ -1367,8 +1446,21 @@ async def evolution_webhook(instance_name: str, payload: dict):
         
         elif parsed['event'] == 'connection':
             # Update connection status
-            status = 'connected' if parsed['state'] == 'open' else 'disconnected'
-            supabase.table('connections').update({'status': status}).eq('instance_name', instance_name).execute()
+            logger.info(f"Processing connection event for {instance_name}: state={parsed.get('state')}, raw_data={parsed.get('raw_data')}")
+            
+            # Detectar estados de conexão válidos
+            connection_state = parsed.get('state', '').lower()
+            is_connected = connection_state in ['open', 'connected']
+            
+            status = 'connected' if is_connected else 'disconnected'
+            
+            # Atualizar também o número do telefone se disponível
+            update_data = {'status': status}
+            if is_connected:
+                update_data['webhook_url'] = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{instance_name}"
+            
+            result = supabase.table('connections').update(update_data).eq('instance_name', instance_name).execute()
+            logger.info(f"Connection status updated for {instance_name}: {status}, result: {result.data}")
         
         elif parsed['event'] == 'presence':
             # Handle typing indicator - broadcast via Supabase Realtime
@@ -2698,7 +2790,7 @@ async def list_evolution_instances(tenant_id: str = None, payload: dict = Depend
 async def create_evolution_instance(name: str, payload: dict = Depends(verify_token)):
     """Create new Evolution API instance"""
     try:
-        webhook_url = f"https://easy-wapp.preview.emergentagent.com/api/webhooks/evolution/{name}"
+        webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{name}"
         result = await evolution_api.create_instance(name, webhook_url)
         return result
     except Exception as e:

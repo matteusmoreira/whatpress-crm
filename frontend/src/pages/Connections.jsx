@@ -22,8 +22,9 @@ import { EvolutionAPI, ConnectionsAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
 
-const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR }) => {
+const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSync }) => {
   const [testing, setTesting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   const handleTest = async () => {
@@ -54,6 +55,19 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR }) =>
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     toast.success('Copiado!');
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const result = await onSync(connection.id);
+      toast.success(result.message || 'Status sincronizado!');
+      // Recarregar a lista de conexões é feito pelo componente pai
+    } catch (error) {
+      toast.error('Erro ao sincronizar', { description: error.response?.data?.detail || error.message });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const getProviderInfo = (provider) => {
@@ -190,6 +204,17 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR }) =>
               </>
             )}
           </GlassButton>
+        )}
+        {/* Botão de Sincronização para Evolution API */}
+        {connection.provider === 'evolution' && (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="p-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors disabled:opacity-50"
+            title="Sincronizar status com Evolution API"
+          >
+            <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+          </button>
         )}
         <button
           onClick={() => onDelete(connection.id)}
@@ -345,7 +370,8 @@ const Connections = () => {
     createConnection,
     testConnection,
     updateConnectionStatus,
-    deleteConnection
+    deleteConnection,
+    syncConnection
   } = useAppStore();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -410,8 +436,8 @@ const Connections = () => {
         </GlassButton>
       </div>
 
-      {/* Evolution Instances Overview */}
-      <EvolutionInstances tenantId={tenantId} />
+      {/* Note: EvolutionInstances foi removido para melhorar performance */}
+      {/* Os dados das conexões já mostram todas as informações necessárias */}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -481,6 +507,7 @@ const Connections = () => {
               onToggle={updateConnectionStatus}
               onDelete={handleDeleteConnection}
               onShowQR={handleShowQR}
+              onSync={syncConnection}
             />
           ))}
         </div>

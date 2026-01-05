@@ -47,7 +47,7 @@ class EvolutionAPI:
             'integration': 'WHATSAPP-BAILEYS',
             'qrcode': True,
             'rejectCall': False,
-            'groupsIgnore': False,
+            'groupsIgnore': True,  # Ignorar mensagens de grupos
             'alwaysOnline': False,
             'readMessages': False,
             'readStatus': False,
@@ -380,11 +380,23 @@ class EvolutionAPI:
                 }
         
         elif event == 'connection.update':
+            # Evolution API v2 pode retornar o estado em diferentes formatos
+            state = data.get('state', '')
+            status_reason = data.get('statusReason')
+            
+            # Normalizar o estado - pode ser 'open', 'close', 'connecting', etc.
+            # Também pode vir como 'open' em maiúsculo ou minúsculo
+            normalized_state = state.lower() if isinstance(state, str) else ''
+            
+            # Log para debug
+            logger.info(f"Connection update received: state={state}, statusReason={status_reason}, data={data}")
+            
             return {
                 'event': 'connection',
                 'instance': instance,
-                'state': data.get('state'),
-                'status_reason': data.get('statusReason')
+                'state': normalized_state,
+                'status_reason': status_reason,
+                'raw_data': data
             }
         
         elif event == 'qrcode.updated':

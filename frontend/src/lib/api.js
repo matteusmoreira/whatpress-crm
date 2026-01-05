@@ -167,6 +167,11 @@ export const ConnectionsAPI = {
     return response.data;
   },
 
+  async syncStatus(id) {
+    const response = await apiClient.post(`/connections/${id}/sync`);
+    return response.data;
+  },
+
   async getQRCode(id) {
     const response = await apiClient.get(`/connections/${id}/qrcode`);
     return response.data;
