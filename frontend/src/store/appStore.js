@@ -176,6 +176,27 @@ export const useAppStore = create((set, get) => ({
     }));
   },
 
+  deleteConversation: async (conversationId) => {
+    await ConversationsAPI.delete(conversationId);
+    set(state => {
+      const nextSelected = state.selectedConversation?.id === conversationId ? null : state.selectedConversation;
+      return {
+        conversations: (state.conversations || []).filter(c => c.id !== conversationId),
+        selectedConversation: nextSelected,
+        messages: nextSelected ? state.messages : [],
+        messagesLoading: nextSelected ? state.messagesLoading : false
+      };
+    });
+  },
+
+  clearConversationMessages: async (conversationId) => {
+    await ConversationsAPI.clearMessages(conversationId);
+    set(state => ({
+      conversations: (state.conversations || []).map(c => c.id === conversationId ? { ...c, lastMessageAt: null, lastMessagePreview: '', unreadCount: 0 } : c),
+      messages: state.selectedConversation?.id === conversationId ? [] : state.messages
+    }));
+  },
+
   // Messages Actions
   fetchMessages: async (conversationId, options = {}) => {
     const silent = options?.silent;
@@ -221,6 +242,31 @@ export const useAppStore = create((set, get) => ({
       )
     }));
     return newMessage;
+  },
+
+  deleteMessage: async (messageId) => {
+    const result = await MessagesAPI.delete(messageId);
+    const conversationId = result?.conversationId;
+    set(state => {
+      const nextMessages = (state.messages || []).filter(m => m.id !== messageId);
+      if (!conversationId || state.selectedConversation?.id !== conversationId) {
+        return { messages: nextMessages };
+      }
+
+      const last = nextMessages[nextMessages.length - 1];
+      const lastPreview = last?.content ? String(last.content).slice(0, 50) : '';
+      const lastAt = last?.timestamp || null;
+
+      return {
+        messages: nextMessages,
+        conversations: (state.conversations || []).map(c =>
+          c.id === conversationId
+            ? { ...c, lastMessageAt: lastAt, lastMessagePreview: lastPreview }
+            : c
+        )
+      };
+    });
+    return result;
   },
 
   // UI Actions

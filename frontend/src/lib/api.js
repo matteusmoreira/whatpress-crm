@@ -232,6 +232,16 @@ export const ConversationsAPI = {
     return response.data;
   },
 
+  async clearMessages(conversationId) {
+    const response = await apiClient.delete(`/conversations/${conversationId}/messages`);
+    return response.data;
+  },
+
+  async delete(conversationId) {
+    const response = await apiClient.delete(`/conversations/${conversationId}`);
+    return response.data;
+  },
+
   async addLabel(conversationId, labelId) {
     const response = await apiClient.post(`/conversations/${conversationId}/labels/${labelId}`);
     return response.data;
@@ -256,6 +266,11 @@ export const MessagesAPI = {
       content,
       type
     });
+    return response.data;
+  },
+
+  async delete(messageId) {
+    const response = await apiClient.delete(`/messages/${messageId}`);
     return response.data;
   },
 

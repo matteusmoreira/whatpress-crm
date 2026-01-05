@@ -23,7 +23,8 @@ import {
   Video,
   Wifi,
   WifiOff,
-  Reply
+  Reply,
+  Trash2
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
@@ -95,7 +96,10 @@ const Inbox = () => {
     setSelectedConversation,
     setConversationFilter,
     sendMessage,
-    updateConversationStatus
+    updateConversationStatus,
+    deleteConversation,
+    clearConversationMessages,
+    deleteMessage
   } = useAppStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,6 +110,7 @@ const Inbox = () => {
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showLabelsMenu, setShowLabelsMenu] = useState(false);
   const [showAssignMenu, setShowAssignMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showLabelsManager, setShowLabelsManager] = useState(false);
   const [agents, setAgents] = useState([]);
   const [labels, setLabels] = useState([]);
@@ -198,6 +203,7 @@ const Inbox = () => {
         setShowFileUpload(false);
         setShowLabelsMenu(false);
         setShowAssignMenu(false);
+        setShowMoreMenu(false);
       }
       if (e.key === '/' && e.ctrlKey) {
         e.preventDefault();
@@ -301,6 +307,44 @@ const Inbox = () => {
       setShowLabelsMenu(false);
     } catch (error) {
       toast.error('Erro ao adicionar label');
+    }
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!selectedConversation?.id) return;
+    const ok = window.confirm('Deseja excluir esta conversa? Isso também remove as mensagens.');
+    if (!ok) return;
+    try {
+      await deleteConversation(selectedConversation.id);
+      toast.success('Conversa excluída');
+      setShowMoreMenu(false);
+    } catch (error) {
+      toast.error('Erro ao excluir conversa');
+    }
+  };
+
+  const handleClearMessages = async () => {
+    if (!selectedConversation?.id) return;
+    const ok = window.confirm('Deseja excluir todas as mensagens desta conversa?');
+    if (!ok) return;
+    try {
+      await clearConversationMessages(selectedConversation.id);
+      toast.success('Mensagens excluídas');
+      setShowMoreMenu(false);
+    } catch (error) {
+      toast.error('Erro ao excluir mensagens');
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!messageId) return;
+    const ok = window.confirm('Deseja excluir esta mensagem?');
+    if (!ok) return;
+    try {
+      await deleteMessage(messageId);
+      toast.success('Mensagem excluída');
+    } catch (error) {
+      toast.error('Erro ao excluir mensagem');
     }
   };
 
@@ -640,9 +684,39 @@ const Inbox = () => {
                   <button className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
                     <Phone className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(!showMoreMenu);
+                        setShowAssignMenu(false);
+                        setShowLabelsMenu(false);
+                      }}
+                      className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                      title="Mais opções"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                    {showMoreMenu && (
+                      <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
+                        <div className="p-2">
+                          <button
+                            onClick={handleClearMessages}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Excluir mensagens
+                          </button>
+                          <button
+                            onClick={handleDeleteConversation}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-400 text-sm mt-1"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Excluir conversa
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -679,15 +753,23 @@ const Inbox = () => {
                               msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
                             )}
                           >
-                      {/* Reply button - appears on hover (left side for outbound) */}
                       {msg.direction === 'outbound' && (
-                        <button
-                          onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
-                          className="self-center mr-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                          title="Responder"
-                        >
-                          <Reply className="w-4 h-4" />
-                        </button>
+                        <div className="self-center mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                            className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                            title="Responder"
+                          >
+                            <Reply className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
 
                       <div
@@ -719,15 +801,23 @@ const Inbox = () => {
                         </div>
                       </div>
 
-                      {/* Reply button - appears on hover (right side for inbound) */}
                       {msg.direction === 'inbound' && (
-                        <button
-                          onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
-                          className="self-center ml-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                          title="Responder"
-                        >
-                          <Reply className="w-4 h-4" />
-                        </button>
+                        <div className="self-center ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                            className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                            title="Responder"
+                          >
+                            <Reply className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                           </div>
                         );

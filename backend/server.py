@@ -1302,6 +1302,38 @@ async def remove_label(conversation_id: str, label_id: str, payload: dict = Depe
     await LabelsService.remove_label_from_conversation(conversation_id, label_id)
     return {"success": True}
 
+@api_router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+
+    conv = supabase.table('conversations').select('id, tenant_id').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    if user_tenant_id and conv.data[0].get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    supabase.table('messages').delete().eq('conversation_id', conversation_id).execute()
+    supabase.table('conversations').delete().eq('id', conversation_id).execute()
+    return {"success": True}
+
+@api_router.delete("/conversations/{conversation_id}/messages")
+async def clear_conversation_messages(conversation_id: str, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+
+    conv = supabase.table('conversations').select('id, tenant_id').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    if user_tenant_id and conv.data[0].get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    supabase.table('messages').delete().eq('conversation_id', conversation_id).execute()
+    supabase.table('conversations').update({
+        'last_message_at': None,
+        'last_message_preview': '',
+        'unread_count': 0
+    }).eq('id', conversation_id).execute()
+    return {"success": True}
+
 # ==================== MESSAGES ROUTES ====================
 
 @api_router.get("/messages")
@@ -1447,6 +1479,98 @@ async def list_messages(
         })
     
     return messages
+
+@api_router.delete("/messages/{message_id}")
+async def delete_message(message_id: str, payload: dict = Depends(verify_token)):
+    user_tenant_id = get_user_tenant_id(payload)
+
+    msg = supabase.table('messages').select('id, conversation_id').eq('id', message_id).execute()
+    if not msg.data:
+        raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+    conversation_id = msg.data[0]['conversation_id']
+
+    conv = supabase.table('conversations').select('id, tenant_id').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    if user_tenant_id and conv.data[0].get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    supabase.table('messages').delete().eq('id', message_id).execute()
+
+    def normalize_preview(content: Any, msg_type: str) -> str:
+        if content is None:
+            return ''
+        if isinstance(content, (int, float, bool)):
+            return str(content)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, dict):
+            cur: Any = content
+            for _ in range(10):
+                if not isinstance(cur, dict):
+                    break
+                if isinstance(cur.get('message'), dict):
+                    cur = cur.get('message')
+                    continue
+                ephemeral = cur.get('ephemeralMessage')
+                if isinstance(ephemeral, dict) and isinstance(ephemeral.get('message'), dict):
+                    cur = ephemeral.get('message')
+                    continue
+                view_once = cur.get('viewOnceMessage')
+                if isinstance(view_once, dict) and isinstance(view_once.get('message'), dict):
+                    cur = view_once.get('message')
+                    continue
+                view_once_v2 = cur.get('viewOnceMessageV2')
+                if isinstance(view_once_v2, dict) and isinstance(view_once_v2.get('message'), dict):
+                    cur = view_once_v2.get('message')
+                    continue
+                view_once_v2_ext = cur.get('viewOnceMessageV2Extension')
+                if isinstance(view_once_v2_ext, dict) and isinstance(view_once_v2_ext.get('message'), dict):
+                    cur = view_once_v2_ext.get('message')
+                    continue
+                break
+
+            if isinstance(cur, dict):
+                c = cur.get('conversation')
+                if isinstance(c, str) and c:
+                    return c
+                tm = cur.get('textMessage')
+                if isinstance(tm, dict) and isinstance(tm.get('text'), str) and tm.get('text'):
+                    return tm.get('text')
+                etm = cur.get('extendedTextMessage')
+                if isinstance(etm, dict) and isinstance(etm.get('text'), str) and etm.get('text'):
+                    return etm.get('text')
+                v = cur.get('conversation')
+                if isinstance(v, str) and v:
+                    return v
+
+        if msg_type == 'audio':
+            return '[Áudio]'
+        if msg_type == 'image':
+            return '[Imagem]'
+        if msg_type == 'video':
+            return '[Vídeo]'
+        if msg_type == 'document':
+            return '[Documento]'
+        return '[Mensagem]'
+
+    latest = supabase.table('messages').select('content, timestamp, type').eq('conversation_id', conversation_id).order('timestamp', desc=True).limit(1).execute()
+    if latest.data:
+        lm = latest.data[0]
+        content = normalize_preview(lm.get('content'), lm.get('type') or 'text')
+        preview = (content or '').strip()[:50]
+        supabase.table('conversations').update({
+            'last_message_at': lm.get('timestamp'),
+            'last_message_preview': preview
+        }).eq('id', conversation_id).execute()
+    else:
+        supabase.table('conversations').update({
+            'last_message_at': None,
+            'last_message_preview': '',
+            'unread_count': 0
+        }).eq('id', conversation_id).execute()
+
+    return {"success": True, "conversationId": conversation_id}
 
 @api_router.post("/messages")
 async def send_message(message: MessageCreate, background_tasks: BackgroundTasks, payload: dict = Depends(verify_token)):
