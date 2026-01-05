@@ -180,7 +180,7 @@ class ConnectionCreate(BaseModel):
     tenant_id: str
     provider: str
     instance_name: str
-    phone_number: str
+    phone_number: Optional[str] = ""
 
 class ConnectionStatusUpdate(BaseModel):
     status: str
@@ -884,7 +884,7 @@ async def create_connection(connection: ConnectionCreate, payload: dict = Depend
         'tenant_id': connection.tenant_id,
         'provider': connection.provider,
         'instance_name': connection.instance_name,
-        'phone_number': connection.phone_number,
+        'phone_number': connection.phone_number or '',
         'status': 'disconnected',
         'webhook_url': '',
         'config': {}

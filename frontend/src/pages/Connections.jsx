@@ -544,16 +544,22 @@ const Connections = () => {
                 />
               </div>
 
-              {/* Phone Number */}
+              {/* Phone Number - Opcional para Evolution API */}
               <div>
-                <label className="text-white/80 text-sm font-medium block mb-2">Número WhatsApp</label>
+                <label className="text-white/80 text-sm font-medium block mb-2">
+                  Número WhatsApp <span className="text-white/40">(opcional para Evolution API)</span>
+                </label>
                 <GlassInput
                   type="tel"
                   placeholder="+55 21 99999-8888"
                   value={newConnection.phoneNumber}
                   onChange={(e) => setNewConnection(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                  required
                 />
+                {newConnection.provider === 'evolution' && (
+                  <p className="text-white/40 text-xs mt-1">
+                    O número será associado automaticamente após escanear o QR Code
+                  </p>
+                )}
               </div>
 
               {/* Actions */}
