@@ -36,6 +36,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '../components/ui/glass-toaster';
 import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../components/ui/tooltip';
 import FileUpload from '../components/FileUpload';
 import QuickRepliesPanel from '../components/QuickRepliesPanel';
 import LabelsManager from '../components/LabelsManager';
@@ -425,6 +426,33 @@ const Inbox = () => {
     }
   };
 
+  const getMessageOriginInfo = (msg) => {
+    const rawOrigin = msg.origin || (msg.direction === 'inbound' ? 'customer' : 'agent');
+    const origin = String(rawOrigin || '').toLowerCase();
+    if (origin === 'system') {
+      return {
+        label: 'Sistema',
+        badgeClass: 'bg-purple-500/10 border-purple-400 text-purple-200',
+        dotClass: 'bg-purple-400',
+        tooltip: 'Mensagem automática enviada pelo sistema'
+      };
+    }
+    if (origin === 'customer') {
+      return {
+        label: 'Cliente',
+        badgeClass: 'bg-emerald-500/10 border-emerald-400 text-emerald-200',
+        dotClass: 'bg-emerald-400',
+        tooltip: 'Mensagem enviada pelo cliente'
+      };
+    }
+    return {
+      label: 'Agente',
+      badgeClass: 'bg-sky-500/10 border-sky-400 text-sky-200',
+      dotClass: 'bg-sky-400',
+      tooltip: 'Mensagem enviada por um agente humano'
+    };
+  };
+
   const formatTime = (timestamp) => {
     try {
       return formatDistanceToNow(new Date(timestamp), { addSuffix: true, locale: ptBR });
@@ -601,8 +629,9 @@ const Inbox = () => {
         </div>
       </div>
 
-      {/* Chat Area */}
-      <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-br from-emerald-950/50 to-teal-950/50">
+      <TooltipProvider>
+        {/* Chat Area */}
+        <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-br from-emerald-950/50 to-teal-950/50">
         {selectedConversation ? (
           <>
             {/* Chat Header */}
@@ -798,6 +827,7 @@ const Inbox = () => {
                         const canInlineMedia = Boolean(mediaUrl) && isMediaType;
                         const urls = extractUrls(displayContent);
                         const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
+                        const originInfo = getMessageOriginInfo(msg);
 
                         return (
                           <div
@@ -925,14 +955,39 @@ const Inbox = () => {
                             {renderTextWithLinks(rawContent)}
                           </p>
                         )}
-                        <div className={cn(
-                          'flex items-center justify-end gap-1 mt-1',
-                          msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
-                        )}>
-                          <span className="text-xs">
-                            {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          {msg.direction === 'outbound' && getStatusIcon(msg.status)}
+                        <div
+                          className={cn(
+                            'flex items-center justify-between gap-2 mt-1',
+                            msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
+                          )}
+                        >
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide',
+                                  originInfo.badgeClass
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    'w-1.5 h-1.5 rounded-full',
+                                    originInfo.dotClass
+                                  )}
+                                />
+                                <span>{originInfo.label}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" sideOffset={6}>
+                              {originInfo.tooltip}
+                            </TooltipContent>
+                          </Tooltip>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs">
+                              {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {msg.direction === 'outbound' && getStatusIcon(msg.status)}
+                          </div>
                         </div>
                       </div>
 
@@ -1085,7 +1140,8 @@ const Inbox = () => {
             <p>Selecione uma conversa para começar a conversar</p>
           </div>
         )}
-      </div>
+        </div>
+      </TooltipProvider>
 
       <Dialog open={mediaViewer.open} onOpenChange={(open) => setMediaViewer(prev => ({ ...prev, open }))}>
         <DialogContent className="max-w-4xl bg-black/80 border border-white/10 p-3">

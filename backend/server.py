@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase_client import supabase
 from evolution_api import evolution_api, EvolutionAPI
 from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
@@ -1877,6 +1877,14 @@ async def list_messages(
     
     messages = []
     for m in rows:
+        direction = m.get('direction') or 'inbound'
+        msg_type = (m.get('type') or 'text').lower()
+        if direction == 'inbound':
+            origin = 'customer'
+        elif msg_type == 'system':
+            origin = 'system'
+        else:
+            origin = 'agent'
         messages.append({
             'id': m['id'],
             'conversationId': m['conversation_id'],
@@ -1885,7 +1893,8 @@ async def list_messages(
             'direction': m['direction'],
             'status': m['status'],
             'mediaUrl': m['media_url'],
-            'timestamp': m['timestamp']
+            'timestamp': m['timestamp'],
+            'origin': origin
         })
     
     return messages
@@ -2262,6 +2271,7 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     )
                 
                 # Find or create conversation
+                is_new_conversation = False
                 conv = (
                     supabase.table('conversations')
                     .select('*')
@@ -2300,6 +2310,7 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     }
                     conv_result = supabase.table('conversations').insert(conv_data).execute()
                     conversation = conv_result.data[0]
+                    is_new_conversation = True
                 
                 # Save message
                 msg_data = {
@@ -2318,6 +2329,143 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     supabase.table('tenants').update({
                         'messages_this_month': tenant.data[0]['messages_this_month'] + 1
                     }).eq('id', tenant_id).execute()
+
+                try:
+                    auto_messages_result = supabase.table('auto_messages').select('*').eq('tenant_id', tenant_id).eq('is_active', True).execute()
+                except Exception as e:
+                    logger.error(f"Error loading auto messages for tenant {tenant_id}: {e}")
+                    auto_messages_result = None
+
+                if auto_messages_result and auto_messages_result.data:
+                    incoming_text = (parsed.get('content') or '').strip()
+                    if not is_placeholder_text(incoming_text):
+                        now_utc = datetime.utcnow()
+                        local_offset = timedelta(hours=-3)
+                        local_now = now_utc + local_offset
+                        day_index = (local_now.weekday() + 1) % 7
+
+                        def parse_time_to_minutes(value):
+                            s = str(value or '').strip()
+                            if not s:
+                                return None
+                            if len(s) >= 5 and s[2] == ':':
+                                s = s[:5]
+                            parts = s.split(':')
+                            if len(parts) < 2:
+                                return None
+                            try:
+                                hour = int(parts[0])
+                                minute = int(parts[1])
+                                if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                                    return None
+                                return hour * 60 + minute
+                            except Exception:
+                                return None
+
+                        now_minutes = local_now.hour * 60 + local_now.minute
+                        connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
+                        connection_status = (connection.get('status') if isinstance(connection, dict) else None)
+                        is_evolution = str(connection_provider or '').lower() == 'evolution'
+                        is_connected = str(connection_status or '').lower() in ['connected', 'open']
+
+                        async def send_auto_message(auto_msg, delay_seconds: int):
+                            try:
+                                msg_type_inner = str(auto_msg.get('type') or '').lower()
+                                log_query = supabase.table('auto_message_logs').select('id').eq('auto_message_id', auto_msg['id']).eq('conversation_id', conversation['id'])
+
+                                if msg_type_inner == 'away':
+                                    day_start_local = datetime(local_now.year, local_now.month, local_now.day)
+                                    day_start_utc = day_start_local - local_offset
+                                    day_end_utc = day_start_utc + timedelta(days=1)
+                                    log_query = log_query.gte('sent_at', day_start_utc.isoformat()).lt('sent_at', day_end_utc.isoformat())
+
+                                log_exists = log_query.limit(1).execute()
+                                if log_exists.data:
+                                    return
+
+                                supabase.table('auto_message_logs').insert({
+                                    'auto_message_id': auto_msg['id'],
+                                    'conversation_id': conversation['id']
+                                }).execute()
+
+                                content = (auto_msg.get('message') or '').strip()
+                                if not content:
+                                    return
+
+                                msg_row = supabase.table('messages').insert({
+                                    'conversation_id': conversation['id'],
+                                    'content': content,
+                                    'type': 'system',
+                                    'direction': 'outbound',
+                                    'status': 'sent'
+                                }).execute()
+                                if not msg_row.data:
+                                    return
+                                msg = msg_row.data[0]
+
+                                supabase.table('conversations').update({
+                                    'last_message_at': now_utc.isoformat(),
+                                    'last_message_preview': content[:50]
+                                }).eq('id', conversation['id']).execute()
+
+                                if tenant_id:
+                                    tenant_row = supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
+                                    if tenant_row.data:
+                                        supabase.table('tenants').update({
+                                            'messages_this_month': tenant_row.data[0]['messages_this_month'] + 1
+                                        }).eq('id', tenant_id).execute()
+
+                                if is_evolution and is_connected:
+                                    if delay_seconds and delay_seconds > 0:
+                                        await asyncio.sleep(delay_seconds)
+                                    await send_whatsapp_message(
+                                        connection['instance_name'],
+                                        phone,
+                                        content,
+                                        'text',
+                                        msg['id']
+                                    )
+                            except Exception as e:
+                                logger.error(f"Error sending auto message: {e}")
+
+                        for auto_msg in auto_messages_result.data:
+                            msg_type = str(auto_msg.get('type') or '').lower()
+                            delay_seconds = auto_msg.get('delay_seconds') or 0
+                            try:
+                                delay_seconds = int(delay_seconds)
+                            except Exception:
+                                delay_seconds = 0
+                            if delay_seconds < 0:
+                                delay_seconds = 0
+
+                            if msg_type == 'welcome':
+                                if not is_new_conversation:
+                                    continue
+                            elif msg_type == 'away':
+                                days = auto_msg.get('schedule_days') or []
+                                if days and day_index not in days:
+                                    continue
+                                start_min = parse_time_to_minutes(auto_msg.get('schedule_start'))
+                                end_min = parse_time_to_minutes(auto_msg.get('schedule_end'))
+                                active = False
+                                if start_min is None or end_min is None:
+                                    active = True
+                                elif start_min <= end_min:
+                                    active = start_min <= now_minutes <= end_min
+                                else:
+                                    active = now_minutes >= start_min or now_minutes <= end_min
+                                if not active:
+                                    continue
+                            elif msg_type == 'keyword':
+                                keyword = (auto_msg.get('trigger_keyword') or '').strip()
+                                if not keyword:
+                                    continue
+                                if keyword.lower() not in incoming_text.lower():
+                                    continue
+                            else:
+                                continue
+
+                            asyncio.create_task(send_auto_message(auto_msg, delay_seconds))
         
         elif parsed['event'] == 'connection':
             # Update connection status
@@ -3553,14 +3701,24 @@ async def export_messages_csv(
         writer = csv.writer(output)
         
         # Header
-        writer.writerow(['Data/Hora', 'Direção', 'Tipo', 'Conteúdo', 'Status'])
+        writer.writerow(['Data/Hora', 'Direção', 'Tipo', 'Origem', 'Conteúdo', 'Status'])
         
         # Data
         for msg in result.data or []:
+            direction = msg['direction']
+            msg_type = (msg.get('type') or 'text').lower()
+            if direction == 'inbound':
+                origin = 'Cliente'
+            elif msg_type == 'system':
+                origin = 'Sistema'
+            else:
+                origin = 'Agente'
+
             writer.writerow([
                 msg['timestamp'],
-                'Enviada' if msg['direction'] == 'outbound' else 'Recebida',
+                'Enviada' if direction == 'outbound' else 'Recebida',
                 msg['type'],
+                origin,
                 msg['content'][:500] if msg['content'] else '',
                 msg['status']
             ])
