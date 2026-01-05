@@ -14,7 +14,8 @@ import {
   User,
   Bot,
   FileText,
-  BookOpen
+  BookOpen,
+  CreditCard
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -41,8 +42,10 @@ const Sidebar = () => {
 
   const navItems = isSuperAdmin
     ? [
-      { to: '/superadmin', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/superadmin', icon: LayoutDashboard, label: 'Dashboard', end: true },
       { to: '/superadmin/tenants', icon: Building2, label: 'Tenants' },
+      { to: '/superadmin/plans', icon: CreditCard, label: 'Planos' },
+      { to: '/superadmin/users', icon: Users, label: 'Usuários' },
     ]
     : [
       { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -153,6 +156,7 @@ const Sidebar = () => {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-4 py-3 rounded-xl',

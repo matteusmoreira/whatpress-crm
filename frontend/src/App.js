@@ -5,6 +5,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 // Pages
 import SignIn from "./pages/SignIn";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import TenantsPage from "./pages/TenantsPage";
+import PlansPage from "./pages/PlansPage";
+import UsersPage from "./pages/UsersPage";
 import Dashboard from "./pages/Dashboard";
 import Inbox from "./pages/Inbox";
 import Automations from "./pages/Automations";
@@ -80,7 +83,9 @@ function App() {
                 }
               >
                 <Route index element={<SuperAdminDashboard />} />
-                <Route path="tenants" element={<SuperAdminDashboard />} />
+                <Route path="tenants" element={<TenantsPage />} />
+                <Route path="plans" element={<PlansPage />} />
+                <Route path="users" element={<UsersPage />} />
               </Route>
 
               {/* App Routes (Admin/Agent) */}

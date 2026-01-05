@@ -61,6 +61,11 @@ export const TenantsAPI = {
     return response.data;
   },
 
+  async getById(id) {
+    const response = await apiClient.get(`/tenants/${id}`);
+    return response.data;
+  },
+
   async getStats() {
     const response = await apiClient.get('/tenants/stats');
     return response.data;
@@ -78,6 +83,62 @@ export const TenantsAPI = {
 
   async delete(id) {
     const response = await apiClient.delete(`/tenants/${id}`);
+    return response.data;
+  }
+};
+
+// Plans API (SuperAdmin)
+export const PlansAPI = {
+  async list() {
+    const response = await apiClient.get('/plans');
+    return response.data;
+  },
+
+  async getById(id) {
+    const response = await apiClient.get(`/plans/${id}`);
+    return response.data;
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/plans', data);
+    return response.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/plans/${id}`, data);
+    return response.data;
+  },
+
+  async delete(id) {
+    const response = await apiClient.delete(`/plans/${id}`);
+    return response.data;
+  }
+};
+
+// Users API (SuperAdmin)
+export const UsersAPI = {
+  async list(filters = {}) {
+    const response = await apiClient.get('/users', { params: filters });
+    return response.data;
+  },
+
+  async getById(id) {
+    const response = await apiClient.get(`/users/${id}`);
+    return response.data;
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/users', data);
+    return response.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/users/${id}`, data);
+    return response.data;
+  },
+
+  async delete(id) {
+    const response = await apiClient.delete(`/users/${id}`);
     return response.data;
   }
 };

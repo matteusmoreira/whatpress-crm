@@ -127,11 +127,54 @@ logger = logging.getLogger(__name__)
 class TenantCreate(BaseModel):
     name: str
     slug: str
+    plan_id: Optional[str] = None
 
 class TenantUpdate(BaseModel):
     name: Optional[str] = None
+    slug: Optional[str] = None
     status: Optional[str] = None
     plan: Optional[str] = None
+    plan_id: Optional[str] = None
+
+# ==================== PLANS MODELS ====================
+
+class PlanCreate(BaseModel):
+    name: str
+    slug: str
+    price: float = 0
+    max_instances: int = 1
+    max_messages_month: int = 1000
+    max_users: int = 1
+    features: Optional[dict] = {}
+    is_active: bool = True
+
+class PlanUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    price: Optional[float] = None
+    max_instances: Optional[int] = None
+    max_messages_month: Optional[int] = None
+    max_users: Optional[int] = None
+    features: Optional[dict] = None
+    is_active: Optional[bool] = None
+
+# ==================== USERS MODELS (SuperAdmin) ====================
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: str = "agent"  # superadmin, admin, agent
+    tenant_id: Optional[str] = None
+    avatar: Optional[str] = None
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    password: Optional[str] = None
+    name: Optional[str] = None
+    role: Optional[str] = None
+    tenant_id: Optional[str] = None
+    avatar: Optional[str] = None
 
 class ConnectionCreate(BaseModel):
     tenant_id: str
@@ -419,6 +462,14 @@ async def create_tenant(tenant: TenantCreate, payload: dict = Depends(verify_tok
         'connections_count': 0
     }
     
+    # Add plan_id if provided
+    if tenant.plan_id:
+        data['plan_id'] = tenant.plan_id
+        # Get plan slug for the legacy 'plan' field
+        plan = supabase.table('plans').select('slug').eq('id', tenant.plan_id).execute()
+        if plan.data:
+            data['plan'] = plan.data[0]['slug']
+    
     result = supabase.table('tenants').insert(data).execute()
     
     if not result.data:
@@ -431,6 +482,33 @@ async def create_tenant(tenant: TenantCreate, payload: dict = Depends(verify_tok
         'slug': t['slug'],
         'status': t['status'],
         'plan': t['plan'],
+        'planId': t.get('plan_id'),
+        'messagesThisMonth': t['messages_this_month'],
+        'connectionsCount': t['connections_count'],
+        'createdAt': t['created_at'],
+        'updatedAt': t['updated_at']
+    }
+
+@api_router.get("/tenants/{tenant_id}")
+async def get_tenant(tenant_id: str, payload: dict = Depends(verify_token)):
+    """Get a single tenant by ID"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    result = supabase.table('tenants').select('*, plans(*)').eq('id', tenant_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Tenant não encontrado")
+    
+    t = result.data[0]
+    return {
+        'id': t['id'],
+        'name': t['name'],
+        'slug': t['slug'],
+        'status': t['status'],
+        'plan': t['plan'],
+        'planId': t.get('plan_id'),
+        'planData': t.get('plans'),
         'messagesThisMonth': t['messages_this_month'],
         'connectionsCount': t['connections_count'],
         'createdAt': t['created_at'],
@@ -446,12 +524,30 @@ async def update_tenant(tenant_id: str, tenant: TenantUpdate, payload: dict = De
     data = {k: v for k, v in tenant.dict().items() if v is not None}
     data['updated_at'] = datetime.utcnow().isoformat()
     
+    # If plan_id is provided, also update the legacy 'plan' field
+    if 'plan_id' in data and data['plan_id']:
+        plan = supabase.table('plans').select('slug').eq('id', data['plan_id']).execute()
+        if plan.data:
+            data['plan'] = plan.data[0]['slug']
+    
     result = supabase.table('tenants').update(data).eq('id', tenant_id).execute()
     
     if not result.data:
         raise HTTPException(status_code=404, detail="Tenant não encontrado")
     
-    return result.data[0]
+    t = result.data[0]
+    return {
+        'id': t['id'],
+        'name': t['name'],
+        'slug': t['slug'],
+        'status': t['status'],
+        'plan': t['plan'],
+        'planId': t.get('plan_id'),
+        'messagesThisMonth': t['messages_this_month'],
+        'connectionsCount': t['connections_count'],
+        'createdAt': t['created_at'],
+        'updatedAt': t['updated_at']
+    }
 
 @api_router.delete("/tenants/{tenant_id}")
 async def delete_tenant(tenant_id: str, payload: dict = Depends(verify_token)):
@@ -460,6 +556,302 @@ async def delete_tenant(tenant_id: str, payload: dict = Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Acesso negado")
     
     supabase.table('tenants').delete().eq('id', tenant_id).execute()
+    return {"success": True}
+
+# ==================== PLANS ROUTES (SuperAdmin) ====================
+
+@api_router.get("/plans")
+async def list_plans(payload: dict = Depends(verify_token)):
+    """List all plans"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    result = supabase.table('plans').select('*').order('price', desc=False).execute()
+    
+    plans = []
+    for p in result.data:
+        plans.append({
+            'id': p['id'],
+            'name': p['name'],
+            'slug': p['slug'],
+            'price': float(p['price']) if p['price'] else 0,
+            'maxInstances': p['max_instances'],
+            'maxMessagesMonth': p['max_messages_month'],
+            'maxUsers': p['max_users'],
+            'features': p['features'],
+            'isActive': p['is_active'],
+            'createdAt': p['created_at']
+        })
+    
+    return plans
+
+@api_router.get("/plans/{plan_id}")
+async def get_plan(plan_id: str, payload: dict = Depends(verify_token)):
+    """Get a single plan by ID"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    result = supabase.table('plans').select('*').eq('id', plan_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    
+    p = result.data[0]
+    return {
+        'id': p['id'],
+        'name': p['name'],
+        'slug': p['slug'],
+        'price': float(p['price']) if p['price'] else 0,
+        'maxInstances': p['max_instances'],
+        'maxMessagesMonth': p['max_messages_month'],
+        'maxUsers': p['max_users'],
+        'features': p['features'],
+        'isActive': p['is_active'],
+        'createdAt': p['created_at']
+    }
+
+@api_router.post("/plans")
+async def create_plan(plan: PlanCreate, payload: dict = Depends(verify_token)):
+    """Create a new plan"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    data = {
+        'name': plan.name,
+        'slug': plan.slug,
+        'price': plan.price,
+        'max_instances': plan.max_instances,
+        'max_messages_month': plan.max_messages_month,
+        'max_users': plan.max_users,
+        'features': plan.features or {},
+        'is_active': plan.is_active
+    }
+    
+    result = supabase.table('plans').insert(data).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=400, detail="Erro ao criar plano")
+    
+    p = result.data[0]
+    return {
+        'id': p['id'],
+        'name': p['name'],
+        'slug': p['slug'],
+        'price': float(p['price']) if p['price'] else 0,
+        'maxInstances': p['max_instances'],
+        'maxMessagesMonth': p['max_messages_month'],
+        'maxUsers': p['max_users'],
+        'features': p['features'],
+        'isActive': p['is_active'],
+        'createdAt': p['created_at']
+    }
+
+@api_router.put("/plans/{plan_id}")
+async def update_plan(plan_id: str, plan: PlanUpdate, payload: dict = Depends(verify_token)):
+    """Update a plan"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    # Map frontend field names to database field names
+    data = {}
+    if plan.name is not None:
+        data['name'] = plan.name
+    if plan.slug is not None:
+        data['slug'] = plan.slug
+    if plan.price is not None:
+        data['price'] = plan.price
+    if plan.max_instances is not None:
+        data['max_instances'] = plan.max_instances
+    if plan.max_messages_month is not None:
+        data['max_messages_month'] = plan.max_messages_month
+    if plan.max_users is not None:
+        data['max_users'] = plan.max_users
+    if plan.features is not None:
+        data['features'] = plan.features
+    if plan.is_active is not None:
+        data['is_active'] = plan.is_active
+    
+    data['updated_at'] = datetime.utcnow().isoformat()
+    
+    result = supabase.table('plans').update(data).eq('id', plan_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    
+    p = result.data[0]
+    return {
+        'id': p['id'],
+        'name': p['name'],
+        'slug': p['slug'],
+        'price': float(p['price']) if p['price'] else 0,
+        'maxInstances': p['max_instances'],
+        'maxMessagesMonth': p['max_messages_month'],
+        'maxUsers': p['max_users'],
+        'features': p['features'],
+        'isActive': p['is_active'],
+        'createdAt': p['created_at']
+    }
+
+@api_router.delete("/plans/{plan_id}")
+async def delete_plan(plan_id: str, payload: dict = Depends(verify_token)):
+    """Delete a plan"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    # Check if any tenant is using this plan
+    tenants = supabase.table('tenants').select('id').eq('plan_id', plan_id).execute()
+    if tenants.data:
+        raise HTTPException(status_code=400, detail="Não é possível excluir plano em uso por tenants")
+    
+    supabase.table('plans').delete().eq('id', plan_id).execute()
+    return {"success": True}
+
+# ==================== USERS ROUTES (SuperAdmin) ====================
+
+@api_router.get("/users")
+async def list_users(tenant_id: Optional[str] = None, role: Optional[str] = None, payload: dict = Depends(verify_token)):
+    """List all users (SuperAdmin) or users from a tenant"""
+    if payload['role'] != 'superadmin':
+        # Non-superadmin can only list users from their own tenant
+        user_tenant = get_user_tenant_id(payload)
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Acesso negado")
+        tenant_id = user_tenant
+    
+    query = supabase.table('users').select('*, tenants(name, slug)')
+    
+    if tenant_id:
+        query = query.eq('tenant_id', tenant_id)
+    if role:
+        query = query.eq('role', role)
+    
+    result = query.order('created_at', desc=True).execute()
+    
+    users = []
+    for u in result.data:
+        users.append({
+            'id': u['id'],
+            'email': u['email'],
+            'name': u['name'],
+            'role': u['role'],
+            'tenantId': u['tenant_id'],
+            'tenantName': u.get('tenants', {}).get('name') if u.get('tenants') else None,
+            'avatar': u['avatar'],
+            'createdAt': u['created_at']
+        })
+    
+    return users
+
+@api_router.get("/users/{user_id}")
+async def get_user(user_id: str, payload: dict = Depends(verify_token)):
+    """Get a single user by ID"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    result = supabase.table('users').select('*, tenants(name, slug)').eq('id', user_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    u = result.data[0]
+    return {
+        'id': u['id'],
+        'email': u['email'],
+        'name': u['name'],
+        'role': u['role'],
+        'tenantId': u['tenant_id'],
+        'tenantName': u.get('tenants', {}).get('name') if u.get('tenants') else None,
+        'avatar': u['avatar'],
+        'createdAt': u['created_at']
+    }
+
+@api_router.post("/users")
+async def create_user(user: UserCreate, payload: dict = Depends(verify_token)):
+    """Create a new user (SuperAdmin only)"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    # Check if email already exists
+    existing = supabase.table('users').select('id').eq('email', user.email).execute()
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Email já está em uso")
+    
+    data = {
+        'email': user.email,
+        'password_hash': user.password,  # In production, hash this!
+        'name': user.name,
+        'role': user.role,
+        'tenant_id': user.tenant_id,
+        'avatar': user.avatar or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user.email}"
+    }
+    
+    result = supabase.table('users').insert(data).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=400, detail="Erro ao criar usuário")
+    
+    u = result.data[0]
+    return {
+        'id': u['id'],
+        'email': u['email'],
+        'name': u['name'],
+        'role': u['role'],
+        'tenantId': u['tenant_id'],
+        'avatar': u['avatar'],
+        'createdAt': u['created_at']
+    }
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, user: UserUpdate, payload: dict = Depends(verify_token)):
+    """Update a user (SuperAdmin only)"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    data = {}
+    if user.email is not None:
+        # Check if new email already exists
+        existing = supabase.table('users').select('id').eq('email', user.email).neq('id', user_id).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Email já está em uso")
+        data['email'] = user.email
+    if user.password is not None:
+        data['password_hash'] = user.password  # In production, hash this!
+    if user.name is not None:
+        data['name'] = user.name
+    if user.role is not None:
+        data['role'] = user.role
+    if user.tenant_id is not None:
+        data['tenant_id'] = user.tenant_id if user.tenant_id != '' else None
+    if user.avatar is not None:
+        data['avatar'] = user.avatar
+    
+    result = supabase.table('users').update(data).eq('id', user_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    u = result.data[0]
+    return {
+        'id': u['id'],
+        'email': u['email'],
+        'name': u['name'],
+        'role': u['role'],
+        'tenantId': u['tenant_id'],
+        'avatar': u['avatar'],
+        'createdAt': u['created_at']
+    }
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, payload: dict = Depends(verify_token)):
+    """Delete a user (SuperAdmin only)"""
+    if payload['role'] != 'superadmin':
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    # Prevent deleting yourself
+    if user_id == payload['user_id']:
+        raise HTTPException(status_code=400, detail="Você não pode excluir seu próprio usuário")
+    
+    supabase.table('users').delete().eq('id', user_id).execute()
     return {"success": True}
 
 # ==================== CONNECTIONS ROUTES ====================
