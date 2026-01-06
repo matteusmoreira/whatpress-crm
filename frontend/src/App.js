@@ -28,6 +28,7 @@ const Connections = lazy(() => import("./pages/Connections"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
 const ThemesPage = lazy(() => import("./pages/ThemesPage"));
+const Contacts = lazy(() => import("./pages/Contacts"));
 
 // Layout
 import MainLayout from "./components/Layout/MainLayout";
@@ -112,6 +113,7 @@ function App() {
                   <Route index element={<Navigate to="/app/dashboard" replace />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="inbox" element={<Inbox />} />
+                  <Route path="contacts" element={<Contacts />} />
                   <Route path="automations" element={<Automations />} />
                   <Route path="chatbot" element={<Chatbot />} />
                   <Route path="templates" element={<Templates />} />

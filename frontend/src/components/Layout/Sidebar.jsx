@@ -52,6 +52,7 @@ const Sidebar = () => {
     : [
       { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
+      { to: '/app/contacts', icon: Users, label: 'Contatos' },
       { to: '/app/automations', icon: Bot, label: 'Automações' },
       { to: '/app/chatbot', icon: Bot, label: 'Chatbot' },
       { to: '/app/templates', icon: FileText, label: 'Templates' },

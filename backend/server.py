@@ -261,8 +261,19 @@ class ContactUpsertByPhone(BaseModel):
 
 class ContactUpdate(BaseModel):
     full_name: Optional[str] = None
+    email: Optional[str] = None
+    tags: Optional[List[str]] = None
+    custom_fields: Optional[dict] = None
     social_links: Optional[dict] = None
     notes_html: Optional[str] = None
+
+class ContactCreate(BaseModel):
+    name: str
+    phone: str
+    email: Optional[str] = None
+    tags: Optional[List[str]] = None
+    custom_fields: Optional[dict] = None
+    source: Optional[str] = None
 
 class AutoMessageCreate(BaseModel):
     type: str  # 'welcome', 'away', 'keyword'
@@ -1592,6 +1603,173 @@ async def clear_conversation_messages(conversation_id: str, payload: dict = Depe
     return {"success": True}
 
 # ==================== CONTACTS ROUTES ====================
+
+@api_router.get("/contacts")
+async def list_contacts(
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    payload: dict = Depends(verify_token)
+):
+    """List all contacts for the tenant"""
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+        if not user_tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant não identificado")
+
+        if limit < 1:
+            limit = 1
+        if limit > 200:
+            limit = 200
+        if offset < 0:
+            offset = 0
+
+        query = supabase.table('contacts').select('*').eq('tenant_id', user_tenant_id)
+
+        if search:
+            search_term = f"%{search}%"
+            query = query.or_(f"name.ilike.{search_term},phone.ilike.{search_term},email.ilike.{search_term}")
+
+        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+
+        contacts = []
+        for c in (result.data or []):
+            contacts.append({
+                'id': c.get('id'),
+                'tenantId': c.get('tenant_id'),
+                'name': c.get('name'),
+                'phone': c.get('phone'),
+                'email': c.get('email'),
+                'tags': c.get('tags') or [],
+                'customFields': c.get('custom_fields') or {},
+                'source': c.get('source'),
+                'createdAt': c.get('created_at'),
+                'updatedAt': c.get('updated_at')
+            })
+
+        # Get total count
+        count_result = supabase.table('contacts').select('id', count='exact').eq('tenant_id', user_tenant_id).execute()
+        total = count_result.count if hasattr(count_result, 'count') and count_result.count else len(result.data or [])
+
+        return {
+            'contacts': contacts,
+            'total': total,
+            'limit': limit,
+            'offset': offset
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing contacts: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao listar contatos: {str(e)}")
+
+@api_router.post("/contacts")
+async def create_contact(data: ContactCreate, payload: dict = Depends(verify_token)):
+    """Create a new contact"""
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+        if not user_tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant não identificado")
+
+        name = (data.name or '').strip()
+        phone = (data.phone or '').strip()
+
+        if not name:
+            raise HTTPException(status_code=400, detail="Nome é obrigatório")
+        if not phone:
+            raise HTTPException(status_code=400, detail="Telefone é obrigatório")
+
+        # Check if contact with same phone already exists
+        existing = supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', phone).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Já existe um contato com este telefone")
+
+        insert_data = {
+            'tenant_id': user_tenant_id,
+            'name': name,
+            'phone': phone,
+            'email': (data.email or '').strip() or None,
+            'tags': data.tags or [],
+            'custom_fields': data.custom_fields or {},
+            'source': data.source or 'manual'
+        }
+
+        result = supabase.table('contacts').insert(insert_data).execute()
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Erro ao criar contato")
+
+        c = result.data[0]
+        
+        safe_insert_audit_log(
+            tenant_id=user_tenant_id,
+            actor_user_id=payload.get('user_id'),
+            action='contact.created',
+            entity_type='contact',
+            entity_id=c.get('id'),
+            metadata={'phone': phone}
+        )
+
+        return {
+            'id': c.get('id'),
+            'tenantId': c.get('tenant_id'),
+            'name': c.get('name'),
+            'phone': c.get('phone'),
+            'email': c.get('email'),
+            'tags': c.get('tags') or [],
+            'customFields': c.get('custom_fields') or {},
+            'source': c.get('source'),
+            'createdAt': c.get('created_at'),
+            'updatedAt': c.get('updated_at')
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating contact: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao criar contato: {str(e)}")
+
+@api_router.get("/contacts/{contact_id}")
+async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
+    """Get a single contact by ID"""
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+
+        result = supabase.table('contacts').select('*').eq('id', contact_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Contato não encontrado")
+
+        c = result.data[0]
+        if user_tenant_id and c.get('tenant_id') != user_tenant_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
+
+        # Get conversation count for this contact
+        conv_count = 0
+        try:
+            conv_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', c.get('tenant_id')).eq('contact_phone', c.get('phone')).execute()
+            conv_count = conv_result.count if hasattr(conv_result, 'count') and conv_result.count else 0
+        except:
+            pass
+
+        return {
+            'id': c.get('id'),
+            'tenantId': c.get('tenant_id'),
+            'name': c.get('name'),
+            'phone': c.get('phone'),
+            'email': c.get('email'),
+            'tags': c.get('tags') or [],
+            'customFields': c.get('custom_fields') or {},
+            'source': c.get('source'),
+            'createdAt': c.get('created_at'),
+            'updatedAt': c.get('updated_at'),
+            'conversationCount': conv_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting contact: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar contato: {str(e)}")
 
 @api_router.get("/contacts/by-phone")
 async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depends(verify_token)):
