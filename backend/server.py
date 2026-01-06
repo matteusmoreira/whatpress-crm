@@ -1595,17 +1595,77 @@ async def clear_conversation_messages(conversation_id: str, payload: dict = Depe
 
 @api_router.get("/contacts/by-phone")
 async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depends(verify_token)):
-    user_tenant_id = get_user_tenant_id(payload)
-    if user_tenant_id and tenant_id != user_tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+        if user_tenant_id and tenant_id != user_tenant_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
 
-    normalized_phone = (phone or '').strip()
-    if not normalized_phone:
-        raise HTTPException(status_code=400, detail="Telefone inválido")
+        normalized_phone = (phone or '').strip()
+        if not normalized_phone:
+            raise HTTPException(status_code=400, detail="Telefone inválido")
 
-    existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
-    if existing.data:
-        c = existing.data[0]
+        logger.info(f"Looking for contact with phone: {normalized_phone} in tenant: {tenant_id}")
+
+        existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+        if existing.data:
+            c = existing.data[0]
+            return {
+                'id': c['id'],
+                'tenantId': c['tenant_id'],
+                'phone': c['phone'],
+                'fullName': c['full_name'],
+                'socialLinks': c.get('social_links') or {},
+                'notesHtml': c.get('notes_html') or '',
+                'createdAt': c.get('created_at'),
+                'updatedAt': c.get('updated_at')
+            }
+
+        conv = supabase.table('conversations').select('contact_name, contact_avatar').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
+        fallback_name = None
+        fallback_avatar = None
+        if conv.data:
+            fallback_name = conv.data[0].get('contact_name')
+            fallback_avatar = conv.data[0].get('contact_avatar')
+
+        full_name = (fallback_name or '').strip() or normalized_phone
+        
+        try:
+            created = supabase.table('contacts').insert({
+                'tenant_id': tenant_id,
+                'phone': normalized_phone,
+                'full_name': full_name,
+                'avatar': fallback_avatar
+            }).execute()
+        except Exception as insert_error:
+            logger.error(f"Error inserting contact: {insert_error}")
+            # Try to fetch again in case of race condition
+            existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+            if existing.data:
+                c = existing.data[0]
+                return {
+                    'id': c['id'],
+                    'tenantId': c['tenant_id'],
+                    'phone': c['phone'],
+                    'fullName': c['full_name'],
+                    'socialLinks': c.get('social_links') or {},
+                    'notesHtml': c.get('notes_html') or '',
+                    'createdAt': c.get('created_at'),
+                    'updatedAt': c.get('updated_at')
+                }
+            raise HTTPException(status_code=400, detail=f"Erro ao criar contato: {str(insert_error)}")
+            
+        if not created.data:
+            raise HTTPException(status_code=400, detail="Erro ao criar contato - sem dados retornados")
+
+        c = created.data[0]
+        safe_insert_audit_log(
+            tenant_id=tenant_id,
+            actor_user_id=payload.get('user_id'),
+            action='contact.created',
+            entity_type='contact',
+            entity_id=c.get('id'),
+            metadata={'phone': normalized_phone}
+        )
         return {
             'id': c['id'],
             'tenantId': c['tenant_id'],
@@ -1616,43 +1676,11 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
             'createdAt': c.get('created_at'),
             'updatedAt': c.get('updated_at')
         }
-
-    conv = supabase.table('conversations').select('contact_name, contact_avatar').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
-    fallback_name = None
-    fallback_avatar = None
-    if conv.data:
-        fallback_name = conv.data[0].get('contact_name')
-        fallback_avatar = conv.data[0].get('contact_avatar')
-
-    full_name = (fallback_name or '').strip() or normalized_phone
-    created = supabase.table('contacts').insert({
-        'tenant_id': tenant_id,
-        'phone': normalized_phone,
-        'full_name': full_name,
-        'avatar': fallback_avatar
-    }).execute()
-    if not created.data:
-        raise HTTPException(status_code=400, detail="Erro ao criar contato")
-
-    c = created.data[0]
-    safe_insert_audit_log(
-        tenant_id=tenant_id,
-        actor_user_id=payload.get('user_id'),
-        action='contact.created',
-        entity_type='contact',
-        entity_id=c.get('id'),
-        metadata={'phone': normalized_phone}
-    )
-    return {
-        'id': c['id'],
-        'tenantId': c['tenant_id'],
-        'phone': c['phone'],
-        'fullName': c['full_name'],
-        'socialLinks': c.get('social_links') or {},
-        'notesHtml': c.get('notes_html') or '',
-        'createdAt': c.get('created_at'),
-        'updatedAt': c.get('updated_at')
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_contact_by_phone: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar contato: {str(e)}")
 
 @api_router.patch("/contacts/{contact_id}")
 async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = Depends(verify_token)):
