@@ -1606,6 +1606,7 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
 
         logger.info(f"Looking for contact with phone: {normalized_phone} in tenant: {tenant_id}")
 
+        # First try to find existing contact
         existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
         if existing.data:
             c = existing.data[0]
@@ -1620,6 +1621,7 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
                 'updatedAt': c.get('updated_at')
             }
 
+        # Get fallback data from conversations
         conv = supabase.table('conversations').select('contact_name, contact_avatar').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
         fallback_name = None
         fallback_avatar = None
@@ -1629,16 +1631,43 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
 
         full_name = (fallback_name or '').strip() or normalized_phone
         
+        # Use upsert to handle race conditions and unique constraints
+        # NOTE: The contacts table does NOT have an 'avatar' column
         try:
-            created = supabase.table('contacts').insert({
+            created = supabase.table('contacts').upsert({
                 'tenant_id': tenant_id,
                 'phone': normalized_phone,
-                'full_name': full_name,
-                'avatar': fallback_avatar
-            }).execute()
-        except Exception as insert_error:
-            logger.error(f"Error inserting contact: {insert_error}")
-            # Try to fetch again in case of race condition
+                'full_name': full_name
+            }, on_conflict='tenant_id,phone').execute()
+        except Exception as upsert_error:
+            logger.error(f"Error upserting contact: {upsert_error}")
+            # Fallback: try insert without on_conflict
+            try:
+                created = supabase.table('contacts').insert({
+                    'tenant_id': tenant_id,
+                    'phone': normalized_phone,
+                    'full_name': full_name
+                }).execute()
+            except Exception as insert_error:
+                logger.error(f"Error inserting contact: {insert_error}")
+                # Final fallback: try to fetch again
+                existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+                if existing.data:
+                    c = existing.data[0]
+                    return {
+                        'id': c['id'],
+                        'tenantId': c['tenant_id'],
+                        'phone': c['phone'],
+                        'fullName': c['full_name'],
+                        'socialLinks': c.get('social_links') or {},
+                        'notesHtml': c.get('notes_html') or '',
+                        'createdAt': c.get('created_at'),
+                        'updatedAt': c.get('updated_at')
+                    }
+                raise HTTPException(status_code=400, detail=f"Erro ao criar contato: {str(insert_error)}")
+            
+        if not created.data:
+            # Try one more time to fetch existing
             existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
             if existing.data:
                 c = existing.data[0]
@@ -1652,9 +1681,6 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
                     'createdAt': c.get('created_at'),
                     'updatedAt': c.get('updated_at')
                 }
-            raise HTTPException(status_code=400, detail=f"Erro ao criar contato: {str(insert_error)}")
-            
-        if not created.data:
             raise HTTPException(status_code=400, detail="Erro ao criar contato - sem dados retornados")
 
         c = created.data[0]
