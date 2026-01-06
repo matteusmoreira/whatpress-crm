@@ -1534,14 +1534,30 @@ async def accept_conversation_transfer(conversation_id: str, payload: dict = Dep
 @api_router.post("/conversations/{conversation_id}/labels/{label_id}")
 async def add_label(conversation_id: str, label_id: str, payload: dict = Depends(verify_token)):
     """Add label to conversation"""
-    await LabelsService.add_label_to_conversation(conversation_id, label_id)
-    return {"success": True}
+    try:
+        result = await LabelsService.add_label_to_conversation(conversation_id, label_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Conversa não encontrada")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding label {label_id} to conversation {conversation_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao adicionar label: {str(e)}")
 
 @api_router.delete("/conversations/{conversation_id}/labels/{label_id}")
 async def remove_label(conversation_id: str, label_id: str, payload: dict = Depends(verify_token)):
     """Remove label from conversation"""
-    await LabelsService.remove_label_from_conversation(conversation_id, label_id)
-    return {"success": True}
+    try:
+        result = await LabelsService.remove_label_from_conversation(conversation_id, label_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Conversa não encontrada")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing label {label_id} from conversation {conversation_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao remover label: {str(e)}")
 
 @api_router.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, payload: dict = Depends(verify_token)):
@@ -3098,11 +3114,40 @@ async def get_labels(tenant_id: str, payload: dict = Depends(verify_token)):
                 })
             return labels
         
-        # Return default labels if none exist
-        return await LabelsService.get_labels(tenant_id)
+        # If no labels exist, create default labels in the database
+        default_labels_data = [
+            {'name': 'Urgente', 'color': '#EF4444'},
+            {'name': 'VIP', 'color': '#F59E0B'},
+            {'name': 'Novo Cliente', 'color': '#10B981'},
+            {'name': 'Follow-up', 'color': '#3B82F6'},
+            {'name': 'Reclamação', 'color': '#EF4444'},
+            {'name': 'Venda', 'color': '#8B5CF6'},
+            {'name': 'Suporte', 'color': '#06B6D4'},
+            {'name': 'Dúvida', 'color': '#6366F1'}
+        ]
+        
+        created_labels = []
+        for label_data in default_labels_data:
+            insert_result = supabase.table('labels').insert({
+                'tenant_id': tenant_id,
+                'name': label_data['name'],
+                'color': label_data['color']
+            }).execute()
+            if insert_result.data:
+                created_label = insert_result.data[0]
+                created_labels.append({
+                    'id': created_label['id'],
+                    'name': created_label['name'],
+                    'color': created_label['color'],
+                    'usageCount': 0,
+                    'createdAt': created_label['created_at']
+                })
+        
+        return created_labels
     except Exception as e:
         logger.error(f"Error getting labels: {e}")
-        return await LabelsService.get_labels(tenant_id)
+        # Return empty list on error instead of static defaults
+        return []
 
 @api_router.post("/labels")
 async def create_label(tenant_id: str, data: LabelCreate, payload: dict = Depends(verify_token)):

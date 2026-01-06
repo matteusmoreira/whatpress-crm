@@ -119,25 +119,39 @@ class LabelsService:
     @staticmethod
     async def add_label_to_conversation(conversation_id: str, label_id: str) -> bool:
         """Add label to conversation"""
-        # Get current labels
-        conv = supabase.table('conversations').select('labels').eq('id', conversation_id).execute()
-        if conv.data:
-            current_labels = conv.data[0].get('labels') or []
-            if label_id not in current_labels:
-                current_labels.append(label_id)
-                supabase.table('conversations').update({'labels': current_labels}).eq('id', conversation_id).execute()
-        return True
+        try:
+            # Get current labels
+            conv = supabase.table('conversations').select('labels').eq('id', conversation_id).execute()
+            if conv.data:
+                current_labels = conv.data[0].get('labels') or []
+                if label_id not in current_labels:
+                    current_labels.append(label_id)
+                    supabase.table('conversations').update({'labels': current_labels}).eq('id', conversation_id).execute()
+                return True
+            else:
+                print(f"Conversation {conversation_id} not found when adding label {label_id}")
+                return False
+        except Exception as e:
+            print(f"Error adding label to conversation: {e}")
+            raise e
     
     @staticmethod
     async def remove_label_from_conversation(conversation_id: str, label_id: str) -> bool:
         """Remove label from conversation"""
-        conv = supabase.table('conversations').select('labels').eq('id', conversation_id).execute()
-        if conv.data:
-            current_labels = conv.data[0].get('labels') or []
-            if label_id in current_labels:
-                current_labels.remove(label_id)
-                supabase.table('conversations').update({'labels': current_labels}).eq('id', conversation_id).execute()
-        return True
+        try:
+            conv = supabase.table('conversations').select('labels').eq('id', conversation_id).execute()
+            if conv.data:
+                current_labels = conv.data[0].get('labels') or []
+                if label_id in current_labels:
+                    current_labels.remove(label_id)
+                    supabase.table('conversations').update({'labels': current_labels}).eq('id', conversation_id).execute()
+                return True
+            else:
+                print(f"Conversation {conversation_id} not found when removing label {label_id}")
+                return False
+        except Exception as e:
+            print(f"Error removing label from conversation: {e}")
+            raise e
 
 
 class AgentService:
