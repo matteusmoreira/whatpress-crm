@@ -2537,6 +2537,32 @@ async def delete_quick_reply(reply_id: str, payload: dict = Depends(verify_token
     await QuickRepliesService.delete_quick_reply(reply_id)
     return {"success": True}
 
+@api_router.put("/quick-replies/{reply_id}")
+async def update_quick_reply(reply_id: str, data: QuickReplyCreate, payload: dict = Depends(verify_token)):
+    """Update an existing quick reply"""
+    try:
+        update_data = {
+            'title': data.title,
+            'content': data.content,
+            'category': data.category
+        }
+        result = supabase.table('quick_replies').update(update_data).eq('id', reply_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Resposta rápida não encontrada")
+        
+        reply = result.data[0]
+        return {
+            'id': reply['id'],
+            'title': reply['title'],
+            'content': reply['content'],
+            'category': reply['category']
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ==================== AUTO MESSAGES ====================
 
 @api_router.get("/auto-messages")

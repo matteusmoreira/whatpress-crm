@@ -27,6 +27,7 @@ const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const Connections = lazy(() => import("./pages/Connections"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
+const ThemesPage = lazy(() => import("./pages/ThemesPage"));
 
 // Layout
 import MainLayout from "./components/Layout/MainLayout";
@@ -117,6 +118,7 @@ function App() {
                   <Route path="kb" element={<KnowledgeBase />} />
                   <Route path="settings/connections" element={<Connections />} />
                   <Route path="settings/profile" element={<Profile />} />
+                  <Route path="settings/themes" element={<ThemesPage />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="profile" element={<Profile />} />
                 </Route>

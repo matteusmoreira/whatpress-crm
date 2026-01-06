@@ -358,6 +358,11 @@ export const QuickRepliesAPI = {
     return response.data;
   },
 
+  async update(replyId, data) {
+    const response = await apiClient.put(`/quick-replies/${replyId}`, data);
+    return response.data;
+  },
+
   async delete(replyId) {
     const response = await apiClient.delete(`/quick-replies/${replyId}`);
     return response.data;

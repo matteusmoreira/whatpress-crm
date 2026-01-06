@@ -15,7 +15,9 @@ import {
   Bot,
   FileText,
   BookOpen,
-  CreditCard
+  CreditCard,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -107,16 +109,35 @@ const Sidebar = () => {
           "p-6 border-b",
           theme === 'dark' ? 'border-white/10' : 'border-slate-200/50'
         )}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <MessageSquare className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <MessageSquare className="w-6 h-6 text-white" />
+              </div>
+              {!sidebarCollapsed && (
+                <span className={cn(
+                  "text-xl font-bold",
+                  theme === 'dark' ? 'text-white' : 'text-slate-800'
+                )}>WhatsApp CRM</span>
+              )}
             </div>
-            {!sidebarCollapsed && (
-              <span className={cn(
-                "text-xl font-bold",
-                theme === 'dark' ? 'text-white' : 'text-slate-800'
-              )}>WhatsApp CRM</span>
-            )}
+            {/* Collapse button - visible on desktop */}
+            <button
+              onClick={toggleSidebar}
+              className={cn(
+                "hidden lg:flex p-2 rounded-lg transition-all",
+                theme === 'dark'
+                  ? 'hover:bg-white/10 text-white/60 hover:text-white'
+                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+              )}
+              title={sidebarCollapsed ? "Expandir menu" : "Retrair menu"}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeft className="w-5 h-5" />
+              ) : (
+                <PanelLeftClose className="w-5 h-5" />
+              )}
+            </button>
           </div>
         </div>
 

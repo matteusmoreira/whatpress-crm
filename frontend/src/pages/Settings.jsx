@@ -76,9 +76,9 @@ const Settings = () => {
       items: [
         {
           icon: Palette,
-          title: 'Aparência',
-          description: 'Tema, cores e personalização',
-          to: '/app/settings/profile'
+          title: 'Temas',
+          description: 'Personalize o tema e cores do sistema',
+          to: '/app/settings/themes'
         },
         {
           icon: Globe,

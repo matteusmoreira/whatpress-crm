@@ -6,7 +6,6 @@ import {
   Paperclip,
   Smile,
   MoreVertical,
-  Phone,
   Check,
   CheckCheck,
   Clock,
@@ -25,7 +24,9 @@ import {
   Wifi,
   WifiOff,
   Reply,
-  Trash2
+  Trash2,
+  Edit2,
+  UserCircle
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
@@ -41,7 +42,8 @@ import FileUpload from '../components/FileUpload';
 import QuickRepliesPanel from '../components/QuickRepliesPanel';
 import LabelsManager from '../components/LabelsManager';
 import TypingIndicator, { useTypingIndicator } from '../components/TypingIndicator';
-import { AgentsAPI, LabelsAPI, ConversationsAPI } from '../lib/api';
+import { EmojiPicker } from '../components/EmojiPicker';
+import { AgentsAPI, LabelsAPI, ConversationsAPI, ContactsAPI } from '../lib/api';
 
 // Labels are now loaded from the database
 
@@ -223,6 +225,11 @@ const Inbox = () => {
   const [selectedLabelFilter, setSelectedLabelFilter] = useState('all');
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [mediaViewer, setMediaViewer] = useState({ open: false, url: '', title: '' });
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [editingContactName, setEditingContactName] = useState(false);
+  const [contactNameValue, setContactNameValue] = useState('');
+  const [contactData, setContactData] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -409,12 +416,84 @@ const Inbox = () => {
 
   const handleAddLabel = async (labelId) => {
     try {
+      // Check if label already exists on conversation
+      const currentLabels = selectedConversation?.labels || [];
+      if (currentLabels.includes(labelId)) {
+        toast.info('Label já adicionada');
+        setShowLabelsMenu(false);
+        return;
+      }
+
       await ConversationsAPI.addLabel(selectedConversation.id, labelId);
+
+      // Update local state
+      const updatedConv = {
+        ...selectedConversation,
+        labels: [...currentLabels, labelId]
+      };
+      setSelectedConversation(updatedConv);
+
+      // Refresh conversations to get updated data
+      fetchConversations(tenantId);
+
       toast.success('Label adicionada');
       setShowLabelsMenu(false);
     } catch (error) {
       toast.error('Erro ao adicionar label');
     }
+  };
+
+  // Handle contact editing
+  const handleContactNameClick = () => {
+    if (!selectedConversation) return;
+    setContactNameValue(selectedConversation.contactName || '');
+    setEditingContactName(true);
+  };
+
+  const handleContactNameSave = async () => {
+    if (!selectedConversation || !contactNameValue.trim()) {
+      toast.error('Digite um nome válido');
+      return;
+    }
+
+    try {
+      // First get or create the contact
+      const contact = await ContactsAPI.getByPhone(tenantId, selectedConversation.contactPhone);
+
+      // Update contact name
+      await ContactsAPI.update(contact.id, { full_name: contactNameValue.trim() });
+
+      // Update local state
+      const updatedConv = { ...selectedConversation, contactName: contactNameValue.trim() };
+      setSelectedConversation(updatedConv);
+
+      // Refresh conversations
+      fetchConversations(tenantId);
+
+      toast.success('Nome atualizado');
+      setEditingContactName(false);
+    } catch (error) {
+      toast.error('Erro ao atualizar nome');
+    }
+  };
+
+  const handleViewContact = async () => {
+    if (!selectedConversation) return;
+
+    try {
+      const contact = await ContactsAPI.getByPhone(tenantId, selectedConversation.contactPhone);
+      setContactData(contact);
+      setShowContactModal(true);
+      setShowMoreMenu(false);
+    } catch (error) {
+      toast.error('Erro ao carregar contato');
+    }
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    setNewMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
   };
 
   const handleDeleteConversation = async () => {
@@ -690,545 +769,597 @@ const Inbox = () => {
       <TooltipProvider>
         {/* Chat Area */}
         <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-br from-emerald-950/50 to-teal-950/50">
-        {selectedConversation ? (
-          <>
-            {/* Chat Header */}
-            <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <ContactAvatar
-                    src={selectedConversation.contactAvatar}
-                    name={selectedConversation.contactName}
-                    sizeClassName="w-10 h-10"
-                  />
-                  <div>
-                    <h2 className="text-white font-medium">{selectedConversation.contactName}</h2>
-                    <p className="text-white/50 text-sm">{selectedConversation.contactPhone}</p>
+          {selectedConversation ? (
+            <>
+              {/* Chat Header */}
+              <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <ContactAvatar
+                      src={selectedConversation.contactAvatar}
+                      name={selectedConversation.contactName}
+                      sizeClassName="w-10 h-10"
+                    />
+                    <div>
+                      {editingContactName ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={contactNameValue}
+                            onChange={(e) => setContactNameValue(e.target.value)}
+                            className="px-2 py-1 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleContactNameSave();
+                              if (e.key === 'Escape') setEditingContactName(false);
+                            }}
+                          />
+                          <button
+                            onClick={handleContactNameSave}
+                            className="p-1 bg-emerald-500 rounded text-white hover:bg-emerald-600"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingContactName(false)}
+                            className="p-1 bg-white/10 rounded text-white/60 hover:bg-white/20"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <h2 className="text-white font-medium">{selectedConversation.contactName}</h2>
+                      )}
+                      <button
+                        onClick={handleContactNameClick}
+                        className="text-white/50 text-sm hover:text-emerald-400 hover:underline transition-colors flex items-center gap-1"
+                        title="Clique para editar nome do contato"
+                      >
+                        {selectedConversation.contactPhone}
+                        <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Status select */}
-                  <select
-                    value={selectedConversation.status}
-                    onChange={(e) => updateConversationStatus(selectedConversation.id, e.target.value)}
-                    className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none"
-                  >
-                    <option value="open" className="bg-emerald-900">Aberta</option>
-                    <option value="pending" className="bg-emerald-900">Pendente</option>
-                    <option value="resolved" className="bg-emerald-900">Resolvida</option>
-                  </select>
-
-                  {/* Assign button */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowAssignMenu(!showAssignMenu)}
-                      className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                      title="Atribuir"
+                  <div className="flex items-center gap-2">
+                    {/* Status select */}
+                    <select
+                      value={selectedConversation.status}
+                      onChange={(e) => updateConversationStatus(selectedConversation.id, e.target.value)}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none"
                     >
-                      <Users className="w-5 h-5" />
-                    </button>
-                    {showAssignMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
-                        <div className="p-2">
-                          <p className="text-white/50 text-xs px-2 mb-2">Atribuir para:</p>
-                          {/* Sort agents: online first */}
-                          {[...agents]
-                            .sort((a, b) => (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1))
-                            .map(agent => (
+                      <option value="open" className="bg-emerald-900">Aberta</option>
+                      <option value="pending" className="bg-emerald-900">Pendente</option>
+                      <option value="resolved" className="bg-emerald-900">Resolvida</option>
+                    </select>
+
+                    {/* Assign button */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowAssignMenu(!showAssignMenu)}
+                        className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                        title="Atribuir"
+                      >
+                        <Users className="w-5 h-5" />
+                      </button>
+                      {showAssignMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
+                          <div className="p-2">
+                            <p className="text-white/50 text-xs px-2 mb-2">Atribuir para:</p>
+                            {/* Sort agents: online first */}
+                            {[...agents]
+                              .sort((a, b) => (a.status === 'online' ? -1 : 1) - (b.status === 'online' ? -1 : 1))
+                              .map(agent => (
+                                <button
+                                  key={agent.id}
+                                  onClick={() => handleAssign(agent.id)}
+                                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
+                                >
+                                  <div className="relative">
+                                    <img src={agent.avatar} alt={agent.name} className="w-6 h-6 rounded-full" />
+                                    <span
+                                      className={cn(
+                                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-emerald-900',
+                                        getAgentStatusColor(agent.status)
+                                      )}
+                                    />
+                                  </div>
+                                  <span className="flex-1 text-left">{agent.name}</span>
+                                  <span className="text-xs text-white/40 capitalize">{agent.status || 'offline'}</span>
+                                </button>
+                              ))}
+                            {/* Unassign option */}
+                            {selectedConversation?.assignedTo && (
                               <button
-                                key={agent.id}
-                                onClick={() => handleAssign(agent.id)}
+                                onClick={async () => {
+                                  try {
+                                    await ConversationsAPI.unassign(selectedConversation.id);
+                                    toast.success('Conversa desatribuída');
+                                    setShowAssignMenu(false);
+                                  } catch (error) {
+                                    toast.error('Erro ao desatribuir');
+                                  }
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-400 text-sm mt-2 border-t border-white/10 pt-2"
+                              >
+                                <X className="w-4 h-4" />
+                                Remover atribuição
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Labels button */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowLabelsMenu(!showLabelsMenu)}
+                        className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                        title="Labels"
+                      >
+                        <Tag className="w-5 h-5" />
+                      </button>
+                      {showLabelsMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
+                          <div className="p-2">
+                            <p className="text-white/50 text-xs px-2 mb-2">Adicionar label:</p>
+                            {labels.map(label => (
+                              <button
+                                key={label.id}
+                                onClick={() => handleAddLabel(label.id)}
                                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
                               >
-                                <div className="relative">
-                                  <img src={agent.avatar} alt={agent.name} className="w-6 h-6 rounded-full" />
-                                  <span
-                                    className={cn(
-                                      'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-emerald-900',
-                                      getAgentStatusColor(agent.status)
-                                    )}
-                                  />
-                                </div>
-                                <span className="flex-1 text-left">{agent.name}</span>
-                                <span className="text-xs text-white/40 capitalize">{agent.status || 'offline'}</span>
+                                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: label.color }} />
+                                {label.name}
                               </button>
                             ))}
-                          {/* Unassign option */}
-                          {selectedConversation?.assignedTo && (
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await ConversationsAPI.unassign(selectedConversation.id);
-                                  toast.success('Conversa desatribuída');
-                                  setShowAssignMenu(false);
-                                } catch (error) {
-                                  toast.error('Erro ao desatribuir');
-                                }
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-400 text-sm mt-2 border-t border-white/10 pt-2"
-                            >
-                              <X className="w-4 h-4" />
-                              Remover atribuição
-                            </button>
-                          )}
+                            <div className="border-t border-white/10 mt-2 pt-2">
+                              <button
+                                onClick={() => {
+                                  setShowLabelsMenu(false);
+                                  setShowLabelsManager(true);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-sm"
+                              >
+                                <Tag className="w-4 h-4" />
+                                Gerenciar Labels
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
 
-                  {/* Labels button */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowLabelsMenu(!showLabelsMenu)}
-                      className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                      title="Labels"
-                    >
-                      <Tag className="w-5 h-5" />
-                    </button>
-                    {showLabelsMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
-                        <div className="p-2">
-                          <p className="text-white/50 text-xs px-2 mb-2">Adicionar label:</p>
-                          {labels.map(label => (
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(!showMoreMenu);
+                          setShowAssignMenu(false);
+                          setShowLabelsMenu(false);
+                        }}
+                        className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                        title="Mais opções"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+                      {showMoreMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
+                          <div className="p-2">
                             <button
-                              key={label.id}
-                              onClick={() => handleAddLabel(label.id)}
+                              onClick={handleViewContact}
                               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
                             >
-                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: label.color }} />
-                              {label.name}
+                              <UserCircle className="w-4 h-4" />
+                              Ver contato
                             </button>
-                          ))}
-                          <div className="border-t border-white/10 mt-2 pt-2">
                             <button
-                              onClick={() => {
-                                setShowLabelsMenu(false);
-                                setShowLabelsManager(true);
-                              }}
-                              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-sm"
+                              onClick={handleClearMessages}
+                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
                             >
-                              <Tag className="w-4 h-4" />
-                              Gerenciar Labels
+                              <Trash2 className="w-4 h-4" />
+                              Excluir mensagens
+                            </button>
+                            <button
+                              onClick={handleDeleteConversation}
+                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-400 text-sm mt-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Excluir conversa
                             </button>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <button className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
-                    <Phone className="w-5 h-5" />
-                  </button>
-                  <div className="relative">
-                    <button
-                      onClick={() => {
-                        setShowMoreMenu(!showMoreMenu);
-                        setShowAssignMenu(false);
-                        setShowLabelsMenu(false);
-                      }}
-                      className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                      title="Mais opções"
-                    >
-                      <MoreVertical className="w-5 h-5" />
-                    </button>
-                    {showMoreMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-56 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl z-50">
-                        <div className="p-2">
-                          <button
-                            onClick={handleClearMessages}
-                            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Excluir mensagens
-                          </button>
-                          <button
-                            onClick={handleDeleteConversation}
-                            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-400 text-sm mt-1"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Excluir conversa
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Messages */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-              {messagesLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <>
-                  {messages.map((msg) => (
-                    <div key={msg.id}>
-                      {(() => {
-                        const rawContent = typeof msg.content === 'string'
-                          ? msg.content
-                          : msg.content == null
-                            ? ''
-                            : String(msg.content);
-                        const hasContent = rawContent.trim().length > 0;
-                        const fallback =
-                          msg.type === 'audio' ? '[Áudio]' :
-                          msg.type === 'image' ? '[Imagem]' :
-                          msg.type === 'video' ? '[Vídeo]' :
-                          msg.type === 'document' ? '[Documento]' :
-                          '[Mensagem]';
-                        const displayContent = hasContent ? rawContent : fallback;
-                        const mediaUrl = typeof msg.mediaUrl === 'string' && msg.mediaUrl.trim() ? msg.mediaUrl.trim() : '';
-                        const isMediaType = ['image', 'video', 'audio', 'document'].includes(msg.type);
-                        const canInlineMedia = Boolean(mediaUrl) && isMediaType;
-                        const urls = extractUrls(displayContent);
-                        const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
-                        const primaryUrl = hasOnlyUrl ? urls[0] : '';
-                        const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
-                        const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) : 'unknown';
-                        const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
-                        const originInfo = getMessageOriginInfo(msg);
+              {/* Messages */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+                {messagesLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((msg) => (
+                      <div key={msg.id}>
+                        {(() => {
+                          const rawContent = typeof msg.content === 'string'
+                            ? msg.content
+                            : msg.content == null
+                              ? ''
+                              : String(msg.content);
+                          const hasContent = rawContent.trim().length > 0;
+                          const fallback =
+                            msg.type === 'audio' ? '[Áudio]' :
+                              msg.type === 'image' ? '[Imagem]' :
+                                msg.type === 'video' ? '[Vídeo]' :
+                                  msg.type === 'document' ? '[Documento]' :
+                                    '[Mensagem]';
+                          const displayContent = hasContent ? rawContent : fallback;
+                          const mediaUrl = typeof msg.mediaUrl === 'string' && msg.mediaUrl.trim() ? msg.mediaUrl.trim() : '';
+                          const isMediaType = ['image', 'video', 'audio', 'document'].includes(msg.type);
+                          const canInlineMedia = Boolean(mediaUrl) && isMediaType;
+                          const urls = extractUrls(displayContent);
+                          const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
+                          const primaryUrl = hasOnlyUrl ? urls[0] : '';
+                          const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
+                          const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) : 'unknown';
+                          const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
+                          const originInfo = getMessageOriginInfo(msg);
 
-                        return (
-                          <div
-                            className={cn(
-                              'flex group',
-                              msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
-                            )}
-                          >
-                      {msg.direction === 'outbound' && (
-                        <div className="self-center mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                          <button
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
-                            className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                            title="Responder"
-                          >
-                            <Reply className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-
-                      <div
-                        className={cn(
-                          'max-w-[70%] rounded-2xl px-4 py-3',
-                          msg.direction === 'outbound'
-                            ? 'bg-emerald-500 text-white rounded-br-md'
-                            : 'bg-white/10 backdrop-blur-sm text-white rounded-bl-md'
-                        )}
-                      >
-                        {/* Media type indicator */}
-                        {msg.type !== 'text' && (
-                          <div className="flex items-center gap-2 mb-2 opacity-70">
-                            {getMessageTypeIcon(msg.type)}
-                            <span className="text-xs capitalize">{msg.type}</span>
-                          </div>
-                        )}
-                        {canInlineMedia && msg.type === 'image' && (
-                          <button
-                            type="button"
-                            onClick={() => setMediaViewer({ open: true, url: mediaUrl, title: displayContent })}
-                            className="block w-full rounded-xl overflow-hidden bg-black/20 focus:outline-none focus:ring-2 focus:ring-white/30"
-                            aria-label="Abrir imagem"
-                          >
-                            <img
-                              src={mediaUrl}
-                              alt={displayContent || 'Imagem'}
-                              className="w-full h-auto max-h-80 object-cover"
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                            />
-                          </button>
-                        )}
-                        {canInlineMedia && msg.type === 'video' && (
-                          <video
-                            className="w-full max-h-80 rounded-xl bg-black/20"
-                            controls
-                            preload="metadata"
-                            playsInline
-                            src={mediaUrl}
-                            aria-label="Reprodutor de vídeo"
-                          />
-                        )}
-                        {canInlineMedia && msg.type === 'audio' && (
-                          <audio
-                            className="w-full"
-                            controls
-                            preload="metadata"
-                            src={mediaUrl}
-                            aria-label="Reprodutor de áudio"
-                          />
-                        )}
-                        {canInlineMedia && msg.type === 'document' && (
-                          <a
-                            href={mediaUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={cn(
-                              'flex items-center gap-3 p-3 rounded-xl border w-full',
-                              msg.direction === 'outbound'
-                                ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                : 'bg-black/20 border-white/10 hover:bg-black/30'
-                            )}
-                          >
-                            <FileText className="w-5 h-5 opacity-80" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{displayContent || 'Documento'}</p>
-                              <p className="text-xs opacity-70 truncate">{shortenUrl(mediaUrl)}</p>
-                            </div>
-                          </a>
-                        )}
-                        {msg.type === 'text' && hasOnlyUrl && isWhatsappMedia && (
-                          <a
-                            href={primaryUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={cn(
-                              'flex items-center gap-3 p-3 rounded-xl border w-full',
-                              msg.direction === 'outbound'
-                                ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                : 'bg-black/20 border-white/10 hover:bg-black/30'
-                            )}
-                          >
-                            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
-                              {whatsappMeta ? (
-                                <whatsappMeta.Icon className="w-5 h-5 opacity-80" />
-                              ) : (
-                                <Image className="w-5 h-5 opacity-80" />
+                          return (
+                            <div
+                              className={cn(
+                                'flex group',
+                                msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
                               )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {whatsappMeta?.label || 'Mídia do WhatsApp'}
-                              </p>
-                              <p className="text-xs opacity-70 truncate">{shortenUrl(primaryUrl)}</p>
-                            </div>
-                          </a>
-                        )}
-                        {msg.type === 'text' && hasOnlyUrl && !isWhatsappMedia && (
-                          <a
-                            href={primaryUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={cn(
-                              'flex items-center gap-3 p-3 rounded-xl border w-full',
-                              msg.direction === 'outbound'
-                                ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                : 'bg-black/20 border-white/10 hover:bg-black/30'
-                            )}
-                          >
-                            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
-                              <Link2 className="w-5 h-5 opacity-80" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{shortenUrl(primaryUrl)}</p>
-                              <p className="text-xs opacity-70 truncate">{primaryUrl}</p>
-                            </div>
-                          </a>
-                        )}
-                        {(!canInlineMedia && !(msg.type === 'text' && hasOnlyUrl)) && (
-                          <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
-                            {renderTextWithLinks(displayContent)}
-                          </p>
-                        )}
-                        {canInlineMedia && hasContent && msg.type !== 'document' && (
-                          <p className="whitespace-pre-wrap mt-2">
-                            {renderTextWithLinks(rawContent)}
-                          </p>
-                        )}
-                        <div
-                          className={cn(
-                            'flex items-center justify-between gap-2 mt-1',
-                            msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
-                          )}
-                        >
-                          <Tooltip>
-                            <TooltipTrigger asChild>
+                            >
+                              {msg.direction === 'outbound' && (
+                                <div className="self-center mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
+                                    title="Excluir"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                                    className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                                    title="Responder"
+                                  >
+                                    <Reply className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+
                               <div
                                 className={cn(
-                                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide',
-                                  originInfo.badgeClass
+                                  'max-w-[70%] rounded-2xl px-4 py-3',
+                                  msg.direction === 'outbound'
+                                    ? 'bg-emerald-500 text-white rounded-br-md'
+                                    : 'bg-white/10 backdrop-blur-sm text-white rounded-bl-md'
                                 )}
                               >
-                                <span
+                                {/* Media type indicator */}
+                                {msg.type !== 'text' && (
+                                  <div className="flex items-center gap-2 mb-2 opacity-70">
+                                    {getMessageTypeIcon(msg.type)}
+                                    <span className="text-xs capitalize">{msg.type}</span>
+                                  </div>
+                                )}
+                                {canInlineMedia && msg.type === 'image' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaViewer({ open: true, url: mediaUrl, title: displayContent })}
+                                    className="block w-full rounded-xl overflow-hidden bg-black/20 focus:outline-none focus:ring-2 focus:ring-white/30"
+                                    aria-label="Abrir imagem"
+                                  >
+                                    <img
+                                      src={mediaUrl}
+                                      alt={displayContent || 'Imagem'}
+                                      className="w-full h-auto max-h-80 object-cover"
+                                      loading="lazy"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </button>
+                                )}
+                                {canInlineMedia && msg.type === 'video' && (
+                                  <video
+                                    className="w-full max-h-80 rounded-xl bg-black/20"
+                                    controls
+                                    preload="metadata"
+                                    playsInline
+                                    src={mediaUrl}
+                                    aria-label="Reprodutor de vídeo"
+                                  />
+                                )}
+                                {canInlineMedia && msg.type === 'audio' && (
+                                  <audio
+                                    className="w-full"
+                                    controls
+                                    preload="metadata"
+                                    src={mediaUrl}
+                                    aria-label="Reprodutor de áudio"
+                                  />
+                                )}
+                                {canInlineMedia && msg.type === 'document' && (
+                                  <a
+                                    href={mediaUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={cn(
+                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
+                                      msg.direction === 'outbound'
+                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
+                                    )}
+                                  >
+                                    <FileText className="w-5 h-5 opacity-80" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{displayContent || 'Documento'}</p>
+                                      <p className="text-xs opacity-70 truncate">{shortenUrl(mediaUrl)}</p>
+                                    </div>
+                                  </a>
+                                )}
+                                {msg.type === 'text' && hasOnlyUrl && isWhatsappMedia && (
+                                  <a
+                                    href={primaryUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={cn(
+                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
+                                      msg.direction === 'outbound'
+                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
+                                    )}
+                                  >
+                                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+                                      {whatsappMeta ? (
+                                        <whatsappMeta.Icon className="w-5 h-5 opacity-80" />
+                                      ) : (
+                                        <Image className="w-5 h-5 opacity-80" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">
+                                        {whatsappMeta?.label || 'Mídia do WhatsApp'}
+                                      </p>
+                                      <p className="text-xs opacity-70 truncate">{shortenUrl(primaryUrl)}</p>
+                                    </div>
+                                  </a>
+                                )}
+                                {msg.type === 'text' && hasOnlyUrl && !isWhatsappMedia && (
+                                  <a
+                                    href={primaryUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={cn(
+                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
+                                      msg.direction === 'outbound'
+                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
+                                    )}
+                                  >
+                                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+                                      <Link2 className="w-5 h-5 opacity-80" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{shortenUrl(primaryUrl)}</p>
+                                      <p className="text-xs opacity-70 truncate">{primaryUrl}</p>
+                                    </div>
+                                  </a>
+                                )}
+                                {(!canInlineMedia && !(msg.type === 'text' && hasOnlyUrl)) && (
+                                  <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
+                                    {renderTextWithLinks(displayContent)}
+                                  </p>
+                                )}
+                                {canInlineMedia && hasContent && msg.type !== 'document' && (
+                                  <p className="whitespace-pre-wrap mt-2">
+                                    {renderTextWithLinks(rawContent)}
+                                  </p>
+                                )}
+                                <div
                                   className={cn(
-                                    'w-1.5 h-1.5 rounded-full',
-                                    originInfo.dotClass
+                                    'flex items-center justify-between gap-2 mt-1',
+                                    msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
                                   )}
-                                />
-                                <span>{originInfo.label}</span>
+                                >
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div
+                                        className={cn(
+                                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide',
+                                          originInfo.badgeClass
+                                        )}
+                                      >
+                                        <span
+                                          className={cn(
+                                            'w-1.5 h-1.5 rounded-full',
+                                            originInfo.dotClass
+                                          )}
+                                        />
+                                        <span>{originInfo.label}</span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" sideOffset={6}>
+                                      {originInfo.tooltip}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs">
+                                      {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    {msg.direction === 'outbound' && getStatusIcon(msg.status)}
+                                  </div>
+                                </div>
                               </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" sideOffset={6}>
-                              {originInfo.tooltip}
-                            </TooltipContent>
-                          </Tooltip>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs">
-                              {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            {msg.direction === 'outbound' && getStatusIcon(msg.status)}
-                          </div>
-                        </div>
+
+                              {msg.direction === 'inbound' && (
+                                <div className="self-center ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
+                                    title="Excluir"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                                    className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                                    title="Responder"
+                                  >
+                                    <Reply className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
-
-                      {msg.direction === 'inbound' && (
-                        <div className="self-center ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                          <button
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
-                            className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                            title="Responder"
-                          >
-                            <Reply className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </>
-              )}
-            </div>
-
-            {/* File Upload Panel */}
-            {showFileUpload && (
-              <div className="p-4 border-t border-white/10">
-                <FileUpload
-                  conversationId={selectedConversation?.id}
-                  onUpload={handleFileUpload}
-                  onCancel={() => setShowFileUpload(false)}
-                />
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
               </div>
-            )}
 
-            {/* Typing Indicator */}
-            {selectedConversation && getTypingContact(selectedConversation.id) && (
-              <div className="px-4 pb-2">
-                <TypingIndicator
-                  contactName={getTypingContact(selectedConversation.id)}
-                />
-              </div>
-            )}
-
-            {/* Reply Preview */}
-            {replyToMessage && (
-              <div className="px-4 pt-2 border-t border-white/10">
-                <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border-l-2 border-emerald-500">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Reply className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400 text-xs font-medium">
-                        Respondendo a {replyToMessage.direction === 'inbound' ? selectedConversation?.contactName : 'você'}
-                      </span>
-                    </div>
-                    <p className="text-white/60 text-sm truncate">
-                      {(typeof replyToMessage.content === 'string' && replyToMessage.content.trim().length > 0)
-                        ? replyToMessage.content
-                        : '[Mensagem]'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setReplyToMessage(null)}
-                    className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Input */}
-            <div className="p-4 border-t border-white/10 backdrop-blur-sm bg-black/20 relative">
-              {/* Quick Replies Panel */}
-              {showQuickReplies && (
-                <QuickRepliesPanel
-                  onSelect={handleQuickReplySelect}
-                  onClose={() => setShowQuickReplies(false)}
-                />
-              )}
-
-
-              <form onSubmit={handleSendMessage} className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowFileUpload(!showFileUpload)}
-                  className={cn(
-                    'p-2 rounded-lg transition-colors',
-                    showFileUpload
-                      ? 'bg-emerald-500 text-white'
-                      : 'hover:bg-white/10 text-white/60 hover:text-white'
-                  )}
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickReplies(!showQuickReplies)}
-                  className={cn(
-                    'p-2 rounded-lg transition-colors',
-                    showQuickReplies
-                      ? 'bg-emerald-500 text-white'
-                      : 'hover:bg-white/10 text-white/60 hover:text-white'
-                  )}
-                  title="Respostas rápidas (Ctrl+/)"
-                >
-                  <Zap className="w-5 h-5" />
-                </button>
-                <div className="flex-1 relative">
-                  <GlassInput
-                    ref={inputRef}
-                    type="text"
-                    placeholder="Digite sua mensagem..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    className="pr-12"
+              {/* File Upload Panel */}
+              {showFileUpload && (
+                <div className="p-4 border-t border-white/10">
+                  <FileUpload
+                    conversationId={selectedConversation?.id}
+                    onUpload={handleFileUpload}
+                    onCancel={() => setShowFileUpload(false)}
                   />
+                </div>
+              )}
+
+              {/* Typing Indicator */}
+              {selectedConversation && getTypingContact(selectedConversation.id) && (
+                <div className="px-4 pb-2">
+                  <TypingIndicator
+                    contactName={getTypingContact(selectedConversation.id)}
+                  />
+                </div>
+              )}
+
+              {/* Reply Preview */}
+              {replyToMessage && (
+                <div className="px-4 pt-2 border-t border-white/10">
+                  <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border-l-2 border-emerald-500">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Reply className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-400 text-xs font-medium">
+                          Respondendo a {replyToMessage.direction === 'inbound' ? selectedConversation?.contactName : 'você'}
+                        </span>
+                      </div>
+                      <p className="text-white/60 text-sm truncate">
+                        {(typeof replyToMessage.content === 'string' && replyToMessage.content.trim().length > 0)
+                          ? replyToMessage.content
+                          : '[Mensagem]'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setReplyToMessage(null)}
+                      className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Input */}
+              <div className="p-4 border-t border-white/10 backdrop-blur-sm bg-black/20 relative">
+                {/* Quick Replies Panel */}
+                {showQuickReplies && (
+                  <QuickRepliesPanel
+                    onSelect={handleQuickReplySelect}
+                    onClose={() => setShowQuickReplies(false)}
+                  />
+                )}
+
+
+                <form onSubmit={handleSendMessage} className="flex items-center gap-3">
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                    onClick={() => setShowFileUpload(!showFileUpload)}
+                    className={cn(
+                      'p-2 rounded-lg transition-colors',
+                      showFileUpload
+                        ? 'bg-emerald-500 text-white'
+                        : 'hover:bg-white/10 text-white/60 hover:text-white'
+                    )}
                   >
-                    <Smile className="w-5 h-5" />
+                    <Paperclip className="w-5 h-5" />
                   </button>
-                </div>
-                <GlassButton type="submit" className="px-4 py-3" disabled={!newMessage.trim()}>
-                  <Send className="w-5 h-5" />
-                </GlassButton>
-              </form>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickReplies(!showQuickReplies)}
+                    className={cn(
+                      'p-2 rounded-lg transition-colors',
+                      showQuickReplies
+                        ? 'bg-emerald-500 text-white'
+                        : 'hover:bg-white/10 text-white/60 hover:text-white'
+                    )}
+                    title="Respostas rápidas (Ctrl+/)"
+                  >
+                    <Zap className="w-5 h-5" />
+                  </button>
+                  <div className="flex-1 relative">
+                    <GlassInput
+                      ref={inputRef}
+                      type="text"
+                      placeholder="Digite sua mensagem..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="pr-12"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        className={cn(
+                          "text-white/40 hover:text-white/60 transition-colors",
+                          showEmojiPicker && "text-emerald-400"
+                        )}
+                      >
+                        <Smile className="w-5 h-5" />
+                      </button>
+                      {showEmojiPicker && (
+                        <EmojiPicker
+                          onSelect={handleEmojiSelect}
+                          onClose={() => setShowEmojiPicker(false)}
+                          position="top"
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <GlassButton type="submit" className="px-4 py-3" disabled={!newMessage.trim()}>
+                    <Send className="w-5 h-5" />
+                  </GlassButton>
+                </form>
 
-              {/* Typing hint */}
-              <p className="text-white/30 text-xs mt-2 text-center">
-                Ctrl+/ para respostas rápidas • Enter para enviar
-              </p>
+                {/* Typing hint */}
+                <p className="text-white/30 text-xs mt-2 text-center">
+                  Ctrl+/ para respostas rápidas • Enter para enviar
+                </p>
+              </div>
+            </>
+          ) : (
+            /* Empty State */
+            <div className="flex-1 flex flex-col items-center justify-center text-white/50">
+              <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mb-4">
+                <MessageSquare className="w-12 h-12" />
+              </div>
+              <h3 className="text-xl font-medium text-white mb-2">Nenhuma conversa selecionada</h3>
+              <p>Selecione uma conversa para começar a conversar</p>
             </div>
-          </>
-        ) : (
-          /* Empty State */
-          <div className="flex-1 flex flex-col items-center justify-center text-white/50">
-            <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mb-4">
-              <MessageSquare className="w-12 h-12" />
-            </div>
-            <h3 className="text-xl font-medium text-white mb-2">Nenhuma conversa selecionada</h3>
-            <p>Selecione uma conversa para começar a conversar</p>
-          </div>
-        )}
+          )}
         </div>
       </TooltipProvider>
 
