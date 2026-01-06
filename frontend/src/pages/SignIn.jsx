@@ -26,16 +26,6 @@ const SignIn = () => {
     }
   };
 
-  const fillSuperAdmin = () => {
-    setEmail('super@admin.com');
-    setPassword('123456');
-  };
-
-  const fillAdmin = () => {
-    setEmail('admin@minhaempresa.com');
-    setPassword('123456');
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 flex items-center justify-center p-4">
       {/* Decorative elements */}
@@ -102,29 +92,6 @@ const SignIn = () => {
             <ArrowRight className="w-5 h-5" />
           </GlassButton>
         </form>
-
-        {/* Quick access buttons */}
-        <div className="mt-6 pt-6 border-t border-white/10">
-          <p className="text-white/50 text-sm text-center mb-4">Acesso rápido para demonstração</p>
-          <div className="flex gap-3">
-            <GlassButton
-              type="button"
-              variant="secondary"
-              onClick={fillSuperAdmin}
-              className="flex-1 text-sm py-2"
-            >
-              SuperAdmin
-            </GlassButton>
-            <GlassButton
-              type="button"
-              variant="secondary"
-              onClick={fillAdmin}
-              className="flex-1 text-sm py-2"
-            >
-              Admin Tenant
-            </GlassButton>
-          </div>
-        </div>
       </GlassCard>
     </div>
   );
