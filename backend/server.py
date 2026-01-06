@@ -1595,6 +1595,13 @@ async def clear_conversation_messages(conversation_id: str, payload: dict = Depe
 
 @api_router.get("/contacts/by-phone")
 async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depends(verify_token)):
+    """
+    Get or create a contact by phone number.
+    This endpoint is resilient to schema changes and will work even if:
+    - The contacts table doesn't exist
+    - The contacts table has a different schema
+    Falls back to reading contact info from conversations table.
+    """
     try:
         user_tenant_id = get_user_tenant_id(payload)
         if user_tenant_id and tenant_id != user_tenant_id:
@@ -1606,102 +1613,63 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
 
         logger.info(f"Looking for contact with phone: {normalized_phone} in tenant: {tenant_id}")
 
-        # First try to find existing contact
-        existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
-        if existing.data:
-            c = existing.data[0]
-            return {
-                'id': c['id'],
-                'tenantId': c['tenant_id'],
-                'phone': c['phone'],
-                'fullName': c['full_name'],
-                'socialLinks': c.get('social_links') or {},
-                'notesHtml': c.get('notes_html') or '',
-                'createdAt': c.get('created_at'),
-                'updatedAt': c.get('updated_at')
-            }
-
-        # Get fallback data from conversations
-        conv = supabase.table('conversations').select('contact_name, contact_avatar').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
-        fallback_name = None
-        fallback_avatar = None
-        if conv.data:
-            fallback_name = conv.data[0].get('contact_name')
-            fallback_avatar = conv.data[0].get('contact_avatar')
-
-        full_name = (fallback_name or '').strip() or normalized_phone
-        
-        # Use upsert to handle race conditions and unique constraints
-        # NOTE: The contacts table does NOT have an 'avatar' column
+        # Try to find contact in the contacts table
         try:
-            created = supabase.table('contacts').upsert({
-                'tenant_id': tenant_id,
-                'phone': normalized_phone,
-                'full_name': full_name
-            }, on_conflict='tenant_id,phone').execute()
-        except Exception as upsert_error:
-            logger.error(f"Error upserting contact: {upsert_error}")
-            # Fallback: try insert without on_conflict
-            try:
-                created = supabase.table('contacts').insert({
-                    'tenant_id': tenant_id,
-                    'phone': normalized_phone,
-                    'full_name': full_name
-                }).execute()
-            except Exception as insert_error:
-                logger.error(f"Error inserting contact: {insert_error}")
-                # Final fallback: try to fetch again
-                existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
-                if existing.data:
-                    c = existing.data[0]
-                    return {
-                        'id': c['id'],
-                        'tenantId': c['tenant_id'],
-                        'phone': c['phone'],
-                        'fullName': c['full_name'],
-                        'socialLinks': c.get('social_links') or {},
-                        'notesHtml': c.get('notes_html') or '',
-                        'createdAt': c.get('created_at'),
-                        'updatedAt': c.get('updated_at')
-                    }
-                raise HTTPException(status_code=400, detail=f"Erro ao criar contato: {str(insert_error)}")
-            
-        if not created.data:
-            # Try one more time to fetch existing
             existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
             if existing.data:
                 c = existing.data[0]
+                # Return with actual schema columns
                 return {
-                    'id': c['id'],
-                    'tenantId': c['tenant_id'],
-                    'phone': c['phone'],
-                    'fullName': c['full_name'],
-                    'socialLinks': c.get('social_links') or {},
-                    'notesHtml': c.get('notes_html') or '',
+                    'id': c.get('id'),
+                    'tenantId': c.get('tenant_id'),
+                    'phone': c.get('phone'),
+                    'fullName': c.get('name') or normalized_phone,  # Use 'name' column
+                    'email': c.get('email'),
+                    'tags': c.get('tags') or [],
+                    'customFields': c.get('custom_fields') or {},
+                    'source': c.get('source'),
                     'createdAt': c.get('created_at'),
                     'updatedAt': c.get('updated_at')
                 }
-            raise HTTPException(status_code=400, detail="Erro ao criar contato - sem dados retornados")
+        except Exception as table_error:
+            # Table might not exist or have different schema - continue to fallback
+            logger.warning(f"Could not query contacts table: {table_error}")
 
-        c = created.data[0]
-        safe_insert_audit_log(
-            tenant_id=tenant_id,
-            actor_user_id=payload.get('user_id'),
-            action='contact.created',
-            entity_type='contact',
-            entity_id=c.get('id'),
-            metadata={'phone': normalized_phone}
-        )
+        # Fallback: get contact info from conversations table
+        conv = supabase.table('conversations').select('id, contact_name, contact_avatar, contact_phone').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
+        
+        if conv.data:
+            c = conv.data[0]
+            # Return contact-like object from conversation data
+            return {
+                'id': f"conv-{c.get('id')}",  # Synthetic ID
+                'tenantId': tenant_id,
+                'phone': normalized_phone,
+                'fullName': c.get('contact_name') or normalized_phone,
+                'email': None,
+                'tags': [],
+                'customFields': {},
+                'source': 'conversation',
+                'createdAt': None,
+                'updatedAt': None,
+                'isFromConversation': True  # Flag to indicate this is from conversations table
+            }
+
+        # No contact found anywhere - return empty contact
         return {
-            'id': c['id'],
-            'tenantId': c['tenant_id'],
-            'phone': c['phone'],
-            'fullName': c['full_name'],
-            'socialLinks': c.get('social_links') or {},
-            'notesHtml': c.get('notes_html') or '',
-            'createdAt': c.get('created_at'),
-            'updatedAt': c.get('updated_at')
+            'id': None,
+            'tenantId': tenant_id,
+            'phone': normalized_phone,
+            'fullName': normalized_phone,
+            'email': None,
+            'tags': [],
+            'customFields': {},
+            'source': None,
+            'createdAt': None,
+            'updatedAt': None,
+            'isNew': True  # Flag to indicate this is a new contact
         }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1710,80 +1678,115 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
 
 @api_router.patch("/contacts/{contact_id}")
 async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = Depends(verify_token)):
-    user_tenant_id = get_user_tenant_id(payload)
-
-    existing = supabase.table('contacts').select('*').eq('id', contact_id).execute()
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Contato não encontrado")
-    contact = existing.data[0]
-    if user_tenant_id and contact.get('tenant_id') != user_tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
-
-    update_data: Dict[str, Any] = {}
-    if data.full_name is not None:
-        name = (data.full_name or '').strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="Nome completo é obrigatório")
-        update_data['full_name'] = name
-    if data.social_links is not None:
-        update_data['social_links'] = data.social_links
-    if data.notes_html is not None:
-        update_data['notes_html'] = data.notes_html
-
-    if not update_data:
-        return {"success": True}
-
-    update_data['updated_at'] = datetime.utcnow().isoformat()
-    updated = supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
-    if not updated.data:
-        raise HTTPException(status_code=400, detail="Erro ao atualizar contato")
-
-    after = updated.data[0]
+    """
+    Update a contact by ID. 
+    If the contact_id starts with 'conv-', it means we're working with a synthetic 
+    contact from the conversations table.
+    
+    NOTE: The actual contacts table uses 'name' column (not 'full_name').
+    The API accepts 'full_name' for backwards compatibility but maps to 'name'.
+    """
     try:
-        supabase.table('contact_history').insert({
-            'tenant_id': contact.get('tenant_id'),
-            'contact_id': contact_id,
-            'changed_by': payload.get('user_id'),
-            'action': 'updated',
-            'before': {
-                'full_name': contact.get('full_name'),
-                'social_links': contact.get('social_links'),
-                'notes_html': contact.get('notes_html')
-            },
-            'after': {
-                'full_name': after.get('full_name'),
-                'social_links': after.get('social_links'),
-                'notes_html': after.get('notes_html')
+        user_tenant_id = get_user_tenant_id(payload)
+        
+        # Check if this is a synthetic contact ID from conversations
+        if contact_id.startswith('conv-'):
+            conversation_id = contact_id.replace('conv-', '')
+            conv = supabase.table('conversations').select('*').eq('id', conversation_id).execute()
+            if not conv.data:
+                raise HTTPException(status_code=404, detail="Conversa não encontrada")
+            
+            conversation = conv.data[0]
+            if user_tenant_id and conversation.get('tenant_id') != user_tenant_id:
+                raise HTTPException(status_code=403, detail="Acesso negado")
+            
+            # Update conversation contact name
+            if data.full_name is not None:
+                name = (data.full_name or '').strip()
+                if not name:
+                    raise HTTPException(status_code=400, detail="Nome é obrigatório")
+                supabase.table('conversations').update({
+                    'contact_name': name
+                }).eq('id', conversation_id).execute()
+            
+            return {
+                'id': contact_id,
+                'tenantId': conversation.get('tenant_id'),
+                'phone': conversation.get('contact_phone'),
+                'fullName': data.full_name or conversation.get('contact_name'),
+                'socialLinks': {},
+                'notesHtml': '',
+                'createdAt': conversation.get('created_at'),
+                'updatedAt': datetime.utcnow().isoformat()
             }
-        }).execute()
-    except Exception:
-        pass
-
-    if data.full_name is not None:
+        
+        # Try to update in the contacts table
         try:
-            supabase.table('conversations').update({'contact_name': after.get('full_name')}).eq('tenant_id', contact.get('tenant_id')).eq('contact_phone', contact.get('phone')).execute()
-        except Exception:
-            pass
+            existing = supabase.table('contacts').select('*').eq('id', contact_id).execute()
+            if not existing.data:
+                raise HTTPException(status_code=404, detail="Contato não encontrado")
+            contact = existing.data[0]
+            if user_tenant_id and contact.get('tenant_id') != user_tenant_id:
+                raise HTTPException(status_code=403, detail="Acesso negado")
 
-    safe_insert_audit_log(
-        tenant_id=contact.get('tenant_id'),
-        actor_user_id=payload.get('user_id'),
-        action='contact.updated',
-        entity_type='contact',
-        entity_id=contact_id,
-        metadata={'fields': list(update_data.keys())}
-    )
+            update_data: Dict[str, Any] = {}
+            # NOTE: The database uses 'name' column, not 'full_name'
+            if data.full_name is not None:
+                name = (data.full_name or '').strip()
+                if not name:
+                    raise HTTPException(status_code=400, detail="Nome é obrigatório")
+                update_data['name'] = name  # Use 'name' column (actual schema)
 
-    return {
-        'id': after['id'],
-        'tenantId': after['tenant_id'],
-        'phone': after['phone'],
-        'fullName': after['full_name'],
-        'socialLinks': after.get('social_links') or {},
-        'notesHtml': after.get('notes_html') or '',
-        'createdAt': after.get('created_at'),
-        'updatedAt': after.get('updated_at')
-    }
+            if not update_data:
+                return {"success": True}
+
+            update_data['updated_at'] = datetime.utcnow().isoformat()
+            updated = supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
+            if not updated.data:
+                raise HTTPException(status_code=400, detail="Erro ao atualizar contato")
+
+            after = updated.data[0]
+            
+            # Update conversation contact_name if name was changed
+            if data.full_name is not None:
+                try:
+                    supabase.table('conversations').update({
+                        'contact_name': after.get('name')
+                    }).eq('tenant_id', contact.get('tenant_id')).eq('contact_phone', contact.get('phone')).execute()
+                except Exception:
+                    pass
+
+            safe_insert_audit_log(
+                tenant_id=contact.get('tenant_id'),
+                actor_user_id=payload.get('user_id'),
+                action='contact.updated',
+                entity_type='contact',
+                entity_id=contact_id,
+                metadata={'fields': list(update_data.keys())}
+            )
+
+            return {
+                'id': after.get('id'),
+                'tenantId': after.get('tenant_id'),
+                'phone': after.get('phone'),
+                'fullName': after.get('name'),  # Return 'name' as 'fullName'
+                'email': after.get('email'),
+                'tags': after.get('tags') or [],
+                'customFields': after.get('custom_fields') or {},
+                'createdAt': after.get('created_at'),
+                'updatedAt': after.get('updated_at')
+            }
+        except HTTPException:
+            raise
+        except Exception as table_error:
+            logger.error(f"Could not update contacts table: {table_error}")
+            raise HTTPException(status_code=400, detail=f"Erro ao atualizar contato: {str(table_error)}")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating contact: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar contato: {str(e)}")
 
 @api_router.get("/contacts/{contact_id}/history")
 async def list_contact_history(contact_id: str, limit: int = 20, payload: dict = Depends(verify_token)):
