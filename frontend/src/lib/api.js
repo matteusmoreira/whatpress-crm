@@ -209,6 +209,14 @@ export const ConnectionsAPI = {
 
 // Conversations API
 export const ConversationsAPI = {
+  async initiate(phone, contactId = null) {
+    const response = await apiClient.post('/conversations/initiate', {
+      phone,
+      contact_id: contactId
+    });
+    return response.data;
+  },
+
   async list(tenantId, filters = {}, options = {}) {
     const params = { tenant_id: tenantId, ...filters };
     if (typeof options?.limit === 'number') params.limit = options.limit;

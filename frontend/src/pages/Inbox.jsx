@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   Filter,
@@ -347,6 +348,7 @@ const Inbox = () => {
     deleteMessage
   } = useAppStore();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [selectedConnectionFilter, setSelectedConnectionFilter] = useState('all');
@@ -403,6 +405,51 @@ const Inbox = () => {
     loadAgents();
     loadLabels();
   }, [tenantId, fetchConversations, fetchConnections, loadAgents, loadLabels]);
+
+  // Handle URL search parameter to initiate conversation
+  useEffect(() => {
+    const searchParam = searchParams.get('search');
+    if (!searchParam || conversationsLoading) return;
+
+    const phone = decodeURIComponent(searchParam).replace(/\D/g, ''); // Simple cleanup
+    if (!phone) return;
+
+    // Check if conversation already exists
+    const existing = conversations.find(c =>
+      c.contactPhone?.includes(phone) ||
+      c.contactPhone?.replace(/\D/g, '') === phone
+    );
+
+    if (existing) {
+      setSelectedConversation(existing.id);
+      setSearchQuery(phone);
+      // Clear param to avoid re-triggering
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('search');
+      setSearchParams(newParams);
+    } else {
+      // Create new conversation
+      const initiate = async () => {
+        try {
+          const newConv = await ConversationsAPI.initiate(phone);
+          // Refresh conversations to include the new one (or optimize by adding to store directly if possible)
+          // For now, re-fetching or simulating addition:
+          await fetchConversations(tenantId);
+          setSelectedConversation(newConv.id);
+          setSearchQuery(phone);
+
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('search');
+          setSearchParams(newParams);
+        } catch (error) {
+          console.error("Error initiating conversation:", error);
+          toast.error("Erro ao iniciar conversa");
+        }
+      };
+
+      initiate();
+    }
+  }, [searchParams, conversations, conversationsLoading, tenantId, fetchConversations, setSelectedConversation, setSearchParams]);
 
   // Fallback: polling para atualizar conversas/mensagens quando realtime falhar
   useEffect(() => {

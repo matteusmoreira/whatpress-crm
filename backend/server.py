@@ -217,6 +217,10 @@ class ConnectionStatusUpdate(BaseModel):
 class ConversationStatusUpdate(BaseModel):
     status: str
 
+class InitiateConversation(BaseModel):
+    phone: str
+    contact_id: Optional[str] = None
+
 class MessageCreate(BaseModel):
     conversation_id: str
     content: str
@@ -1401,6 +1405,96 @@ async def update_conversation_status(conversation_id: str, status_update: Conver
     if not result.data:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")
     
+    c = result.data[0]
+    return {
+        'id': c['id'],
+        'tenantId': c['tenant_id'],
+        'connectionId': c['connection_id'],
+        'contactPhone': c['contact_phone'],
+        'contactName': c['contact_name'],
+        'status': c['status'],
+        'unreadCount': c['unread_count']
+    }
+
+@api_router.post("/conversations/initiate")
+async def initiate_conversation(data: InitiateConversation, payload: dict = Depends(verify_token)):
+    """Initiate a conversation with a contact"""
+    tenant_id = get_user_tenant_id(payload)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant não identificado")
+
+    phone = (data.phone or '').strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Telefone obrigatório")
+
+    # Check if conversation already exists
+    query = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('contact_phone', phone)
+    result = query.execute()
+    
+    if result.data:
+        # Return existing conversation
+        c = result.data[0]
+        return {
+            'id': c['id'],
+            'tenantId': c['tenant_id'],
+            'connectionId': c['connection_id'],
+            'contactPhone': c['contact_phone'],
+            'contactName': c['contact_name'],
+            'status': c['status'],
+            'unreadCount': c['unread_count']
+        }
+
+    # Need to create a new conversation. 
+    # Must find a valid connection (Evolution instance) to assign to this conversation.
+    # We'll pick the first connected Evolution instance for this tenant.
+    conn_result = supabase.table('connections').select('*').eq('tenant_id', tenant_id).eq('provider', 'evolution').eq('status', 'connected').execute()
+    
+    if not conn_result.data:
+        # Fallback to any connection
+        conn_result = supabase.table('connections').select('*').eq('tenant_id', tenant_id).limit(1).execute()
+        
+    if not conn_result.data:
+        raise HTTPException(status_code=400, detail="Nenhuma conexão disponível para iniciar conversa")
+        
+    connection = conn_result.data[0]
+    
+    # Try to get profile picture and name
+    avatar_url = None
+    contact_name = phone
+    
+    # If contact_id provided, look up name
+    if data.contact_id:
+        try:
+            contact = supabase.table('contacts').select('name').eq('id', data.contact_id).execute()
+            if contact.data:
+                contact_name = contact.data[0]['name']
+        except:
+            pass
+            
+    try:
+        if connection['provider'] == 'evolution':
+            profile_data = await evolution_api.get_profile_picture(connection['instance_name'], phone)
+            avatar_url = extract_profile_picture_url(profile_data)
+    except:
+        pass
+
+    conv_data = {
+        'tenant_id': tenant_id,
+        'connection_id': connection['id'],
+        'contact_phone': phone,
+        'contact_name': contact_name,
+        'contact_avatar': avatar_url,
+        'status': 'open',
+        'unread_count': 0,
+        'last_message_at': datetime.utcnow().isoformat(),
+        'last_message_preview': ''
+    }
+    
+    result = supabase.table('conversations').insert(conv_data).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Erro ao criar conversa")
+        
     c = result.data[0]
     return {
         'id': c['id'],
