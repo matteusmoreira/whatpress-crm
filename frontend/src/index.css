@@ -294,10 +294,6 @@ code {
 }
 
 /* Light: Message bubbles */
-.light .bg-emerald-500 {
-  @apply bg-emerald-500;
-}
-
 .light .backdrop-blur-sm.bg-black\/20 {
   @apply bg-slate-100/90;
 }
