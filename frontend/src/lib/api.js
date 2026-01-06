@@ -400,12 +400,36 @@ export const AutoMessagesAPI = {
   },
 
   async create(tenantId, data) {
-    const response = await apiClient.post('/auto-messages', data, { params: { tenant_id: tenantId } });
+    // Converter camelCase para snake_case para o backend
+    const payload = {
+      type: data.type,
+      name: data.name,
+      message: data.message,
+      trigger_keyword: data.triggerKeyword || null,
+      is_active: data.isActive ?? true,
+      schedule_start: data.scheduleStart || null,
+      schedule_end: data.scheduleEnd || null,
+      schedule_days: data.scheduleDays || null,
+      delay_seconds: data.delaySeconds || 0
+    };
+    const response = await apiClient.post('/auto-messages', payload, { params: { tenant_id: tenantId } });
     return response.data;
   },
 
   async update(messageId, data) {
-    const response = await apiClient.put(`/auto-messages/${messageId}`, data);
+    // Converter camelCase para snake_case para o backend
+    const payload = {
+      type: data.type,
+      name: data.name,
+      message: data.message,
+      trigger_keyword: data.triggerKeyword || null,
+      is_active: data.isActive ?? true,
+      schedule_start: data.scheduleStart || null,
+      schedule_end: data.scheduleEnd || null,
+      schedule_days: data.scheduleDays || null,
+      delay_seconds: data.delaySeconds || 0
+    };
+    const response = await apiClient.put(`/auto-messages/${messageId}`, payload);
     return response.data;
   },
 

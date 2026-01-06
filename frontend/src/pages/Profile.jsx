@@ -369,6 +369,28 @@ const Profile = () => {
                     />
                   </button>
                 </div>
+
+                {/* Preview da Assinatura */}
+                {formData.signatureEnabled && (
+                  <div className="md:col-span-2 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                    <p className="text-white/70 text-sm mb-2">📝 Preview da assinatura nas mensagens:</p>
+                    <div className="p-3 rounded-lg bg-black/20">
+                      <p className="text-white">
+                        <strong>*{formData.name || 'Seu Nome'}*</strong>
+                        {((formData.signatureIncludeTitle && formData.jobTitle) ||
+                          (formData.signatureIncludeDepartment && formData.department)) && (
+                            <span className="text-white/70">
+                              {' '}({[
+                                formData.signatureIncludeTitle && formData.jobTitle,
+                                formData.signatureIncludeDepartment && formData.department
+                              ].filter(Boolean).join(' / ')})
+                            </span>
+                          )}
+                      </p>
+                      <p className="text-white/50 text-sm mt-1 italic">Sua mensagem aqui...</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

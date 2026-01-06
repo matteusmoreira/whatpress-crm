@@ -6,53 +6,55 @@ import { cn } from '../lib/utils';
 
 const ThemeCard = ({ themeKey, themeData, isSelected, onSelect }) => {
     const { theme } = useTheme();
+    const isDark = theme === 'dark' || theme === 'black' || theme === 'purple';
 
     return (
         <button
             onClick={() => onSelect(themeKey)}
             className={cn(
-                "relative p-6 rounded-2xl text-left transition-all duration-300 group",
-                "backdrop-blur-xl border",
+                "relative p-6 rounded-2xl text-left transition-all duration-300 group overflow-hidden",
+                "backdrop-blur-xl border-2",
                 isSelected
-                    ? theme === 'dark' || theme === 'black' || theme === 'purple'
-                        ? "bg-white/20 border-emerald-500 ring-2 ring-emerald-500/50"
-                        : "bg-slate-100 border-emerald-500 ring-2 ring-emerald-500/50"
-                    : theme === 'dark' || theme === 'black' || theme === 'purple'
-                        ? "bg-white/10 border-white/20 hover:bg-white/15"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    ? isDark
+                        ? "bg-white/20 border-emerald-400 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20"
+                        : "bg-white border-emerald-500 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/30"
+                    : isDark
+                        ? "bg-white/10 border-white/20 hover:bg-white/15 hover:border-white/30"
+                        : "bg-white/90 border-slate-200 hover:bg-white hover:border-slate-300 shadow-sm hover:shadow-md"
             )}
         >
-            {/* Preview gradient */}
+            {/* Preview gradient - mais alto e com mais detalhes */}
             <div className={cn(
-                "w-full h-24 rounded-xl mb-4 bg-gradient-to-br shadow-lg",
-                themeData.preview
+                "w-full h-28 rounded-xl mb-4 bg-gradient-to-br shadow-lg overflow-hidden",
+                themeData.preview,
+                themeKey === 'light' && 'border border-slate-200'
             )}>
-                <div className="w-full h-full rounded-xl backdrop-blur-sm bg-black/10 flex items-center justify-center">
-                    {themeKey === 'dark' && <Moon className="w-8 h-8 text-white/80" />}
-                    {themeKey === 'light' && <Sun className="w-8 h-8 text-yellow-500" />}
-                    {themeKey === 'black' && <Sparkles className="w-8 h-8 text-white/80" />}
-                    {themeKey === 'purple' && <Palette className="w-8 h-8 text-purple-300" />}
+                <div className="w-full h-full backdrop-blur-sm bg-black/5 flex items-center justify-center">
+                    {themeKey === 'dark' && <Moon className="w-10 h-10 text-white drop-shadow-lg" />}
+                    {themeKey === 'light' && <Sun className="w-10 h-10 text-amber-500 drop-shadow-lg" />}
+                    {themeKey === 'black' && <Sparkles className="w-10 h-10 text-white drop-shadow-lg" />}
+                    {themeKey === 'purple' && <Palette className="w-10 h-10 text-purple-200 drop-shadow-lg" />}
                 </div>
             </div>
 
             <h3 className={cn(
-                "text-lg font-semibold mb-1",
-                theme === 'dark' || theme === 'black' || theme === 'purple' ? 'text-white' : 'text-slate-800'
+                "text-lg font-bold mb-1",
+                isDark ? 'text-white' : 'text-slate-800'
             )}>
                 {themeData.name}
             </h3>
 
             <p className={cn(
-                "text-sm",
-                theme === 'dark' || theme === 'black' || theme === 'purple' ? 'text-white/60' : 'text-slate-500'
+                "text-sm leading-relaxed",
+                isDark ? 'text-white/60' : 'text-slate-500'
             )}>
                 {themeData.description}
             </p>
 
-            {/* Selected indicator */}
+            {/* Selected indicator - mais visível */}
             {isSelected && (
-                <div className="absolute top-3 right-3 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" />
+                <div className="absolute top-3 right-3 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/50">
+                    <Check className="w-4 h-4 text-white" strokeWidth={3} />
                 </div>
             )}
         </button>

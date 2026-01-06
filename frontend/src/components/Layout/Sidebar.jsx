@@ -101,7 +101,13 @@ const Sidebar = () => {
           sidebarCollapsed ? '-translate-x-full lg:translate-x-0 lg:w-20' : 'translate-x-0',
           theme === 'dark'
             ? 'bg-gradient-to-b from-emerald-900/90 to-emerald-950/95 border-white/10'
-            : 'bg-gradient-to-b from-white/90 to-slate-50/95 border-slate-200/50'
+            : theme === 'light'
+              ? 'bg-gradient-to-b from-white/95 to-slate-50/98 border-slate-200 shadow-lg'
+              : theme === 'black'
+                ? 'bg-gradient-to-b from-zinc-950 to-black border-white/5'
+                : theme === 'purple'
+                  ? 'bg-gradient-to-b from-purple-950/90 to-indigo-950/95 border-purple-500/20'
+                  : 'bg-gradient-to-b from-emerald-900/90 to-emerald-950/95 border-white/10'
         )}
       >
         {/* Logo */}
@@ -109,26 +115,35 @@ const Sidebar = () => {
           "p-6 border-b",
           theme === 'dark' ? 'border-white/10' : 'border-slate-200/50'
         )}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                <MessageSquare className="w-6 h-6 text-white" />
-              </div>
-              {!sidebarCollapsed && (
+          <div className={cn(
+            "flex items-center gap-3",
+            sidebarCollapsed ? "justify-center" : "justify-between"
+          )}>
+            {!sidebarCollapsed && (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                  <MessageSquare className="w-6 h-6 text-white" />
+                </div>
                 <span className={cn(
                   "text-xl font-bold",
                   theme === 'dark' ? 'text-white' : 'text-slate-800'
                 )}>WhatsApp CRM</span>
-              )}
-            </div>
-            {/* Collapse button - visible on desktop */}
+              </div>
+            )}
+            {sidebarCollapsed && (
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <MessageSquare className="w-6 h-6 text-white" />
+              </div>
+            )}
+            {/* Collapse/Expand button - always visible on desktop */}
             <button
               onClick={toggleSidebar}
               className={cn(
                 "hidden lg:flex p-2 rounded-lg transition-all",
                 theme === 'dark'
                   ? 'hover:bg-white/10 text-white/60 hover:text-white'
-                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+                  : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800',
+                sidebarCollapsed && "absolute right-2 top-6"
               )}
               title={sidebarCollapsed ? "Expandir menu" : "Retrair menu"}
             >

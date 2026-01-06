@@ -129,7 +129,9 @@ code {
   }
 }
 
-/* Light theme overrides - Improved readability */
+/* ============================================
+   TEMA CLARO - Completamente Reformulado
+   ============================================ */
 .light {
   --bg-primary: 248 250 252;
   --bg-secondary: 241 245 249;
@@ -138,106 +140,113 @@ code {
   --border-color: 203 213 225;
 }
 
+/* Light: Glass Card com estilo sólido */
 .light .glass-card {
-  @apply bg-gradient-to-br from-white/95 to-slate-50/90 border-slate-300/60 shadow-slate-300/40;
+  @apply bg-white/95 border-slate-200 shadow-lg shadow-slate-200/50;
+  backdrop-filter: blur(8px);
 }
 
 .light .glass-input {
-  @apply bg-white/90 border-slate-300 text-slate-900 placeholder:text-slate-400;
+  @apply bg-white border-slate-300 text-slate-900 placeholder:text-slate-400;
 }
 
-/* Theme-aware background */
-.dark body {
-  background: linear-gradient(135deg, #064e3b 0%, #0d3d30 50%, #042f2e 100%);
-}
-
+/* Light: Background principal */
 .light body {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%);
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 30%, #a7f3d0 70%, #6ee7b7 100%);
 }
 
-/* Black theme (AMOLED) */
-.black body {
-  background: linear-gradient(135deg, #000000 0%, #0a0a0a 50%, #000000 100%);
-}
-
-.black .glass-card {
-  @apply bg-gradient-to-br from-white/5 to-white/[0.02] border-white/10 shadow-black/50;
-}
-
-.black .glass-input {
-  @apply bg-white/5 border-white/10 text-white placeholder:text-white/40;
-}
-
-/* Purple theme */
-.purple body {
-  background: linear-gradient(135deg, #581c87 0%, #4c1d95 50%, #312e81 100%);
-}
-
-.purple .glass-card {
-  @apply bg-gradient-to-br from-white/10 to-purple-500/10 border-purple-300/20 shadow-purple-500/20;
-}
-
-.purple .glass-input {
-  @apply bg-white/10 border-purple-300/20 text-white placeholder:text-white/50;
-}
-
-/* Theme-aware text colors */
+/* Light: Textos - cores escuras para contraste */
 .light .text-white {
   @apply text-slate-800;
 }
 
 .light .text-white\/40,
-.light .text-white\/50,
-.light .text-white\/60 {
+.light .text-white\/50 {
   @apply text-slate-500;
 }
 
-.light .text-white\/70,
-.light .text-white\/80 {
+.light .text-white\/60,
+.light .text-white\/70 {
+  @apply text-slate-600;
+}
+
+.light .text-white\/80,
+.light .text-white\/90 {
   @apply text-slate-700;
 }
 
-/* Theme-aware backgrounds for glassmorphism */
-.light .bg-white\/5,
+/* Light: Backgrounds transparentes -> sólidos */
+.light .bg-white\/5 {
+  @apply bg-slate-100;
+}
+
 .light .bg-white\/10 {
-  @apply bg-slate-100/90;
+  @apply bg-slate-100;
+}
+
+.light .bg-white\/15 {
+  @apply bg-slate-150;
+  background-color: rgb(241 245 249);
 }
 
 .light .bg-white\/20 {
-  @apply bg-slate-200/90;
+  @apply bg-slate-200;
 }
 
 .light .bg-black\/20 {
-  @apply bg-slate-100/80;
+  @apply bg-slate-100;
 }
 
-/* Theme-aware borders */
+/* Light: Borders visíveis */
+.light .border-white\/5,
 .light .border-white\/10,
 .light .border-white\/20 {
   @apply border-slate-300;
 }
 
-/* Theme-aware hover states */
+/* Light: Hover states */
+.light .hover\:bg-white\/5:hover {
+  @apply bg-slate-150;
+  background-color: rgb(241 245 249);
+}
+
 .light .hover\:bg-white\/10:hover {
-  @apply bg-slate-200/90;
+  @apply bg-slate-200;
 }
 
 .light .hover\:bg-white\/20:hover {
-  @apply bg-slate-300/90;
+  @apply bg-slate-300;
 }
 
-/* Theme-aware emerald elements */
-.light .bg-emerald-900\/95,
-.light .bg-emerald-900 {
-  @apply bg-white/95;
+/* Light: Emerald elements */
+.light .bg-emerald-900,
+.light .bg-emerald-900\/95 {
+  @apply bg-white;
 }
 
+.light .bg-emerald-950\/50,
+.light .bg-emerald-950\/95 {
+  @apply bg-slate-50;
+}
+
+.light .from-emerald-900,
 .light .from-emerald-900\/90,
-.light .from-emerald-950\/95,
-.light .to-emerald-950\/95 {
-  @apply from-white/95 to-slate-50/95;
+.light .from-emerald-950,
+.light .from-emerald-950\/50,
+.light .from-emerald-950\/95 {
+  --tw-gradient-from: rgb(248 250 252);
 }
 
+.light .to-emerald-950,
+.light .to-emerald-950\/50,
+.light .to-emerald-950\/95,
+.light .to-teal-900,
+.light .to-teal-950,
+.light .to-teal-950\/50 {
+  --tw-gradient-to: rgb(241 245 249);
+}
+
+/* Light: Emerald accent colors */
 .light .bg-emerald-500\/20 {
   @apply bg-emerald-100;
 }
@@ -246,7 +255,7 @@ code {
   @apply bg-emerald-200;
 }
 
-/* Theme-aware status colors */
+/* Light: Status colors - mais vibrantes */
 .light .text-emerald-400 {
   @apply text-emerald-600;
 }
@@ -267,57 +276,247 @@ code {
   @apply text-red-600;
 }
 
-/* Light mode dropdown menus */
+/* Light: Dropdown menus */
 .light .backdrop-blur-xl.bg-emerald-900\/95 {
-  @apply bg-white/95 border-slate-300;
+  @apply bg-white border-slate-200 shadow-xl;
 }
 
-/* Purple theme adjustments */
+/* Light: Inbox specific */
+.light .bg-gradient-to-br.from-emerald-950\/50.to-teal-950\/50 {
+  background: linear-gradient(135deg, rgb(248 250 252) 0%, rgb(241 245 249) 100%);
+}
+
+/* Light: Inputs and selects */
+.light select {
+  @apply bg-white border-slate-300 text-slate-800;
+}
+
+.light select option {
+  @apply bg-white text-slate-800;
+}
+
+/* Light: Message bubbles */
+.light .bg-emerald-500 {
+  @apply bg-emerald-500;
+}
+
+.light .backdrop-blur-sm.bg-black\/20 {
+  @apply bg-slate-100/90;
+}
+
+/* ============================================
+   TEMA ESCURO (Padrão) - Refinamentos
+   ============================================ */
+.dark body {
+  background: linear-gradient(135deg, #064e3b 0%, #0d3d30 50%, #042f2e 100%);
+}
+
+.dark .glass-card {
+  @apply bg-gradient-to-br from-white/10 to-white/5 border-white/15 shadow-emerald-500/20;
+}
+
+/* ============================================
+   TEMA PRETO (AMOLED) - Preto Puro
+   ============================================ */
+.black body {
+  background: #000000;
+}
+
+.black .glass-card {
+  @apply bg-zinc-950/90 border-white/10 shadow-black;
+}
+
+.black .glass-input {
+  @apply bg-zinc-900 border-white/10 text-white placeholder:text-white/40;
+}
+
+/* Black: Emerald overrides */
+.black .bg-emerald-900,
+.black .bg-emerald-900\/95 {
+  @apply bg-zinc-950;
+}
+
+.black .bg-emerald-950,
+.black .bg-emerald-950\/50,
+.black .bg-emerald-950\/95 {
+  background-color: #000000;
+}
+
+.black .from-emerald-900,
+.black .from-emerald-900\/90,
+.black .from-emerald-950,
+.black .from-emerald-950\/50,
+.black .from-emerald-950\/95 {
+  --tw-gradient-from: #000000;
+}
+
+.black .to-emerald-950,
+.black .to-emerald-950\/50,
+.black .to-emerald-950\/95,
+.black .to-teal-900,
+.black .to-teal-950,
+.black .to-teal-950\/50 {
+  --tw-gradient-to: #09090b;
+}
+
+/* Black: Sidebar */
+.black .bg-gradient-to-b.from-emerald-900\/90.to-emerald-950\/95 {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, #000000 100%);
+}
+
+/* Black: Inbox area */
+.black .bg-gradient-to-br.from-emerald-950\/50.to-teal-950\/50 {
+  background: #000000;
+}
+
+/* Black: Backgrounds */
+.black .bg-black\/20 {
+  @apply bg-zinc-950;
+}
+
+.black .bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.black .bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Black: Selects */
+.black select option {
+  @apply bg-zinc-950;
+}
+
+/* ============================================
+   TEMA ROXO - Gradiente Premium
+   ============================================ */
+.purple body {
+  background: linear-gradient(135deg, #581c87 0%, #4c1d95 35%, #312e81 70%, #1e1b4b 100%);
+}
+
+.purple .glass-card {
+  @apply bg-gradient-to-br from-purple-900/30 to-indigo-900/20 border-purple-400/20 shadow-purple-500/20;
+}
+
+.purple .glass-input {
+  @apply bg-purple-900/30 border-purple-400/20 text-white placeholder:text-purple-200/50;
+}
+
+/* Purple: Emerald -> Purple transformations */
 .purple .bg-emerald-500 {
   @apply bg-purple-500;
+}
+
+.purple .bg-emerald-600 {
+  @apply bg-purple-600;
 }
 
 .purple .bg-emerald-500\/20 {
   @apply bg-purple-500/20;
 }
 
+.purple .bg-emerald-500\/30 {
+  @apply bg-purple-500/30;
+}
+
 .purple .text-emerald-400 {
   @apply text-purple-300;
+}
+
+.purple .text-emerald-500 {
+  @apply text-purple-400;
+}
+
+.purple .text-emerald-600 {
+  @apply text-purple-500;
+}
+
+.purple .border-emerald-500 {
+  @apply border-purple-500;
+}
+
+.purple .border-emerald-500\/50 {
+  @apply border-purple-500/50;
+}
+
+.purple .shadow-emerald-500\/10 {
+  @apply shadow-purple-500/10;
+}
+
+.purple .shadow-emerald-500\/20 {
+  @apply shadow-purple-500/20;
 }
 
 .purple .shadow-emerald-500\/30 {
   @apply shadow-purple-500/30;
 }
 
-.purple .hover\:bg-emerald-600:hover {
-  @apply hover:bg-purple-600;
-}
-
 .purple .ring-emerald-500\/50 {
   @apply ring-purple-500/50;
 }
 
-/* Black theme adjustments */
-.black .bg-emerald-900,
-.black .bg-emerald-900\/95 {
-  @apply bg-zinc-900/95;
+.purple .focus\:ring-emerald-500\/50:focus {
+  --tw-ring-color: rgb(168 85 247 / 0.5);
 }
 
-.black .from-emerald-900,
-.black .from-emerald-900\/90,
-.black .from-emerald-950,
-.black .from-emerald-950\/50 {
-  @apply from-black;
+.purple .hover\:bg-emerald-600:hover {
+  @apply hover:bg-purple-600;
 }
 
-.black .to-emerald-950,
-.black .to-emerald-950\/95,
-.black .to-teal-900,
-.black .to-teal-950\/50 {
-  @apply to-zinc-950;
+.purple .hover\:bg-emerald-500:hover {
+  @apply hover:bg-purple-500;
 }
 
-/* Theme transition */
+/* Purple: Sidebar e backgrounds emerald */
+.purple .bg-emerald-900,
+.purple .bg-emerald-900\/95 {
+  @apply bg-purple-950/95;
+}
+
+.purple .from-emerald-900,
+.purple .from-emerald-900\/90 {
+  --tw-gradient-from: rgb(59 7 100 / 0.9);
+}
+
+.purple .to-emerald-950,
+.purple .to-emerald-950\/95 {
+  --tw-gradient-to: rgb(30 27 75 / 0.95);
+}
+
+.purple .bg-gradient-to-b.from-emerald-900\/90.to-emerald-950\/95 {
+  background: linear-gradient(180deg, rgba(88, 28, 135, 0.9) 0%, rgba(30, 27, 75, 0.95) 100%);
+}
+
+/* Purple: Inbox area */
+.purple .bg-gradient-to-br.from-emerald-950\/50.to-teal-950\/50 {
+  background: linear-gradient(135deg, rgba(76, 29, 149, 0.3) 0%, rgba(49, 46, 129, 0.3) 100%);
+}
+
+/* Purple: Selects */
+.purple select option {
+  @apply bg-purple-950;
+}
+
+/* Purple: Status indicators mantém cores originais */
+.purple .bg-amber-500 {
+  @apply bg-amber-500;
+}
+
+.purple .bg-gray-500 {
+  @apply bg-gray-500;
+}
+
+/* ============================================
+   TRANSIÇÕES SUAVES GLOBAIS
+   ============================================ */
 * {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease, box-shadow 0.3s ease;
+}
+
+/* Disable transition for elements that shouldn't animate */
+input,
+select,
+textarea,
+button {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.1s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }

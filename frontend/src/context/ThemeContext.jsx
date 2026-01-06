@@ -5,23 +5,23 @@ const ThemeContext = createContext();
 const THEMES = {
   dark: {
     name: 'Escuro',
-    description: 'Tema escuro padrão com tons de esmeralda',
-    preview: 'from-emerald-900 to-emerald-950'
+    description: 'Tema elegante com tons de esmeralda e glassmorphism',
+    preview: 'from-emerald-800 to-teal-900'
   },
   light: {
     name: 'Claro',
-    description: 'Tema claro com alta legibilidade',
-    preview: 'from-slate-100 to-slate-200'
+    description: 'Tema luminoso com alta legibilidade e contraste',
+    preview: 'from-emerald-100 via-green-200 to-emerald-300'
   },
   black: {
-    name: 'Preto',
-    description: 'Tema AMOLED com preto puro',
-    preview: 'from-black to-zinc-900'
+    name: 'Preto (AMOLED)',
+    description: 'Preto puro para telas OLED - economia de bateria',
+    preview: 'from-zinc-900 to-black'
   },
   purple: {
     name: 'Roxo',
-    description: 'Tema moderno com gradiente roxo',
-    preview: 'from-purple-900 to-indigo-950'
+    description: 'Gradiente premium roxo com visual moderno',
+    preview: 'from-purple-700 via-violet-800 to-indigo-900'
   }
 };
 
