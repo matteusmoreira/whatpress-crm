@@ -62,6 +62,64 @@ const extractUrls = (text) => {
   return Array.isArray(found) ? found : [];
 };
 
+const isWhatsappMediaUrl = (url) => {
+  try {
+    const u = new URL(url);
+    const host = u.host.toLowerCase();
+    if (!host.includes('whatsapp.net')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const inferWhatsappMediaKind = (url) => {
+  try {
+    const u = new URL(url);
+    const path = (u.pathname || '').toLowerCase();
+    const search = u.searchParams;
+    const mime = (search.get('mimeType') || search.get('mime_type') || '').toLowerCase();
+    const combined = path + ' ' + mime;
+    if (combined.includes('sticker') || combined.includes('webp')) return 'sticker';
+    if (
+      combined.includes('audio') ||
+      combined.includes('ptt') ||
+      combined.includes('.ogg') ||
+      combined.includes('opus')
+    ) return 'audio';
+    if (
+      combined.includes('video') ||
+      combined.includes('.mp4') ||
+      combined.includes('.3gp')
+    ) return 'video';
+    if (
+      combined.includes('image') ||
+      combined.includes('.jpg') ||
+      combined.includes('.jpeg') ||
+      combined.includes('.png') ||
+      combined.includes('.gif')
+    ) return 'image';
+    return 'document';
+  } catch {
+    return 'unknown';
+  }
+};
+
+const getWhatsappMediaMeta = (kind) => {
+  switch (kind) {
+    case 'sticker':
+      return { label: '[Figurinha]', Icon: Image };
+    case 'audio':
+      return { label: '[Áudio]', Icon: Mic };
+    case 'video':
+      return { label: '[Vídeo]', Icon: Video };
+    case 'image':
+      return { label: '[Imagem]', Icon: Image };
+    default:
+      return { label: 'Mídia do WhatsApp', Icon: Image };
+  }
+};
+
 const shortenUrl = (url) => {
   try {
     const u = new URL(url);
@@ -827,6 +885,10 @@ const Inbox = () => {
                         const canInlineMedia = Boolean(mediaUrl) && isMediaType;
                         const urls = extractUrls(displayContent);
                         const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
+                        const primaryUrl = hasOnlyUrl ? urls[0] : '';
+                        const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
+                        const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) : 'unknown';
+                        const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
                         const originInfo = getMessageOriginInfo(msg);
 
                         return (
@@ -924,9 +986,36 @@ const Inbox = () => {
                             </div>
                           </a>
                         )}
-                        {msg.type === 'text' && hasOnlyUrl && (
+                        {msg.type === 'text' && hasOnlyUrl && isWhatsappMedia && (
                           <a
-                            href={urls[0]}
+                            href={primaryUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={cn(
+                              'flex items-center gap-3 p-3 rounded-xl border w-full',
+                              msg.direction === 'outbound'
+                                ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                : 'bg-black/20 border-white/10 hover:bg-black/30'
+                            )}
+                          >
+                            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+                              {whatsappMeta ? (
+                                <whatsappMeta.Icon className="w-5 h-5 opacity-80" />
+                              ) : (
+                                <Image className="w-5 h-5 opacity-80" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {whatsappMeta?.label || 'Mídia do WhatsApp'}
+                              </p>
+                              <p className="text-xs opacity-70 truncate">{shortenUrl(primaryUrl)}</p>
+                            </div>
+                          </a>
+                        )}
+                        {msg.type === 'text' && hasOnlyUrl && !isWhatsappMedia && (
+                          <a
+                            href={primaryUrl}
                             target="_blank"
                             rel="noreferrer"
                             className={cn(
@@ -940,8 +1029,8 @@ const Inbox = () => {
                               <Link2 className="w-5 h-5 opacity-80" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{shortenUrl(urls[0])}</p>
-                              <p className="text-xs opacity-70 truncate">{urls[0]}</p>
+                              <p className="text-sm font-medium truncate">{shortenUrl(primaryUrl)}</p>
+                              <p className="text-xs opacity-70 truncate">{primaryUrl}</p>
                             </div>
                           </a>
                         )}
