@@ -1893,6 +1893,8 @@ async def list_messages(
             'direction': m['direction'],
             'status': m['status'],
             'mediaUrl': m['media_url'],
+            'externalId': m.get('external_id'),
+            'metadata': m.get('metadata'),
             'timestamp': m['timestamp'],
             'origin': origin
         })
@@ -2319,7 +2321,12 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     'type': parsed['type'],
                     'direction': 'inbound',
                     'status': 'delivered',
-                    'media_url': parsed.get('media_url')
+                    'media_url': parsed.get('media_url'),
+                    'external_id': parsed.get('message_id'),
+                    'metadata': {
+                        'remote_jid': parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
+                        'instance_name': instance_name
+                    }
                 }
                 supabase.table('messages').insert(msg_data).execute()
                 
@@ -4049,6 +4056,52 @@ async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, m
     except Exception as e:
         logger.error(f"Failed to send WhatsApp media: {e}")
         supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+
+# ==================== MEDIA PROXY ====================
+
+@api_router.get("/media/proxy")
+async def proxy_whatsapp_media(
+    message_id: str,
+    remote_jid: str,
+    instance_name: str,
+    from_me: bool = False,
+    payload: dict = Depends(verify_token)
+):
+    """
+    Proxy endpoint to fetch WhatsApp media as base64.
+    This is needed because WhatsApp media URLs are temporary and require authentication.
+    """
+    try:
+        # Call Evolution API to get base64 media
+        result = await evolution_api.get_base64_from_media_message(
+            instance_name=instance_name,
+            message_id=message_id,
+            remote_jid=remote_jid,
+            from_me=from_me
+        )
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Mídia não encontrada")
+        
+        # Result should contain base64 and mimetype
+        base64_data = result.get('base64') or result.get('data', {}).get('base64')
+        mimetype = result.get('mimetype') or result.get('data', {}).get('mimetype') or 'application/octet-stream'
+        
+        if not base64_data:
+            raise HTTPException(status_code=404, detail="Dados da mídia não disponíveis")
+        
+        # Return as data URL
+        return {
+            "success": True,
+            "dataUrl": f"data:{mimetype};base64,{base64_data}",
+            "mimetype": mimetype
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Media proxy error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao obter mídia: {str(e)}")
 
 # Include the router in the main app
 app.include_router(api_router)

@@ -241,6 +241,24 @@ class EvolutionAPI:
         
         return await self._request('POST', f'/message/sendList/{instance_name}', data)
     
+    # ==================== MEDIA OPERATIONS ====================
+    
+    async def get_base64_from_media_message(self, instance_name: str, message_id: str, 
+                                            remote_jid: str, from_me: bool = False) -> dict:
+        """Get media content as base64 from a message"""
+        data = {
+            'message': {
+                'key': {
+                    'remoteJid': remote_jid if '@' in remote_jid else f"{remote_jid}@s.whatsapp.net",
+                    'fromMe': from_me,
+                    'id': message_id
+                }
+            },
+            'convertToMp4': False
+        }
+        
+        return await self._request('POST', f'/chat/getBase64FromMediaMessage/{instance_name}', data)
+    
     # ==================== CHAT OPERATIONS ====================
     
     async def fetch_messages(self, instance_name: str, phone: str, count: int = 50) -> dict:

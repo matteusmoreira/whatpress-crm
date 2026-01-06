@@ -188,6 +188,140 @@ const ContactAvatar = ({ src, name, sizeClassName, className }) => {
   );
 };
 
+// Component to display WhatsApp media (images/videos) inline
+const WhatsAppMediaDisplay = ({
+  type,
+  mediaUrl,
+  content,
+  direction,
+  onImageClick
+}) => {
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Check if it's a WhatsApp CDN URL that might be expired
+  const isWhatsAppUrl = mediaUrl && (
+    mediaUrl.includes('mmg.whatsapp.net') ||
+    mediaUrl.includes('whatsapp.net')
+  );
+
+  // For image type with valid mediaUrl
+  if (type === 'image' && mediaUrl && !loadError) {
+    return (
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
+            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => onImageClick?.({ open: true, url: mediaUrl, title: content || 'Imagem' })}
+          className="block w-full rounded-xl overflow-hidden bg-black/20 focus:outline-none focus:ring-2 focus:ring-white/30"
+          aria-label="Abrir imagem"
+        >
+          <img
+            src={mediaUrl}
+            alt={content || 'Imagem'}
+            className={cn(
+              'w-full h-auto max-h-80 object-cover transition-opacity',
+              loading ? 'opacity-0' : 'opacity-100'
+            )}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setLoading(false);
+              setLoadError(true);
+            }}
+          />
+        </button>
+      </div>
+    );
+  }
+
+  // For video type with valid mediaUrl
+  if (type === 'video' && mediaUrl && !loadError) {
+    return (
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
+            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
+        <video
+          className="w-full max-h-80 rounded-xl bg-black/20"
+          controls
+          preload="metadata"
+          playsInline
+          src={mediaUrl}
+          aria-label="Reprodutor de vídeo"
+          onLoadedMetadata={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setLoadError(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // For audio type with valid mediaUrl
+  if (type === 'audio' && mediaUrl && !loadError) {
+    return (
+      <div className="relative flex items-center gap-3 p-2 rounded-xl bg-black/20 min-w-[200px]">
+        <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+          <Mic className="w-5 h-5 text-emerald-400" />
+        </div>
+        <audio
+          className="flex-1 h-8"
+          controls
+          preload="metadata"
+          src={mediaUrl}
+          aria-label="Reprodutor de áudio"
+          onError={() => setLoadError(true)}
+          style={{
+            height: '32px',
+            filter: 'invert(1) hue-rotate(180deg)',
+            opacity: 0.8
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Fallback for failed loads or WhatsApp URLs that expired - show clickable placeholder
+  if (loadError || (isWhatsAppUrl && !mediaUrl)) {
+    const mediaKind = type === 'video' ? 'video' : type === 'audio' ? 'audio' : 'image';
+    const IconComponent = mediaKind === 'video' ? Video : mediaKind === 'audio' ? Mic : Image;
+    const label = mediaKind === 'video' ? 'Vídeo' : mediaKind === 'audio' ? 'Áudio' : 'Imagem';
+
+    return (
+      <a
+        href={mediaUrl}
+        target="_blank"
+        rel="noreferrer"
+        className={cn(
+          'flex items-center gap-3 p-3 rounded-xl border w-full',
+          direction === 'outbound'
+            ? 'bg-white/10 border-white/20 hover:bg-white/15'
+            : 'bg-black/20 border-white/10 hover:bg-black/30'
+        )}
+      >
+        <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+          <IconComponent className="w-5 h-5 opacity-80" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{label}</p>
+          <p className="text-xs opacity-70 truncate">Clique para abrir</p>
+        </div>
+      </a>
+    );
+  }
+
+  return null;
+};
+
 const Inbox = () => {
   const { user } = useAuthStore();
   const { isConnected: realtimeConnected } = useRealtime();
@@ -1005,7 +1139,18 @@ const Inbox = () => {
                           const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
                           const primaryUrl = hasOnlyUrl ? urls[0] : '';
                           const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
-                          const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) : 'unknown';
+
+                          // Check if the content contains a WhatsApp media URL (for image/video types)
+                          const contentUrls = extractUrls(rawContent);
+                          const contentWhatsappUrl = contentUrls.find(u => isWhatsappMediaUrl(u)) || '';
+                          const hasWhatsappMediaInContent = Boolean(contentWhatsappUrl);
+
+                          // Use mediaUrl if available, otherwise try to extract from content for media types
+                          const effectiveMediaUrl = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
+                          const shouldRenderMedia = Boolean(effectiveMediaUrl) && isMediaType;
+
+                          const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) :
+                            (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
                           const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
                           const originInfo = getMessageOriginInfo(msg);
 
@@ -1050,44 +1195,19 @@ const Inbox = () => {
                                     <span className="text-xs capitalize">{msg.type}</span>
                                   </div>
                                 )}
-                                {canInlineMedia && msg.type === 'image' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setMediaViewer({ open: true, url: mediaUrl, title: displayContent })}
-                                    className="block w-full rounded-xl overflow-hidden bg-black/20 focus:outline-none focus:ring-2 focus:ring-white/30"
-                                    aria-label="Abrir imagem"
-                                  >
-                                    <img
-                                      src={mediaUrl}
-                                      alt={displayContent || 'Imagem'}
-                                      className="w-full h-auto max-h-80 object-cover"
-                                      loading="lazy"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  </button>
-                                )}
-                                {canInlineMedia && msg.type === 'video' && (
-                                  <video
-                                    className="w-full max-h-80 rounded-xl bg-black/20"
-                                    controls
-                                    preload="metadata"
-                                    playsInline
-                                    src={mediaUrl}
-                                    aria-label="Reprodutor de vídeo"
+                                {/* Render media inline using WhatsAppMediaDisplay */}
+                                {shouldRenderMedia && (msg.type === 'image' || msg.type === 'video' || msg.type === 'audio') && (
+                                  <WhatsAppMediaDisplay
+                                    type={msg.type}
+                                    mediaUrl={effectiveMediaUrl}
+                                    content={displayContent}
+                                    direction={msg.direction}
+                                    onImageClick={setMediaViewer}
                                   />
                                 )}
-                                {canInlineMedia && msg.type === 'audio' && (
-                                  <audio
-                                    className="w-full"
-                                    controls
-                                    preload="metadata"
-                                    src={mediaUrl}
-                                    aria-label="Reprodutor de áudio"
-                                  />
-                                )}
-                                {canInlineMedia && msg.type === 'document' && (
+                                {shouldRenderMedia && msg.type === 'document' && (
                                   <a
-                                    href={mediaUrl}
+                                    href={effectiveMediaUrl}
                                     target="_blank"
                                     rel="noreferrer"
                                     className={cn(
@@ -1100,36 +1220,19 @@ const Inbox = () => {
                                     <FileText className="w-5 h-5 opacity-80" />
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-medium truncate">{displayContent || 'Documento'}</p>
-                                      <p className="text-xs opacity-70 truncate">{shortenUrl(mediaUrl)}</p>
+                                      <p className="text-xs opacity-70 truncate">{shortenUrl(effectiveMediaUrl)}</p>
                                     </div>
                                   </a>
                                 )}
+                                {/* WhatsApp media URL in text message - render inline */}
                                 {msg.type === 'text' && hasOnlyUrl && isWhatsappMedia && (
-                                  <a
-                                    href={primaryUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className={cn(
-                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
-                                      msg.direction === 'outbound'
-                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
-                                    )}
-                                  >
-                                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
-                                      {whatsappMeta ? (
-                                        <whatsappMeta.Icon className="w-5 h-5 opacity-80" />
-                                      ) : (
-                                        <Image className="w-5 h-5 opacity-80" />
-                                      )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">
-                                        {whatsappMeta?.label || 'Mídia do WhatsApp'}
-                                      </p>
-                                      <p className="text-xs opacity-70 truncate">{shortenUrl(primaryUrl)}</p>
-                                    </div>
-                                  </a>
+                                  <WhatsAppMediaDisplay
+                                    type={mediaKind === 'video' ? 'video' : mediaKind === 'audio' ? 'audio' : 'image'}
+                                    mediaUrl={primaryUrl}
+                                    content={whatsappMeta?.label || 'Mídia do WhatsApp'}
+                                    direction={msg.direction}
+                                    onImageClick={setMediaViewer}
+                                  />
                                 )}
                                 {msg.type === 'text' && hasOnlyUrl && !isWhatsappMedia && (
                                   <a
@@ -1152,12 +1255,12 @@ const Inbox = () => {
                                     </div>
                                   </a>
                                 )}
-                                {(!canInlineMedia && !(msg.type === 'text' && hasOnlyUrl)) && (
+                                {(!shouldRenderMedia && !(msg.type === 'text' && hasOnlyUrl)) && (
                                   <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
                                     {renderTextWithLinks(displayContent)}
                                   </p>
                                 )}
-                                {canInlineMedia && hasContent && msg.type !== 'document' && (
+                                {shouldRenderMedia && hasContent && msg.type !== 'document' && (
                                   <p className="whitespace-pre-wrap mt-2">
                                     {renderTextWithLinks(rawContent)}
                                   </p>

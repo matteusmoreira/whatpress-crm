@@ -306,7 +306,10 @@ code {
 }
 
 .dark .glass-card {
-  @apply bg-gradient-to-br from-white/10 to-white/5 border-white/15 shadow-emerald-500/20;
+  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+  border-color: rgba(255, 255, 255, 0.15);
+  --tw-shadow-color: rgba(16, 185, 129, 0.2);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
 /* ============================================
@@ -389,7 +392,10 @@ code {
 }
 
 .purple .glass-card {
-  @apply bg-gradient-to-br from-purple-900/30 to-indigo-900/20 border-purple-400/20 shadow-purple-500/20;
+  background: linear-gradient(to bottom right, rgba(88, 28, 135, 0.3), rgba(49, 46, 129, 0.2));
+  border-color: rgba(192, 132, 252, 0.2);
+  --tw-shadow-color: rgba(168, 85, 247, 0.2);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
 .purple .glass-input {
@@ -491,14 +497,7 @@ code {
   @apply bg-purple-950;
 }
 
-/* Purple: Status indicators mantém cores originais */
-.purple .bg-amber-500 {
-  @apply bg-amber-500;
-}
-
-.purple .bg-gray-500 {
-  @apply bg-gray-500;
-}
+/* Purple: Status indicators - cores mantidas por padrão (herança natural) */
 
 /* ============================================
    TRANSIÇÕES SUAVES GLOBAIS
