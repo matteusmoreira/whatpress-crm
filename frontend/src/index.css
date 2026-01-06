@@ -185,7 +185,6 @@ code {
 }
 
 .light .bg-white\/15 {
-  @apply bg-slate-150;
   background-color: rgb(241 245 249);
 }
 
@@ -206,7 +205,6 @@ code {
 
 /* Light: Hover states */
 .light .hover\:bg-white\/5:hover {
-  @apply bg-slate-150;
   background-color: rgb(241 245 249);
 }
 
