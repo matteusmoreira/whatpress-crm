@@ -26,7 +26,10 @@ import {
   Reply,
   Trash2,
   Edit2,
-  UserCircle
+  UserCircle,
+  Phone,
+  Mail,
+  PenLine
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAppStore } from '../store/appStore';
@@ -364,6 +367,7 @@ const Inbox = () => {
   const [editingContactName, setEditingContactName] = useState(false);
   const [contactNameValue, setContactNameValue] = useState('');
   const [contactData, setContactData] = useState(null);
+  const [useSignature, setUseSignature] = useState(user?.signatureEnabled ?? true);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -512,8 +516,29 @@ const Inbox = () => {
     if (!newMessage.trim() || !selectedConversation) return;
 
     try {
+      // Build message with signature if enabled
+      let messageToSend = newMessage.trim();
+
+      if (useSignature && user?.name) {
+        // Build signature based on user settings
+        const parts = [user.name];
+        if (user.signatureIncludeTitle && user.jobTitle) {
+          parts.push(user.jobTitle);
+        }
+        if (user.signatureIncludeDepartment && user.department) {
+          parts.push(user.department);
+        }
+
+        // Format: *Name* (Title / Department)\nMessage
+        const signatureLine = parts.length > 1
+          ? `*${parts[0]}* (${parts.slice(1).join(' / ')})`
+          : `*${parts[0]}*`;
+
+        messageToSend = `${signatureLine}\n${newMessage.trim()}`;
+      }
+
       // TODO: Include replyToMessage.id when sending to support quoted replies
-      await sendMessage(selectedConversation.id, newMessage);
+      await sendMessage(selectedConversation.id, messageToSend);
       setNewMessage('');
       setReplyToMessage(null);
       inputRef.current?.focus();
@@ -1413,6 +1438,26 @@ const Inbox = () => {
                   >
                     <Zap className="w-5 h-5" />
                   </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setUseSignature(!useSignature)}
+                        className={cn(
+                          'p-2 rounded-lg transition-colors',
+                          useSignature
+                            ? 'bg-emerald-500 text-white'
+                            : 'hover:bg-white/10 text-white/60 hover:text-white'
+                        )}
+                        title={useSignature ? 'Assinatura ativada' : 'Assinatura desativada'}
+                      >
+                        <PenLine className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {useSignature ? 'Desativar assinatura' : 'Ativar assinatura'}
+                    </TooltipContent>
+                  </Tooltip>
                   <div className="flex-1 relative">
                     <GlassInput
                       ref={inputRef}
@@ -1474,6 +1519,122 @@ const Inbox = () => {
             className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
             referrerPolicy="no-referrer"
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Contact View Modal */}
+      <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
+        <DialogContent className="max-w-md bg-gradient-to-br from-emerald-900/95 to-teal-900/95 backdrop-blur-xl border border-white/20">
+          <div className="p-6">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-400" />
+              Informações do Contato
+            </h2>
+
+            {contactData ? (
+              <div className="space-y-4">
+                {/* Avatar and Name */}
+                <div className="flex items-center gap-4">
+                  <ContactAvatar
+                    src={null}
+                    name={contactData.fullName}
+                    sizeClassName="w-16 h-16"
+                  />
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">{contactData.fullName}</h3>
+                    <p className="text-white/60 text-sm">{contactData.phone}</p>
+                  </div>
+                </div>
+
+                {/* Contact Details */}
+                <div className="space-y-3 mt-6">
+                  {/* Phone */}
+                  <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                      <Phone className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-white/50 text-xs">Telefone</p>
+                      <p className="text-white">{contactData.phone}</p>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  {contactData.email && (
+                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                        <Mail className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-white/50 text-xs">Email</p>
+                        <p className="text-white">{contactData.email}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {contactData.tags && contactData.tags.length > 0 && (
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <p className="text-white/50 text-xs mb-2">Tags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {contactData.tags.map((tag, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-emerald-500/20 text-emerald-300 text-xs rounded-full">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom Fields */}
+                  {contactData.customFields && Object.keys(contactData.customFields).length > 0 && (
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <p className="text-white/50 text-xs mb-2">Campos Personalizados</p>
+                      <div className="space-y-2">
+                        {Object.entries(contactData.customFields).map(([key, value]) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-white/60 text-sm capitalize">{key.replace(/_/g, ' ')}</span>
+                            <span className="text-white text-sm">{String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source */}
+                  {contactData.source && (
+                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                      <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <FileText className="w-4 h-4 text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-white/50 text-xs">Origem</p>
+                        <p className="text-white capitalize">{contactData.source}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Created At */}
+                  {contactData.createdAt && (
+                    <div className="text-center text-white/40 text-xs mt-4">
+                      Criado em {new Date(contactData.createdAt).toLocaleDateString('pt-BR')}
+                    </div>
+                  )}
+                </div>
+
+                {/* Close Button */}
+                <div className="mt-6 flex justify-end">
+                  <GlassButton onClick={() => setShowContactModal(false)}>
+                    Fechar
+                  </GlassButton>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center p-8">
+                <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -163,16 +163,9 @@ const Profile = () => {
             </span>
 
             <div className="mt-6 pt-6 border-t border-white/10">
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-white">1,247</p>
-                  <p className="text-white/50 text-sm">Mensagens</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white">89</p>
-                  <p className="text-white/50 text-sm">Conversas</p>
-                </div>
-              </div>
+              <p className="text-white/50 text-sm text-center">
+                Membro desde {new Date(user?.createdAt || Date.now()).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </p>
             </div>
           </div>
         </GlassCard>

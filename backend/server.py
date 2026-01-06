@@ -2270,7 +2270,10 @@ async def evolution_webhook(instance_name: str, payload: dict):
     try:
         parsed = evolution_api.parse_webhook_message(payload)
         
-        if parsed['event'] == 'message' and not parsed['from_me']:
+        # Process ALL messages (including fromMe - messages sent from the phone)
+        if parsed['event'] == 'message':
+            is_from_me = parsed.get('from_me', False)
+            
             # Ignorar mensagens de grupos (grupos têm @g.us no JID)
             raw_jid = parsed.get('remote_jid_raw') or payload.get('data', {}).get('key', {}).get('remoteJid', '')
             if '@g.us' in raw_jid:
@@ -2345,6 +2348,9 @@ async def evolution_webhook(instance_name: str, payload: dict):
                         f"msg_id={parsed.get('message_id')} data_type={data_type} data_keys={data_keys}"
                     )
                 
+                # Determine message direction based on fromMe flag
+                direction = 'outbound' if is_from_me else 'inbound'
+                
                 # Find or create conversation
                 is_new_conversation = False
                 conv = (
@@ -2359,12 +2365,16 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 if conv.data:
                     conversation = conv.data[0]
                     preview = '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
-                    # Update conversation
-                    supabase.table('conversations').update({
+                    
+                    # Only increment unread_count for INBOUND messages (not from_me)
+                    update_data = {
                         'last_message_at': datetime.utcnow().isoformat(),
-                        'last_message_preview': preview,
-                        'unread_count': conversation['unread_count'] + 1
-                    }).eq('id', conversation['id']).execute()
+                        'last_message_preview': preview
+                    }
+                    if not is_from_me:
+                        update_data['unread_count'] = conversation['unread_count'] + 1
+                    
+                    supabase.table('conversations').update(update_data).eq('id', conversation['id']).execute()
                 else:
                     # Create new conversation
                     avatar_url = None
@@ -2380,25 +2390,26 @@ async def evolution_webhook(instance_name: str, payload: dict):
                         'contact_name': parsed.get('push_name') or phone,
                         'contact_avatar': avatar_url,
                         'status': 'open',
-                        'unread_count': 1,
+                        'unread_count': 0 if is_from_me else 1,  # Don't count as unread if from_me
                         'last_message_preview': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
                     }
                     conv_result = supabase.table('conversations').insert(conv_data).execute()
                     conversation = conv_result.data[0]
                     is_new_conversation = True
                 
-                # Save message
+                # Save message with correct direction
                 msg_data = {
                     'conversation_id': conversation['id'],
                     'content': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or ''),
                     'type': parsed['type'],
-                    'direction': 'inbound',
-                    'status': 'delivered',
+                    'direction': direction,  # 'inbound' for received, 'outbound' for sent
+                    'status': 'read' if is_from_me else 'delivered',
                     'media_url': parsed.get('media_url'),
                     'external_id': parsed.get('message_id'),
                     'metadata': {
                         'remote_jid': parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
-                        'instance_name': instance_name
+                        'instance_name': instance_name,
+                        'from_me': is_from_me
                     }
                 }
                 supabase.table('messages').insert(msg_data).execute()
