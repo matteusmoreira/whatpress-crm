@@ -12,6 +12,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // Realtime subscription helpers
+export const setRealtimeAuth = async (token) => {
+  if (token) {
+    await supabase.realtime.setAuth(token);
+  }
+};
+
 export const subscribeToMessages = (conversationId, callback) => {
   const channel = supabase
     .channel(`messages:${conversationId}`)

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { subscribeToMessages, subscribeToConversations, subscribeToConnectionStatus } from '../lib/supabase';
+import { subscribeToMessages, subscribeToConversations, subscribeToConnectionStatus, setRealtimeAuth } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { toast } from '../components/ui/glass-toaster';
@@ -8,10 +8,10 @@ const RealtimeContext = createContext();
 
 export const RealtimeProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuthStore();
-  const { 
-    selectedConversation, 
+  const {
+    selectedConversation,
   } = useAppStore();
-  
+
   const [isConnected, setIsConnected] = useState(false);
   const [unsubscribers, setUnsubscribers] = useState([]);
 
@@ -21,10 +21,10 @@ export const RealtimeProvider = ({ children }) => {
   const handleNewMessage = useCallback((message) => {
     const fallback =
       message.type === 'audio' ? '[Áudio]' :
-      message.type === 'image' ? '[Imagem]' :
-      message.type === 'video' ? '[Vídeo]' :
-      message.type === 'document' ? '[Documento]' :
-      '[Mensagem]';
+        message.type === 'image' ? '[Imagem]' :
+          message.type === 'video' ? '[Vídeo]' :
+            message.type === 'document' ? '[Documento]' :
+              '[Mensagem]';
 
     const raw = (() => {
       if (typeof message.content === 'string') return message.content;
@@ -77,21 +77,21 @@ export const RealtimeProvider = ({ children }) => {
       try {
         const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19');
         audio.volume = 0.3;
-        audio.play().catch(() => {});
-      } catch (e) {}
+        audio.play().catch(() => { });
+      } catch (e) { }
     }
   }, []);
 
   // Handle conversation updates from realtime
   const handleConversationUpdate = useCallback((data) => {
     const { event, conversation } = data;
-    
+
     if (event === 'INSERT') {
       // New conversation
       useAppStore.setState(state => ({
         conversations: [conversation, ...state.conversations]
       }));
-      
+
       toast.info('Nova conversa!', {
         description: `${conversation.contactName} iniciou uma conversa`
       });
@@ -118,11 +118,11 @@ export const RealtimeProvider = ({ children }) => {
   // Handle connection status updates
   const handleConnectionUpdate = useCallback((data) => {
     useAppStore.setState(state => ({
-      connections: state.connections.map(c => 
+      connections: state.connections.map(c =>
         c.id === data.id ? { ...c, status: data.status } : c
       )
     }));
-    
+
     if (data.status === 'connected') {
       toast.success('WhatsApp conectado!');
     } else if (data.status === 'disconnected') {
@@ -134,12 +134,18 @@ export const RealtimeProvider = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated || !tenantId) return;
 
+    // Set auth token for realtime RLS
+    const token = useAuthStore.getState().token;
+    if (token) {
+      setRealtimeAuth(token);
+    }
+
     // Subscribe to conversations
     const unsubConversations = subscribeToConversations(tenantId, handleConversationUpdate);
-    
+
     // Subscribe to connection status
     const unsubConnections = subscribeToConnectionStatus(tenantId, handleConnectionUpdate);
-    
+
     const newUnsubscribers = [unsubConversations, unsubConnections];
     setUnsubscribers(newUnsubscribers);
     setIsConnected(true);
