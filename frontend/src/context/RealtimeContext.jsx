@@ -23,6 +23,24 @@ const loadNotificationPrefs = () => {
   }
 };
 
+const normalizeMessageType = (type) => {
+  const raw = String(type || '').trim();
+  if (!raw) return 'text';
+
+  let t = raw.toLowerCase();
+  t = t.replace(/[_-]/g, '');
+  if (t.endsWith('message')) t = t.slice(0, -7);
+
+  if (t === 'text' || t === 'chat' || t === 'extendedtext') return 'text';
+  if (t === 'image' || t === 'img' || t === 'photo' || t === 'picture' || t === 'imagem') return 'image';
+  if (t === 'video' || t === 'gif') return 'video';
+  if (t === 'audio' || t === 'ptt' || t === 'voice' || t === 'voicemessage') return 'audio';
+  if (t === 'document' || t === 'file' || t === 'documento') return 'document';
+  if (t === 'sticker' || t === 'figurinha') return 'sticker';
+
+  return 'unknown';
+};
+
 export const RealtimeProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuthStore();
   const {
@@ -40,12 +58,14 @@ export const RealtimeProvider = ({ children }) => {
     const isHidden = typeof document !== 'undefined' ? !!document.hidden : false;
     const hasFocus = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? !!document.hasFocus() : true;
 
+    const normalizedType = normalizeMessageType(message.type);
     const fallback =
-      message.type === 'audio' ? '[Áudio]' :
-        message.type === 'image' ? '[Imagem]' :
-          message.type === 'video' ? '[Vídeo]' :
-            message.type === 'document' ? '[Documento]' :
-              '[Mensagem]';
+      normalizedType === 'audio' ? '[Áudio]' :
+        normalizedType === 'image' ? '[Imagem]' :
+          normalizedType === 'video' ? '[Vídeo]' :
+            normalizedType === 'document' ? '[Documento]' :
+              normalizedType === 'sticker' ? '[Figurinha]' :
+                '[Mensagem]';
 
     const raw = (() => {
       if (typeof message.content === 'string') return message.content;

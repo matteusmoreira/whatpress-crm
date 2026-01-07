@@ -826,7 +826,43 @@ const Inbox = () => {
       case 'video': return <Video className="w-4 h-4" />;
       case 'audio': return <Mic className="w-4 h-4" />;
       case 'document': return <FileText className="w-4 h-4" />;
+      case 'sticker': return <Image className="w-4 h-4" />;
       default: return null;
+    }
+  };
+
+  const normalizeMessageType = (type) => {
+    const raw = String(type || '').trim();
+    if (!raw) return 'text';
+
+    let t = raw.toLowerCase();
+    t = t.replace(/[_-]/g, '');
+    if (t.endsWith('message')) t = t.slice(0, -7);
+
+    if (t === 'text' || t === 'chat' || t === 'extendedtext') return 'text';
+    if (t === 'image' || t === 'img' || t === 'photo' || t === 'picture' || t === 'imagem') return 'image';
+    if (t === 'video' || t === 'gif') return 'video';
+    if (t === 'audio' || t === 'ptt' || t === 'voice' || t === 'voicemessage') return 'audio';
+    if (t === 'document' || t === 'file' || t === 'documento') return 'document';
+    if (t === 'sticker' || t === 'figurinha') return 'sticker';
+
+    return 'unknown';
+  };
+
+  const getMessageTypeBadgeInfo = (type) => {
+    switch (type) {
+      case 'image':
+        return { label: 'Imagem', badgeClass: 'bg-sky-500/10 border-sky-400 text-sky-200', dotClass: 'bg-sky-400' };
+      case 'video':
+        return { label: 'Vídeo', badgeClass: 'bg-purple-500/10 border-purple-400 text-purple-200', dotClass: 'bg-purple-400' };
+      case 'audio':
+        return { label: 'Áudio', badgeClass: 'bg-amber-500/10 border-amber-400 text-amber-200', dotClass: 'bg-amber-400' };
+      case 'document':
+        return { label: 'Documento', badgeClass: 'bg-slate-500/10 border-slate-300 text-slate-200', dotClass: 'bg-slate-300' };
+      case 'sticker':
+        return { label: 'Figurinha', badgeClass: 'bg-pink-500/10 border-pink-400 text-pink-200', dotClass: 'bg-pink-400' };
+      default:
+        return null;
     }
   };
 
@@ -1300,18 +1336,25 @@ const Inbox = () => {
                               ? ''
                               : String(msg.content);
                           const hasContent = rawContent.trim().length > 0;
+                          const normalizedType = normalizeMessageType(msg.type);
                           const fallback =
-                            msg.type === 'audio' ? '[Áudio]' :
-                              msg.type === 'image' ? '[Imagem]' :
-                                msg.type === 'video' ? '[Vídeo]' :
-                                  msg.type === 'document' ? '[Documento]' :
-                                    '[Mensagem]';
+                            normalizedType === 'audio' ? '[Áudio]' :
+                              normalizedType === 'image' ? '[Imagem]' :
+                                normalizedType === 'video' ? '[Vídeo]' :
+                                  normalizedType === 'document' ? '[Documento]' :
+                                    normalizedType === 'sticker' ? '[Figurinha]' :
+                                      '[Mensagem]';
                           const displayContent = hasContent ? rawContent : fallback;
-                          const mediaUrl = typeof msg.mediaUrl === 'string' && msg.mediaUrl.trim() ? msg.mediaUrl.trim() : '';
-                          const isMediaType = ['image', 'video', 'audio', 'document'].includes(msg.type);
+                          const mediaUrlRaw =
+                            typeof msg.mediaUrl === 'string' ? msg.mediaUrl :
+                              typeof msg.media_url === 'string' ? msg.media_url :
+                                typeof msg.url === 'string' ? msg.url :
+                                  '';
+                          const mediaUrl = typeof mediaUrlRaw === 'string' && mediaUrlRaw.trim() ? mediaUrlRaw.trim() : '';
+                          const isMediaType = ['image', 'video', 'audio', 'document', 'sticker'].includes(normalizedType);
                           const canInlineMedia = Boolean(mediaUrl) && isMediaType;
                           const urls = extractUrls(displayContent);
-                          const hasOnlyUrl = msg.type === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
+                          const hasOnlyUrl = normalizedType === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
                           const primaryUrl = hasOnlyUrl ? urls[0] : '';
                           const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
 
@@ -1328,6 +1371,13 @@ const Inbox = () => {
                             (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
                           const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
                           const originInfo = getMessageOriginInfo(msg);
+                          const typeForBadge =
+                            normalizedType !== 'text'
+                              ? normalizedType
+                              : (hasOnlyUrl && isWhatsappMedia
+                                ? (mediaKind === 'sticker' ? 'sticker' : mediaKind === 'audio' ? 'audio' : mediaKind === 'video' ? 'video' : 'image')
+                                : null);
+                          const typeBadgeInfo = typeForBadge ? getMessageTypeBadgeInfo(typeForBadge) : null;
 
                           return (
                             <div
@@ -1363,24 +1413,51 @@ const Inbox = () => {
                                     : 'bg-white/10 backdrop-blur-sm text-white rounded-bl-md'
                                 )}
                               >
-                                {/* Media type indicator */}
-                                {msg.type !== 'text' && (
-                                  <div className="flex items-center gap-2 mb-2 opacity-70">
-                                    {getMessageTypeIcon(msg.type)}
-                                    <span className="text-xs capitalize">{msg.type}</span>
+                                {typeBadgeInfo && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div
+                                      className={cn(
+                                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide',
+                                        typeBadgeInfo.badgeClass
+                                      )}
+                                    >
+                                      <span className={cn('w-1.5 h-1.5 rounded-full', typeBadgeInfo.dotClass)} />
+                                      {getMessageTypeIcon(typeForBadge)}
+                                      <span>{typeBadgeInfo.label}</span>
+                                    </div>
                                   </div>
                                 )}
-                                {/* Render media inline using WhatsAppMediaDisplay */}
-                                {shouldRenderMedia && (msg.type === 'image' || msg.type === 'video' || msg.type === 'audio') && (
+                                {shouldRenderMedia && (normalizedType === 'image' || normalizedType === 'video' || normalizedType === 'audio') && (
                                   <WhatsAppMediaDisplay
-                                    type={msg.type}
+                                    type={normalizedType}
                                     mediaUrl={effectiveMediaUrl}
                                     content={displayContent}
                                     direction={msg.direction}
                                     onImageClick={setMediaViewer}
                                   />
                                 )}
-                                {shouldRenderMedia && msg.type === 'document' && (
+                                {shouldRenderMedia && normalizedType === 'sticker' && (
+                                  <a
+                                    href={effectiveMediaUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={cn(
+                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
+                                      msg.direction === 'outbound'
+                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
+                                    )}
+                                  >
+                                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+                                      <Image className="w-5 h-5 opacity-80" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">Figurinha</p>
+                                      <p className="text-xs opacity-70 truncate">Clique para abrir</p>
+                                    </div>
+                                  </a>
+                                )}
+                                {shouldRenderMedia && normalizedType === 'document' && (
                                   <a
                                     href={effectiveMediaUrl}
                                     target="_blank"
@@ -1400,7 +1477,7 @@ const Inbox = () => {
                                   </a>
                                 )}
                                 {/* WhatsApp media URL in text message - render inline */}
-                                {msg.type === 'text' && hasOnlyUrl && isWhatsappMedia && (
+                                {normalizedType === 'text' && hasOnlyUrl && isWhatsappMedia && (
                                   <WhatsAppMediaDisplay
                                     type={mediaKind === 'video' ? 'video' : mediaKind === 'audio' ? 'audio' : 'image'}
                                     mediaUrl={primaryUrl}
@@ -1409,7 +1486,7 @@ const Inbox = () => {
                                     onImageClick={setMediaViewer}
                                   />
                                 )}
-                                {msg.type === 'text' && hasOnlyUrl && !isWhatsappMedia && (
+                                {normalizedType === 'text' && hasOnlyUrl && !isWhatsappMedia && (
                                   <a
                                     href={primaryUrl}
                                     target="_blank"
@@ -1430,12 +1507,12 @@ const Inbox = () => {
                                     </div>
                                   </a>
                                 )}
-                                {(!shouldRenderMedia && !(msg.type === 'text' && hasOnlyUrl)) && (
+                                {(!shouldRenderMedia && !(normalizedType === 'text' && hasOnlyUrl)) && (
                                   <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
                                     {renderTextWithLinks(displayContent)}
                                   </p>
                                 )}
-                                {shouldRenderMedia && hasContent && msg.type !== 'document' && (
+                                {shouldRenderMedia && hasContent && normalizedType !== 'document' && (
                                   <p className="whitespace-pre-wrap mt-2">
                                     {renderTextWithLinks(rawContent)}
                                   </p>

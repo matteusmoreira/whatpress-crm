@@ -11,10 +11,10 @@ export const EmojiPicker = ({ onSelect, onClose, position = 'top' }) => {
 
     return (
         <div className={cn(
-            'absolute z-50 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl p-2',
+            'absolute right-0 z-[1000] pointer-events-auto touch-manipulation backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl p-2 max-w-[calc(100vw-1rem)]',
             position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
         )}>
-            <div className="grid grid-cols-8 gap-1">
+            <div className="grid grid-cols-6 sm:grid-cols-8 gap-1">
                 {ALL_EMOJIS.map(emoji => (
                     <button
                         key={emoji}
