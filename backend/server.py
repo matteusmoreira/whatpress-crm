@@ -2803,8 +2803,6 @@ async def delete_message(message_id: str, payload: dict = Depends(verify_token))
         if msg_type == 'sticker':
             return '[Figurinha]'
         return '[Mensagem]'
-            return '[Figurinha]'
-        return '[Mensagem]'
 
     latest = supabase.table('messages').select('content, timestamp, type').eq('conversation_id', conversation_id).order('timestamp', desc=True).limit(1).execute()
     if latest.data:

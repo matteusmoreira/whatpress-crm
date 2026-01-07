@@ -1349,23 +1349,16 @@ const Inbox = () => {
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-2 flex-wrap">
-            {['all', 'open', 'pending', 'resolved'].map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setConversationFilter(filter)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                  conversationFilter === filter
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
-                )}
-              >
-                {filter === 'all' ? 'Todas' : filter === 'open' ? 'Abertas' : filter === 'pending' ? 'Pendentes' : 'Resolvidas'}
-              </button>
-            ))}
-          </div>
+          <select
+            value={conversationFilter}
+            onChange={(e) => setConversationFilter(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          >
+            <option value="all" className="bg-emerald-900">Todas</option>
+            <option value="open" className="bg-emerald-900">Abertas</option>
+            <option value="pending" className="bg-emerald-900">Pendentes</option>
+            <option value="resolved" className="bg-emerald-900">Resolvidas</option>
+          </select>
         </div>
 
         {/* Connection filter */}

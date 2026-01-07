@@ -29,7 +29,7 @@ import { toast } from '../ui/glass-toaster';
 
 const Sidebar = () => {
   const { user, logout } = useAuthStore();
-  const { sidebarCollapsed, toggleSidebar, conversations } = useAppStore();
+  const { sidebarCollapsed, toggleSidebar, conversations, brandName } = useAppStore();
   const { theme } = useTheme();
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
@@ -129,7 +129,7 @@ const Sidebar = () => {
                 <span className={cn(
                   "text-xl font-bold",
                   theme === 'dark' ? 'text-white' : 'text-slate-800'
-                )}>WhatsApp CRM</span>
+                )}>{brandName || 'WhatsApp CRM'}</span>
               </div>
             )}
             {sidebarCollapsed && (

@@ -1,6 +1,31 @@
 import { create } from 'zustand';
 import { TenantsAPI, ConnectionsAPI, ConversationsAPI, MessagesAPI } from '../lib/api';
 
+const BRAND_NAME_KEY = 'whatsapp-crm-brand-name-v1';
+
+const loadBrandName = () => {
+  if (typeof window === 'undefined') return 'WhatsApp CRM';
+  try {
+    const raw = window.localStorage.getItem(BRAND_NAME_KEY);
+    const name = String(raw || '').trim();
+    return name || 'WhatsApp CRM';
+  } catch (e) {
+    return 'WhatsApp CRM';
+  }
+};
+
+const saveBrandName = (name) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) {
+      window.localStorage.removeItem(BRAND_NAME_KEY);
+      return;
+    }
+    window.localStorage.setItem(BRAND_NAME_KEY, trimmed);
+  } catch (e) { }
+};
+
 export const useAppStore = create((set, get) => ({
   // Tenants State
   tenants: [],
@@ -24,6 +49,7 @@ export const useAppStore = create((set, get) => ({
 
   // Sidebar State
   sidebarCollapsed: false,
+  brandName: loadBrandName(),
 
   // Error State
   error: null,
@@ -299,6 +325,12 @@ export const useAppStore = create((set, get) => ({
   // UI Actions
   toggleSidebar: () => {
     set(state => ({ sidebarCollapsed: !state.sidebarCollapsed }));
+  },
+
+  setBrandName: (name) => {
+    const trimmed = String(name || '').trim();
+    saveBrandName(trimmed);
+    set({ brandName: trimmed || 'WhatsApp CRM' });
   },
 
   clearError: () => {

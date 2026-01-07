@@ -6,11 +6,13 @@ import {
   Globe,
   CreditCard,
   ChevronRight,
-  Plug
+  Plug,
+  Tag
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GlassBadge, GlassCard } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
+import { useAppStore } from '../store/appStore';
 import { cn } from '../lib/utils';
 import { toast } from '../components/ui/glass-toaster';
 
@@ -103,6 +105,8 @@ const ToggleRow = ({ title, description, value, onToggle, disabled }) => {
 
 const Settings = () => {
   const { user } = useAuthStore();
+  const { brandName, setBrandName } = useAppStore();
+  const [brandNameInput, setBrandNameInput] = useState(brandName || 'WhatsApp CRM');
 
   const initialPrefs = useMemo(() => loadNotificationPrefs(), []);
   const [browserNotifications, setBrowserNotifications] = useState(initialPrefs.browserNotifications);
@@ -110,6 +114,10 @@ const Settings = () => {
   const [permission, setPermission] = useState(
     typeof window !== 'undefined' && 'Notification' in window ? window.Notification.permission : 'unsupported'
   );
+
+  useEffect(() => {
+    setBrandNameInput(brandName || 'WhatsApp CRM');
+  }, [brandName]);
 
   useEffect(() => {
     saveNotificationPrefs({ browserNotifications, sound });
@@ -199,6 +207,44 @@ const Settings = () => {
             <GlassBadge variant="success" className="inline-block mt-2 px-3 py-1 text-sm font-medium capitalize">
               {user?.role}
             </GlassBadge>
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard className="mb-8 p-6" hover={false}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 rounded-xl bg-emerald-500/20">
+            <Tag className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">White-label</h2>
+            <p className="text-white/60 text-sm">Altere o nome exibido no topo do menu</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-white/80 text-sm font-medium block mb-2">Nome do sistema</label>
+            <input
+              type="text"
+              value={brandNameInput}
+              onChange={(e) => setBrandNameInput(e.target.value)}
+              placeholder="WhatsApp CRM"
+              className="w-full px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setBrandName(brandNameInput);
+                toast.success('Nome atualizado');
+              }}
+              className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors"
+            >
+              Aplicar
+            </button>
           </div>
         </div>
       </GlassCard>
