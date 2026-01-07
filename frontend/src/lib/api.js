@@ -225,6 +225,12 @@ export const ConversationsAPI = {
     return response.data;
   },
 
+  async purgeAll(tenantId = null) {
+    const params = tenantId ? { tenant_id: tenantId } : undefined;
+    const response = await apiClient.delete('/conversations/purge', { params });
+    return response.data;
+  },
+
   async updateStatus(id, status) {
     const response = await apiClient.patch(`/conversations/${id}/status`, { status });
     return response.data;

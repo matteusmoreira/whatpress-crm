@@ -7,6 +7,7 @@ import {
   Paperclip,
   Smile,
   MoreVertical,
+  ChevronLeft,
   Check,
   CheckCheck,
   Clock,
@@ -347,6 +348,7 @@ const Inbox = () => {
     sendMessage,
     updateConversationStatus,
     deleteConversation,
+    purgeAllConversations,
     clearConversationMessages,
     deleteMessage
   } = useAppStore();
@@ -381,6 +383,8 @@ const Inbox = () => {
   const [contactNameValue, setContactNameValue] = useState('');
   const [contactData, setContactData] = useState(null);
   const [useSignature, setUseSignature] = useState(user?.signatureEnabled ?? true);
+  const [showPurgeAllDialog, setShowPurgeAllDialog] = useState(false);
+  const [purgingAll, setPurgingAll] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const urlSearchHandledRef = useRef(null);
@@ -741,6 +745,21 @@ const Inbox = () => {
     inputRef.current?.focus();
   };
 
+  const handlePurgeAllConversations = async () => {
+    if (purgingAll) return;
+    setPurgingAll(true);
+    try {
+      const result = await purgeAllConversations(tenantId);
+      const deleted = result?.deletedConversations ?? 0;
+      toast.success(deleted > 0 ? `Conversas excluídas: ${deleted}` : 'Nenhuma conversa para excluir');
+      setShowPurgeAllDialog(false);
+    } catch (error) {
+      toast.error('Erro ao excluir todas as conversas');
+    } finally {
+      setPurgingAll(false);
+    }
+  };
+
   const handleDeleteConversation = async () => {
     if (!selectedConversation?.id) return;
     const ok = window.confirm('Deseja excluir esta conversa? Isso também remove as mensagens.');
@@ -846,19 +865,37 @@ const Inbox = () => {
   return (
     <div className="h-full min-h-0 flex flex-col lg:flex-row">
       {/* Conversations List */}
-      <div className="w-full lg:w-96 min-h-0 border-r border-white/10 flex flex-col bg-black/20">
+      <div
+        className={cn(
+          'w-full lg:w-96 min-h-0 border-r border-white/10 bg-black/20 flex flex-col',
+          selectedConversation ? 'hidden lg:flex' : 'flex'
+        )}
+      >
         {/* Header */}
         <div className="p-4 border-b border-white/10">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-white">Conversas</h1>
-            {/* Realtime indicator */}
-            <GlassBadge
-              variant={realtimeConnected ? 'success' : 'danger'}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs"
-            >
-              {realtimeConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {realtimeConnected ? 'Ao vivo' : 'Offline'}
-            </GlassBadge>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPurgeAllDialog(true)}
+                disabled={purgingAll || conversationsLoading || (conversations || []).length === 0}
+                className={cn(
+                  'p-2 rounded-lg transition-colors',
+                  'hover:bg-red-500/20 text-white/60 hover:text-red-200',
+                  (purgingAll || conversationsLoading || (conversations || []).length === 0) && 'opacity-40 cursor-not-allowed hover:bg-transparent'
+                )}
+                title="Excluir todas as conversas"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <GlassBadge
+                variant={realtimeConnected ? 'success' : 'danger'}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs"
+              >
+                {realtimeConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                {realtimeConnected ? 'Ao vivo' : 'Offline'}
+              </GlassBadge>
+            </div>
           </div>
 
           {/* Search */}
@@ -1024,13 +1061,25 @@ const Inbox = () => {
 
       <TooltipProvider>
         {/* Chat Area */}
-        <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-br from-emerald-950/50 to-teal-950/50">
+        <div
+          className={cn(
+            'flex-1 min-h-0 bg-gradient-to-br from-emerald-950/50 to-teal-950/50',
+            selectedConversation ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
+          )}
+        >
           {selectedConversation ? (
             <>
               {/* Chat Header */}
               <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20">
-                <div className="flex items-center justify-between">
+                <div className="flex items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSelectedConversation(null)}
+                      className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+                      title="Voltar"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
                     <ContactAvatar
                       src={selectedConversation.contactAvatar}
                       name={selectedConversation.contactName}
@@ -1076,7 +1125,7 @@ const Inbox = () => {
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
                     {/* Status select */}
                     <select
                       value={selectedConversation.status}
@@ -1510,84 +1559,88 @@ const Inbox = () => {
                 )}
 
 
-                <form onSubmit={handleSendMessage} className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowFileUpload(!showFileUpload)}
-                    className={cn(
-                      'p-2 rounded-lg transition-colors',
-                      showFileUpload
-                        ? 'bg-emerald-500 text-white'
-                        : 'hover:bg-white/10 text-white/60 hover:text-white'
-                    )}
-                  >
-                    <Paperclip className="w-5 h-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickReplies(!showQuickReplies)}
-                    className={cn(
-                      'p-2 rounded-lg transition-colors',
-                      showQuickReplies
-                        ? 'bg-emerald-500 text-white'
-                        : 'hover:bg-white/10 text-white/60 hover:text-white'
-                    )}
-                    title="Respostas rápidas (Ctrl+/)"
-                  >
-                    <Zap className="w-5 h-5" />
-                  </button>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setUseSignature(!useSignature)}
-                        className={cn(
-                          'p-2 rounded-lg transition-colors',
-                          useSignature
-                            ? 'bg-emerald-500 text-white'
-                            : 'hover:bg-white/10 text-white/60 hover:text-white'
-                        )}
-                        title={useSignature ? 'Assinatura ativada' : 'Assinatura desativada'}
-                      >
-                        <PenLine className="w-5 h-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {useSignature ? 'Desativar assinatura' : 'Ativar assinatura'}
-                    </TooltipContent>
-                  </Tooltip>
-                  <div className="flex-1 relative">
-                    <GlassInput
-                      ref={inputRef}
-                      type="text"
-                      placeholder="Digite sua mensagem..."
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      className="pr-12"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <button
-                        type="button"
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className={cn(
-                          "text-white/40 hover:text-white/60 transition-colors",
-                          showEmojiPicker && "text-emerald-400"
-                        )}
-                      >
-                        <Smile className="w-5 h-5" />
-                      </button>
-                      {showEmojiPicker && (
-                        <EmojiPicker
-                          onSelect={handleEmojiSelect}
-                          onClose={() => setShowEmojiPicker(false)}
-                          position="top"
-                        />
+                <form onSubmit={handleSendMessage} className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowFileUpload(!showFileUpload)}
+                      className={cn(
+                        'p-2 rounded-lg transition-colors',
+                        showFileUpload
+                          ? 'bg-emerald-500 text-white'
+                          : 'hover:bg-white/10 text-white/60 hover:text-white'
                       )}
-                    </div>
+                    >
+                      <Paperclip className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickReplies(!showQuickReplies)}
+                      className={cn(
+                        'p-2 rounded-lg transition-colors',
+                        showQuickReplies
+                          ? 'bg-emerald-500 text-white'
+                          : 'hover:bg-white/10 text-white/60 hover:text-white'
+                      )}
+                      title="Respostas rápidas (Ctrl+/)"
+                    >
+                      <Zap className="w-5 h-5" />
+                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setUseSignature(!useSignature)}
+                          className={cn(
+                            'p-2 rounded-lg transition-colors',
+                            useSignature
+                              ? 'bg-emerald-500 text-white'
+                              : 'hover:bg-white/10 text-white/60 hover:text-white'
+                          )}
+                          title={useSignature ? 'Assinatura ativada' : 'Assinatura desativada'}
+                        >
+                          <PenLine className="w-5 h-5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {useSignature ? 'Desativar assinatura' : 'Ativar assinatura'}
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
-                  <GlassButton type="submit" className="px-4 py-3" disabled={!newMessage.trim()}>
-                    <Send className="w-5 h-5" />
-                  </GlassButton>
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="flex-1 relative">
+                      <GlassInput
+                        ref={inputRef}
+                        type="text"
+                        placeholder="Digite sua mensagem..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        className="pr-12"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <button
+                          type="button"
+                          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                          className={cn(
+                            "text-white/40 hover:text-white/60 transition-colors",
+                            showEmojiPicker && "text-emerald-400"
+                          )}
+                        >
+                          <Smile className="w-5 h-5" />
+                        </button>
+                        {showEmojiPicker && (
+                          <EmojiPicker
+                            onSelect={handleEmojiSelect}
+                            onClose={() => setShowEmojiPicker(false)}
+                            position="top"
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <GlassButton type="submit" className="px-4 py-3" disabled={!newMessage.trim()}>
+                      <Send className="w-5 h-5" />
+                    </GlassButton>
+                  </div>
                 </form>
 
                 {/* Typing hint */}
@@ -1617,6 +1670,35 @@ const Inbox = () => {
             className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
             referrerPolicy="no-referrer"
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showPurgeAllDialog} onOpenChange={(open) => !purgingAll && setShowPurgeAllDialog(open)}>
+        <DialogContent className="max-w-md bg-black/70 border border-white/10">
+          <div className="p-6">
+            <h2 className="text-lg font-bold text-white mb-2">Excluir todas as conversas</h2>
+            <p className="text-white/70 text-sm">
+              Isso vai remover todas as conversas e mensagens deste tenant. Essa ação não pode ser desfeita.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <GlassButton
+                variant="secondary"
+                onClick={() => setShowPurgeAllDialog(false)}
+                disabled={purgingAll}
+                className="px-4 py-2"
+              >
+                Cancelar
+              </GlassButton>
+              <GlassButton
+                variant="danger"
+                onClick={handlePurgeAllConversations}
+                loading={purgingAll}
+                className="px-4 py-2"
+              >
+                Excluir tudo
+              </GlassButton>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1742,6 +1742,61 @@ async def remove_label(conversation_id: str, label_id: str, payload: dict = Depe
         logger.error(f"Error removing label {label_id} from conversation {conversation_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao remover label: {str(e)}")
 
+@api_router.delete("/conversations/purge")
+async def purge_conversations(tenant_id: Optional[str] = None, payload: dict = Depends(verify_token)):
+    requested_tenant_id = (tenant_id or '').strip() or None
+    user_tenant_id = get_user_tenant_id(payload)
+
+    effective_tenant_id = None
+    if payload.get('role') == 'superadmin' and requested_tenant_id:
+        effective_tenant_id = requested_tenant_id
+    else:
+        effective_tenant_id = user_tenant_id
+
+    if not effective_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant não identificado")
+
+    count_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', effective_tenant_id).execute()
+    total = count_result.count or 0
+
+    if total <= 0:
+        return {"success": True, "deletedConversations": 0}
+
+    conv_ids_result = supabase.table('conversations').select('id').eq('tenant_id', effective_tenant_id).execute()
+    conversation_ids = [row.get('id') for row in (conv_ids_result.data or []) if row.get('id')]
+
+    chunk_size = 200
+    for i in range(0, len(conversation_ids), chunk_size):
+        chunk = conversation_ids[i:i + chunk_size]
+        try:
+            supabase.table('assignment_history').delete().in_('conversation_id', chunk).execute()
+        except Exception:
+            pass
+        try:
+            supabase.table('auto_message_logs').delete().in_('conversation_id', chunk).execute()
+        except Exception:
+            pass
+        try:
+            supabase.table('typing_events').delete().in_('conversation_id', chunk).execute()
+        except Exception:
+            pass
+
+    try:
+        supabase.table('conversations').delete().eq('tenant_id', effective_tenant_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao excluir conversas: {str(e)}")
+
+    safe_insert_audit_log(
+        tenant_id=effective_tenant_id,
+        actor_user_id=payload.get('user_id'),
+        action='conversations.purge',
+        entity_type='conversation',
+        entity_id=None,
+        metadata={'deleted': total}
+    )
+
+    return {"success": True, "deletedConversations": total}
+
 @api_router.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, payload: dict = Depends(verify_token)):
     user_tenant_id = get_user_tenant_id(payload)

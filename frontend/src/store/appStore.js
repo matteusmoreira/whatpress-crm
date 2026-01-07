@@ -195,6 +195,17 @@ export const useAppStore = create((set, get) => ({
     });
   },
 
+  purgeAllConversations: async (tenantId) => {
+    const result = await ConversationsAPI.purgeAll(tenantId);
+    set({
+      conversations: [],
+      selectedConversation: null,
+      messages: [],
+      messagesLoading: false
+    });
+    return result;
+  },
+
   clearConversationMessages: async (conversationId) => {
     await ConversationsAPI.clearMessages(conversationId);
     set(state => ({
