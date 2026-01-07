@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { subscribeToMessages, subscribeToConversations, subscribeToConnectionStatus, setRealtimeAuth } from '../lib/supabase';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { subscribeToMessages, subscribeToConversations, subscribeToConnectionStatus } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { toast } from '../components/ui/glass-toaster';
@@ -13,7 +13,7 @@ export const RealtimeProvider = ({ children }) => {
   } = useAppStore();
 
   const [isConnected, setIsConnected] = useState(false);
-  const [unsubscribers, setUnsubscribers] = useState([]);
+  const statusesRef = useRef({ conversations: 'CLOSED', connections: 'CLOSED' });
 
   const tenantId = user?.tenantId;
 
@@ -48,27 +48,38 @@ export const RealtimeProvider = ({ children }) => {
       const alreadyInMessages = (state.messages || []).some(m => m.id === message.id);
       const nextMessages = isOpenConversation && !alreadyInMessages ? [...(state.messages || []), normalizedMessage] : state.messages;
 
-      const updatedConversations = (state.conversations || []).map(c => {
-        if (c.id !== message.conversationId) return c;
-        const nextUnread =
-          message.direction === 'inbound' && !isOpenConversation
-            ? (c.unreadCount || 0) + 1
-            : isOpenConversation
-              ? 0
-              : c.unreadCount;
-        return {
-          ...c,
-          lastMessageAt: message.timestamp || c.lastMessageAt,
-          lastMessagePreview: preview,
-          unreadCount: nextUnread
-        };
-      });
+      const conversations = state.conversations || [];
+      const idx = conversations.findIndex(c => c.id === message.conversationId);
+      if (idx < 0) return { messages: nextMessages };
 
-      const nextConversations = [...updatedConversations].sort((a, b) => {
-        const ta = Date.parse(a?.lastMessageAt || '') || 0;
-        const tb = Date.parse(b?.lastMessageAt || '') || 0;
-        return tb - ta;
-      });
+      const current = conversations[idx];
+      const nextUnread =
+        message.direction === 'inbound' && !isOpenConversation
+          ? (current.unreadCount || 0) + 1
+          : isOpenConversation
+            ? 0
+            : current.unreadCount;
+
+      const updated = {
+        ...current,
+        lastMessageAt: message.timestamp || current.lastMessageAt,
+        lastMessagePreview: preview,
+        unreadCount: nextUnread
+      };
+
+      const normalizeTs = (v) => Date.parse(v || '') || 0;
+      const targetTs = normalizeTs(updated.lastMessageAt);
+      const without = [...conversations.slice(0, idx), ...conversations.slice(idx + 1)];
+      let inserted = false;
+      const nextConversations = [];
+      for (const c of without) {
+        if (!inserted && targetTs >= normalizeTs(c?.lastMessageAt)) {
+          nextConversations.push(updated);
+          inserted = true;
+        }
+        nextConversations.push(c);
+      }
+      if (!inserted) nextConversations.push(updated);
 
       return { messages: nextMessages, conversations: nextConversations };
     });
@@ -89,7 +100,7 @@ export const RealtimeProvider = ({ children }) => {
     if (event === 'INSERT') {
       // New conversation
       useAppStore.setState(state => ({
-        conversations: [conversation, ...state.conversations]
+        conversations: [conversation, ...(state.conversations || [])]
       }));
 
       toast.info('Nova conversa!', {
@@ -97,20 +108,50 @@ export const RealtimeProvider = ({ children }) => {
       });
     } else if (event === 'UPDATE' && conversation) {
       // Updated conversation
+      const storeState = useAppStore.getState();
+      if (storeState.selectedConversation?.id === conversation.id) {
+        const currentMessages = storeState.messages || [];
+        const last = currentMessages[currentMessages.length - 1];
+        const lastTs = last?.timestamp;
+
+        if (!lastTs) {
+          storeState.fetchMessages(conversation.id, { silent: true, tail: true, limit: 50 });
+        } else {
+          const convTs = Date.parse(conversation.lastMessageAt || '') || 0;
+          const msgTs = Date.parse(lastTs || '') || 0;
+          if (convTs > msgTs) {
+            storeState.fetchMessages(conversation.id, { silent: true, after: lastTs, append: true, limit: 200 });
+          }
+        }
+      }
+
       useAppStore.setState(state => {
+        const normalizeTs = (v) => Date.parse(v || '') || 0;
         const without = (state.conversations || []).filter(c => c.id !== conversation.id);
-        const merged = [conversation, ...without];
-        const sorted = merged.sort((a, b) => {
-          const ta = Date.parse(a?.lastMessageAt || '') || 0;
-          const tb = Date.parse(b?.lastMessageAt || '') || 0;
-          return tb - ta;
-        });
-        return { conversations: sorted };
+        const targetTs = normalizeTs(conversation.lastMessageAt);
+
+        let inserted = false;
+        const nextConversations = [];
+        for (const c of without) {
+          if (!inserted && targetTs >= normalizeTs(c?.lastMessageAt)) {
+            nextConversations.push(conversation);
+            inserted = true;
+          }
+          nextConversations.push(c);
+        }
+        if (!inserted) nextConversations.push(conversation);
+
+        const nextSelected =
+          state.selectedConversation?.id === conversation.id
+            ? { ...state.selectedConversation, ...conversation }
+            : state.selectedConversation;
+
+        return { conversations: nextConversations, selectedConversation: nextSelected };
       });
     } else if (event === 'DELETE' && conversation) {
       // Deleted conversation
       useAppStore.setState(state => ({
-        conversations: state.conversations.filter(c => c.id !== conversation.id)
+        conversations: (state.conversations || []).filter(c => c.id !== conversation.id)
       }));
     }
   }, []);
@@ -134,10 +175,8 @@ export const RealtimeProvider = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    console.log('[Realtime] Initializing...', { isAuthenticated, tenantId });
-
     if (!tenantId) {
-      console.warn('[Realtime] Missing tenantId, skipping subscription');
+      setIsConnected(false);
       return;
     }
 
@@ -145,34 +184,30 @@ export const RealtimeProvider = ({ children }) => {
     let unsubConnections;
     let mounted = true;
 
+    const updateStatus = (key, status) => {
+      statusesRef.current = { ...statusesRef.current, [key]: status };
+      const nextConnected =
+        statusesRef.current.conversations === 'SUBSCRIBED' &&
+        statusesRef.current.connections === 'SUBSCRIBED';
+      if (mounted) setIsConnected(nextConnected);
+    };
+
     const initRealtime = async () => {
       try {
-        // Set auth token for realtime RLS
-        const token = useAuthStore.getState().token;
-        if (token) {
-          console.log('[Realtime] Setting auth token...');
-          await setRealtimeAuth(token);
-          console.log('[Realtime] Auth token set');
-        } else {
-          console.warn('[Realtime] No token found in authStore');
-        }
-
         if (!mounted) return;
 
-        // Subscribe to conversations
-        console.log('[Realtime] Subscribing to conversations for tenant:', tenantId);
-        unsubConversations = subscribeToConversations(tenantId, handleConversationUpdate);
+        statusesRef.current = { conversations: 'CLOSED', connections: 'CLOSED' };
+        setIsConnected(false);
 
-        // Subscribe to connection status
-        console.log('[Realtime] Subscribing to connections for tenant:', tenantId);
-        unsubConnections = subscribeToConnectionStatus(tenantId, handleConnectionUpdate);
+        unsubConversations = subscribeToConversations(tenantId, handleConversationUpdate, (status) => {
+          updateStatus('conversations', status);
+        });
 
-        const newUnsubscribers = [unsubConversations, unsubConnections];
-        setUnsubscribers(newUnsubscribers);
-        setIsConnected(true);
-        console.log('[Realtime] Connected and subscribed');
+        unsubConnections = subscribeToConnectionStatus(tenantId, handleConnectionUpdate, (status) => {
+          updateStatus('connections', status);
+        });
       } catch (err) {
-        console.error('[Realtime] Initialization error:', err);
+        setIsConnected(false);
       }
     };
 
@@ -180,23 +215,27 @@ export const RealtimeProvider = ({ children }) => {
 
     return () => {
       mounted = false;
-      console.log('[Realtime] Cleaning up subscriptions');
       unsubConversations?.();
       unsubConnections?.();
+      statusesRef.current = { conversations: 'CLOSED', connections: 'CLOSED' };
       setIsConnected(false);
     };
   }, [isAuthenticated, tenantId, handleConversationUpdate, handleConnectionUpdate]);
 
   // Subscribe to messages for selected conversation
   useEffect(() => {
-    if (!selectedConversation?.id) return;
+    const conversationId =
+      typeof selectedConversation === 'string'
+        ? selectedConversation
+        : selectedConversation?.id;
+    if (!conversationId) return;
 
-    const unsubMessages = subscribeToMessages(selectedConversation.id, handleNewMessage);
+    const unsubMessages = subscribeToMessages(conversationId, handleNewMessage);
 
     return () => {
       unsubMessages?.();
     };
-  }, [selectedConversation?.id, handleNewMessage]);
+  }, [selectedConversation, handleNewMessage]);
 
   return (
     <RealtimeContext.Provider value={{ isConnected }}>

@@ -141,16 +141,22 @@ export const useAppStore = create((set, get) => ({
   },
 
   setSelectedConversation: async (conversation) => {
-    set({ selectedConversation: conversation, messagesLoading: true });
-    if (conversation) {
+    let resolved = conversation;
+    if (typeof conversation === 'string') {
+      const existing = (get().conversations || []).find(c => c.id === conversation);
+      resolved = existing || null;
+    }
+
+    set({ selectedConversation: resolved, messagesLoading: true });
+    if (resolved) {
       try {
-        await ConversationsAPI.markAsRead(conversation.id);
-        const messages = await MessagesAPI.list(conversation.id, { limit: 50, tail: true });
+        await ConversationsAPI.markAsRead(resolved.id);
+        const messages = await MessagesAPI.list(resolved.id, { limit: 50, tail: true });
         set(state => ({
           messages,
           messagesLoading: false,
           conversations: state.conversations.map(c =>
-            c.id === conversation.id ? { ...c, unreadCount: 0 } : c
+            c.id === resolved.id ? { ...c, unreadCount: 0 } : c
           )
         }));
       } catch (error) {

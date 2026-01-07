@@ -14,11 +14,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Realtime subscription helpers
 export const setRealtimeAuth = async (token) => {
   if (token) {
-    await supabase.realtime.setAuth(token);
+    try {
+      await supabase.realtime.setAuth(token);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
+  return false;
 };
 
-export const subscribeToMessages = (conversationId, callback) => {
+export const subscribeToMessages = (conversationId, callback, onStatus) => {
   const channel = supabase
     .channel(`messages:${conversationId}`)
     .on(
@@ -43,14 +49,16 @@ export const subscribeToMessages = (conversationId, callback) => {
         });
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (typeof onStatus === 'function') onStatus(status);
+    });
 
   return () => {
     supabase.removeChannel(channel);
   };
 };
 
-export const subscribeToConversations = (tenantId, callback) => {
+export const subscribeToConversations = (tenantId, callback, onStatus) => {
   const channel = supabase
     .channel(`conversations:${tenantId}`)
     .on(
@@ -83,14 +91,16 @@ export const subscribeToConversations = (tenantId, callback) => {
         });
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (typeof onStatus === 'function') onStatus(status);
+    });
 
   return () => {
     supabase.removeChannel(channel);
   };
 };
 
-export const subscribeToConnectionStatus = (tenantId, callback) => {
+export const subscribeToConnectionStatus = (tenantId, callback, onStatus) => {
   const channel = supabase
     .channel(`connections:${tenantId}`)
     .on(
@@ -108,7 +118,9 @@ export const subscribeToConnectionStatus = (tenantId, callback) => {
         });
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (typeof onStatus === 'function') onStatus(status);
+    });
 
   return () => {
     supabase.removeChannel(channel);

@@ -454,7 +454,6 @@ const Inbox = () => {
   // Fallback: polling para atualizar conversas/mensagens quando realtime falhar
   useEffect(() => {
     if (!tenantId) return;
-    if (realtimeConnected) return;
 
     const pollConversations = () => {
       if (typeof document !== 'undefined' && document.hidden) return;
@@ -478,8 +477,8 @@ const Inbox = () => {
     pollConversations();
     pollMessages();
 
-    const conversationsInterval = setInterval(pollConversations, 10000);
-    const messagesInterval = setInterval(pollMessages, 4000);
+    const conversationsInterval = setInterval(pollConversations, realtimeConnected ? 15000 : 5000);
+    const messagesInterval = setInterval(pollMessages, realtimeConnected ? 7000 : 2000);
 
     return () => {
       clearInterval(conversationsInterval);
