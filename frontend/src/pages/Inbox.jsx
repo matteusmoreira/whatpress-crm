@@ -1990,13 +1990,20 @@ const Inbox = () => {
                                 : metaMime.startsWith('image/')
                                   ? 'image'
                                   : null;
-                          const resolvedKind = (metaKind && metaKind !== 'unknown' && metaKind !== 'text')
-                            ? metaKind
-                            : (kindFromMime && kindFromMime !== 'unknown' ? kindFromMime : (inferredKindFromUrl !== 'unknown' ? inferredKindFromUrl : null));
-
-                          const renderType = (resolvedKind && resolvedKind !== 'unknown' && resolvedKind !== 'text')
-                            ? resolvedKind
-                            : normalizedType;
+                          // PRIORITY ORDER FOR MEDIA TYPE DETECTION:
+                          // 1. normalizedType (from msg.type - saved by backend, most reliable)
+                          // 2. metaKind (from metadata.media_kind - also from backend)
+                          // 3. kindFromMime (inferred from mime_type)
+                          // 4. inferredKindFromUrl (inferred from URL - least reliable fallback)
+                          const renderType = (normalizedType && normalizedType !== 'unknown' && normalizedType !== 'text')
+                            ? normalizedType
+                            : (metaKind && metaKind !== 'unknown' && metaKind !== 'text')
+                              ? metaKind
+                              : (kindFromMime && kindFromMime !== 'unknown')
+                                ? kindFromMime
+                                : (inferredKindFromUrl !== 'unknown')
+                                  ? inferredKindFromUrl
+                                  : normalizedType;
 
                           const shouldRenderMedia = Boolean(effectiveMediaUrl) && ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
 
@@ -2004,12 +2011,12 @@ const Inbox = () => {
                             (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
                           const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
                           const originInfo = getMessageOriginInfo(msg);
-                          const typeForBadge =
-                            normalizedType !== 'text'
-                              ? renderType
-                              : (hasOnlyUrl && isWhatsappMedia
-                                ? (mediaKind === 'sticker' ? 'sticker' : mediaKind === 'audio' ? 'audio' : mediaKind === 'video' ? 'video' : 'image')
-                                : null);
+                          // Use renderType for badge - it already has correct priority logic
+                          const typeForBadge = ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType)
+                            ? renderType
+                            : (hasOnlyUrl && isWhatsappMedia
+                              ? (mediaKind === 'sticker' ? 'sticker' : mediaKind === 'audio' ? 'audio' : mediaKind === 'video' ? 'video' : 'image')
+                              : null);
                           const typeBadgeInfo = typeForBadge ? getMessageTypeBadgeInfo(typeForBadge) : null;
 
                           return (
