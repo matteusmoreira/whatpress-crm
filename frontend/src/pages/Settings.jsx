@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   User,
   Bell,
@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { GlassBadge, GlassCard } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
+import { toast } from '../components/ui/glass-toaster';
 
 const SettingItem = ({ icon: Icon, title, description, to, comingSoon }) => {
   const Component = to ? Link : 'div';
@@ -45,8 +46,82 @@ const SettingItem = ({ icon: Icon, title, description, to, comingSoon }) => {
   );
 };
 
+const NOTIFICATION_PREFS_KEY = 'whatsapp-crm-notification-prefs-v1';
+
+const loadNotificationPrefs = () => {
+  if (typeof window === 'undefined') return { browserNotifications: false, sound: true };
+  try {
+    const raw = window.localStorage.getItem(NOTIFICATION_PREFS_KEY);
+    if (!raw) return { browserNotifications: false, sound: true };
+    const parsed = JSON.parse(raw);
+    return {
+      browserNotifications: !!parsed?.browserNotifications,
+      sound: parsed?.sound === false ? false : true
+    };
+  } catch (e) {
+    return { browserNotifications: false, sound: true };
+  }
+};
+
+const saveNotificationPrefs = (next) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(next));
+  } catch (e) { }
+};
+
+const ToggleRow = ({ title, description, value, onToggle, disabled }) => {
+  return (
+    <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+      <div className="pr-4">
+        <p className="text-white font-medium">{title}</p>
+        <p className="text-white/50 text-sm">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          if (disabled) return;
+          onToggle?.();
+        }}
+        className={cn(
+          'relative w-11 h-6 rounded-full transition-all duration-300',
+          value ? 'bg-emerald-500' : 'bg-white/20',
+          disabled && 'opacity-60 cursor-not-allowed'
+        )}
+        aria-pressed={!!value}
+      >
+        <span
+          className={cn(
+            'absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300',
+            value ? 'left-6' : 'left-1'
+          )}
+        />
+      </button>
+    </div>
+  );
+};
+
 const Settings = () => {
   const { user } = useAuthStore();
+
+  const initialPrefs = useMemo(() => loadNotificationPrefs(), []);
+  const [browserNotifications, setBrowserNotifications] = useState(initialPrefs.browserNotifications);
+  const [sound, setSound] = useState(initialPrefs.sound);
+  const [permission, setPermission] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? window.Notification.permission : 'unsupported'
+  );
+
+  useEffect(() => {
+    saveNotificationPrefs({ browserNotifications, sound });
+  }, [browserNotifications, sound]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setPermission('unsupported');
+      return;
+    }
+    setPermission(window.Notification.permission);
+  }, []);
 
   const settingsSections = [
     {
@@ -68,7 +143,7 @@ const Settings = () => {
           icon: Bell,
           title: 'Notificações',
           description: 'Configure alertas e notificações',
-          comingSoon: true
+          comingSoon: false
         },
         {
           icon: Shield,
@@ -125,6 +200,82 @@ const Settings = () => {
               {user?.role}
             </GlassBadge>
           </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard className="mb-8 p-6" hover={false}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 rounded-xl bg-emerald-500/20">
+            <Bell className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Notificações</h2>
+            <p className="text-white/60 text-sm">
+              {permission === 'granted'
+                ? 'Permissão do navegador: concedida'
+                : permission === 'denied'
+                  ? 'Permissão do navegador: bloqueada'
+                  : permission === 'default'
+                    ? 'Permissão do navegador: não configurada'
+                    : 'Permissão do navegador: indisponível'}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <ToggleRow
+            title="Notificação no navegador"
+            description="Mostra um alerta quando chegar mensagem nova"
+            value={browserNotifications}
+            disabled={permission === 'unsupported'}
+            onToggle={async () => {
+              const next = !browserNotifications;
+              if (!next) {
+                setBrowserNotifications(false);
+                return;
+              }
+
+              if (typeof window === 'undefined' || !('Notification' in window)) {
+                setPermission('unsupported');
+                setBrowserNotifications(false);
+                toast.warning('Seu navegador não suporta notificações');
+                return;
+              }
+
+              const currentPermission = window.Notification.permission;
+              setPermission(currentPermission);
+              if (currentPermission === 'granted') {
+                setBrowserNotifications(true);
+                return;
+              }
+              if (currentPermission === 'denied') {
+                setBrowserNotifications(false);
+                toast.warning('Notificações bloqueadas no navegador');
+                return;
+              }
+
+              try {
+                const result = await window.Notification.requestPermission();
+                setPermission(result);
+                if (result === 'granted') {
+                  setBrowserNotifications(true);
+                } else {
+                  setBrowserNotifications(false);
+                  toast.info('Notificações não foram ativadas');
+                }
+              } catch (e) {
+                setBrowserNotifications(false);
+                toast.error('Não foi possível pedir permissão de notificação');
+              }
+            }}
+          />
+
+          <ToggleRow
+            title="Aviso sonoro"
+            description="Toca um som simples quando chegar mensagem nova"
+            value={sound}
+            onToggle={() => setSound(s => !s)}
+          />
         </div>
       </GlassCard>
 

@@ -6,6 +6,23 @@ import { toast } from '../components/ui/glass-toaster';
 
 const RealtimeContext = createContext();
 
+const NOTIFICATION_PREFS_KEY = 'whatsapp-crm-notification-prefs-v1';
+
+const loadNotificationPrefs = () => {
+  if (typeof window === 'undefined') return { browserNotifications: false, sound: true };
+  try {
+    const raw = window.localStorage.getItem(NOTIFICATION_PREFS_KEY);
+    if (!raw) return { browserNotifications: false, sound: true };
+    const parsed = JSON.parse(raw);
+    return {
+      browserNotifications: !!parsed?.browserNotifications,
+      sound: parsed?.sound === false ? false : true
+    };
+  } catch (e) {
+    return { browserNotifications: false, sound: true };
+  }
+};
+
 export const RealtimeProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuthStore();
   const {
@@ -19,6 +36,10 @@ export const RealtimeProvider = ({ children }) => {
 
   // Handle new message from realtime
   const handleNewMessage = useCallback((message) => {
+    const prefs = loadNotificationPrefs();
+    const isHidden = typeof document !== 'undefined' ? !!document.hidden : false;
+    const hasFocus = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? !!document.hasFocus() : true;
+
     const fallback =
       message.type === 'audio' ? '[Áudio]' :
         message.type === 'image' ? '[Imagem]' :
@@ -85,11 +106,34 @@ export const RealtimeProvider = ({ children }) => {
     });
 
     if (message.direction === 'inbound') {
-      try {
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19');
-        audio.volume = 0.3;
-        audio.play().catch(() => { });
-      } catch (e) { }
+      const state = useAppStore.getState();
+      const isOpenConversation = state.selectedConversation?.id === message.conversationId;
+      const shouldAlert = isHidden || !hasFocus || !isOpenConversation;
+
+      if (prefs.sound && shouldAlert) {
+        try {
+          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19');
+          audio.volume = 0.3;
+          audio.play().catch(() => { });
+        } catch (e) { }
+      }
+
+      if (prefs.browserNotifications && shouldAlert && typeof window !== 'undefined' && 'Notification' in window) {
+        try {
+          if (window.Notification.permission === 'granted') {
+            const conv =
+              (useAppStore.getState().conversations || []).find(c => c.id === message.conversationId) || null;
+            const title = conv?.contactName ? `Mensagem de ${conv.contactName}` : 'Nova mensagem';
+            const body = normalizedContent || '[Mensagem]';
+            const n = new window.Notification(title, { body });
+            n.onclick = () => {
+              try {
+                window.focus();
+              } catch (e) { }
+            };
+          }
+        } catch (e) { }
+      }
     }
   }, []);
 
@@ -107,8 +151,40 @@ export const RealtimeProvider = ({ children }) => {
         description: `${conversation.contactName} iniciou uma conversa`
       });
     } else if (event === 'UPDATE' && conversation) {
-      // Updated conversation
+      const prefs = loadNotificationPrefs();
+      const isHidden = typeof document !== 'undefined' ? !!document.hidden : false;
+      const hasFocus = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? !!document.hasFocus() : true;
       const storeState = useAppStore.getState();
+      const prev = (storeState.conversations || []).find(c => c.id === conversation.id) || null;
+      const wasUnread = prev?.unreadCount || 0;
+      const nowUnread = conversation?.unreadCount || 0;
+      const isSelected = storeState.selectedConversation?.id === conversation.id;
+      const shouldAlert = (isHidden || !hasFocus || !isSelected) && nowUnread > wasUnread;
+
+      if (shouldAlert && prefs.sound) {
+        try {
+          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19');
+          audio.volume = 0.3;
+          audio.play().catch(() => { });
+        } catch (e) { }
+      }
+
+      if (shouldAlert && prefs.browserNotifications && typeof window !== 'undefined' && 'Notification' in window) {
+        try {
+          if (window.Notification.permission === 'granted') {
+            const title = conversation?.contactName ? `Mensagem de ${conversation.contactName}` : 'Nova mensagem';
+            const body = conversation?.lastMessagePreview ? String(conversation.lastMessagePreview) : '[Mensagem]';
+            const n = new window.Notification(title, { body });
+            n.onclick = () => {
+              try {
+                window.focus();
+              } catch (e) { }
+            };
+          }
+        } catch (e) { }
+      }
+
+      // Updated conversation
       if (storeState.selectedConversation?.id === conversation.id) {
         const currentMessages = storeState.messages || [];
         const last = currentMessages[currentMessages.length - 1];
