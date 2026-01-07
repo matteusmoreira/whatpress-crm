@@ -239,14 +239,24 @@ export const useAppStore = create((set, get) => ({
 
   sendMessage: async (conversationId, content) => {
     const newMessage = await MessagesAPI.send(conversationId, content);
-    set(state => ({
-      messages: [...state.messages, newMessage],
-      conversations: state.conversations.map(c =>
-        c.id === conversationId
-          ? { ...c, lastMessageAt: newMessage.timestamp, lastMessagePreview: content.substring(0, 50) }
-          : c
-      )
-    }));
+    set(state => {
+      const currentMessages = state.messages || [];
+      const existingIdx = currentMessages.findIndex(m => m?.id && newMessage?.id && m.id === newMessage.id);
+
+      const nextMessages =
+        existingIdx >= 0
+          ? currentMessages.map((m, idx) => (idx === existingIdx ? { ...m, ...newMessage } : m))
+          : [...currentMessages, newMessage];
+
+      return {
+        messages: nextMessages,
+        conversations: (state.conversations || []).map(c =>
+          c.id === conversationId
+            ? { ...c, lastMessageAt: newMessage.timestamp, lastMessagePreview: String(content || '').substring(0, 50) }
+            : c
+        )
+      };
+    });
     return newMessage;
   },
 
