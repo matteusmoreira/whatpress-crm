@@ -8,6 +8,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(120);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_enabled BOOLEAN DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_include_title BOOLEAN DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_include_department BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_users_signature_enabled ON users(signature_enabled);
 

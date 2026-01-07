@@ -87,17 +87,22 @@ const Profile = () => {
     try {
       const updatedUser = await updateCurrentUser({
         name,
-        job_title: formData.jobTitle || '',
+        email: (formData.email || '').trim(),
+        phone: (formData.phone || '').trim(),
+        bio: (formData.bio || '').trim(),
+        jobTitle: formData.jobTitle || '',
         department: formData.department || '',
-        signature_enabled: Boolean(formData.signatureEnabled),
-        signature_include_title: Boolean(formData.signatureIncludeTitle),
-        signature_include_department: Boolean(formData.signatureIncludeDepartment)
+        signatureEnabled: Boolean(formData.signatureEnabled),
+        signatureIncludeTitle: Boolean(formData.signatureIncludeTitle),
+        signatureIncludeDepartment: Boolean(formData.signatureIncludeDepartment)
       });
 
       setFormData(prev => ({
         ...prev,
         name: updatedUser?.name || prev.name,
         email: updatedUser?.email || prev.email,
+        phone: updatedUser?.phone || '',
+        bio: updatedUser?.bio || '',
         jobTitle: updatedUser?.jobTitle || '',
         department: updatedUser?.department || '',
         signatureEnabled: updatedUser?.signatureEnabled ?? true,
@@ -209,7 +214,8 @@ const Profile = () => {
                 <GlassInput
                   type="email"
                   value={formData.email}
-                  disabled
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={isSaving}
                 />
               ) : (
                 <p className="text-white py-3">{formData.email}</p>
@@ -223,7 +229,8 @@ const Profile = () => {
               {isEditing ? (
                 <GlassInput
                   value={formData.phone}
-                  disabled
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  disabled={isSaving}
                 />
               ) : (
                 <p className="text-white py-3">{formData.phone}</p>
@@ -249,7 +256,8 @@ const Profile = () => {
               {isEditing ? (
                 <textarea
                   value={formData.bio}
-                  disabled
+                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                  disabled={isSaving}
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
                 />

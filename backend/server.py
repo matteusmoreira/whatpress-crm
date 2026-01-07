@@ -5,7 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
@@ -269,6 +269,9 @@ class ConversationTransferCreate(BaseModel):
 class UserProfileUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
     name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
     job_title: Optional[str] = Field(default=None, alias="jobTitle")
     department: Optional[str] = None
     signature_enabled: Optional[bool] = Field(default=None, alias="signatureEnabled")
@@ -522,11 +525,14 @@ async def get_current_user(payload: dict = Depends(verify_token)):
         'role': user['role'],
         'tenantId': user['tenant_id'],
         'avatar': user['avatar'],
+        'phone': user.get('phone'),
+        'bio': user.get('bio'),
         'jobTitle': user.get('job_title'),
         'department': user.get('department'),
         'signatureEnabled': user.get('signature_enabled', True),
         'signatureIncludeTitle': user.get('signature_include_title', False),
         'signatureIncludeDepartment': user.get('signature_include_department', False),
+        'createdAt': user.get('created_at'),
     }
 
 @api_router.patch("/auth/me")
@@ -535,6 +541,20 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
     update_data: Dict[str, Any] = {}
     if data.name is not None:
         update_data['name'] = (data.name or '').strip()
+    if data.email is not None:
+        email = (str(data.email) or '').strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email é obrigatório")
+        existing = supabase.table('users').select('id').eq('email', email).neq('id', user_id).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Email já está em uso")
+        update_data['email'] = email
+    if data.phone is not None:
+        phone = (data.phone or '').strip()
+        update_data['phone'] = phone or None
+    if data.bio is not None:
+        bio = (data.bio or '').strip()
+        update_data['bio'] = bio or None
     if data.job_title is not None:
         update_data['job_title'] = (data.job_title or '').strip()
     if data.department is not None:
@@ -558,14 +578,16 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
             'role': u['role'],
             'tenantId': u['tenant_id'],
             'avatar': u['avatar'],
+            'phone': u.get('phone'),
+            'bio': u.get('bio'),
             'jobTitle': u.get('job_title'),
             'department': u.get('department'),
             'signatureEnabled': u.get('signature_enabled', True),
             'signatureIncludeTitle': u.get('signature_include_title', False),
             'signatureIncludeDepartment': u.get('signature_include_department', False),
+            'createdAt': u.get('created_at'),
         }
 
-    update_data['updated_at'] = datetime.utcnow().isoformat()
     try:
         result = supabase.table('users').update(update_data).eq('id', user_id).execute()
     except Exception as e:
@@ -574,7 +596,7 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
         if "column" in lowered or "does not exist" in lowered:
             raise HTTPException(
                 status_code=400,
-                detail="Banco de dados sem colunas de perfil (cargo/departamento/assinatura). Aplique a migração 009_contacts_transfer_signature_audit.sql.",
+                detail="Banco de dados sem colunas de perfil. Aplique a migração 009_contacts_transfer_signature_audit.sql.",
             )
         raise HTTPException(status_code=400, detail="Erro ao salvar perfil.")
     if not result.data:
@@ -587,11 +609,14 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
         'role': u['role'],
         'tenantId': u['tenant_id'],
         'avatar': u['avatar'],
+        'phone': u.get('phone'),
+        'bio': u.get('bio'),
         'jobTitle': u.get('job_title'),
         'department': u.get('department'),
         'signatureEnabled': u.get('signature_enabled', True),
         'signatureIncludeTitle': u.get('signature_include_title', False),
         'signatureIncludeDepartment': u.get('signature_include_department', False),
+        'createdAt': u.get('created_at'),
     }
 
 # ==================== TENANTS ROUTES ====================
@@ -1872,50 +1897,6 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
         logger.error(f"Error creating contact: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao criar contato: {str(e)}")
 
-@api_router.get("/contacts/{contact_id}")
-async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
-    """Get a single contact by ID"""
-    try:
-        user_tenant_id = get_user_tenant_id(payload)
-
-        result = supabase.table('contacts').select('*').eq('id', contact_id).execute()
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Contato não encontrado")
-
-        c = result.data[0]
-        if user_tenant_id and c.get('tenant_id') != user_tenant_id:
-            raise HTTPException(status_code=403, detail="Acesso negado")
-
-        # Get conversation count for this contact
-        conv_count = 0
-        try:
-            conv_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', c.get('tenant_id')).eq('contact_phone', c.get('phone')).execute()
-            conv_count = conv_result.count if hasattr(conv_result, 'count') and conv_result.count else 0
-        except:
-            pass
-
-        return {
-            'id': c.get('id'),
-            'tenantId': c.get('tenant_id'),
-            'name': c.get('name') or c.get('full_name'),
-            'phone': c.get('phone'),
-            'email': c.get('email'),
-            'tags': c.get('tags') or [],
-            'customFields': c.get('custom_fields') or {},
-            'socialLinks': c.get('social_links') or {},
-            'notesHtml': c.get('notes_html') or '',
-            'source': c.get('source'),
-            'createdAt': c.get('created_at'),
-            'updatedAt': c.get('updated_at'),
-            'conversationCount': conv_count
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting contact: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar contato: {str(e)}")
-
 @api_router.get("/contacts/by-phone")
 async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depends(verify_token)):
     """
@@ -2020,6 +2001,54 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
             'isNew': True
         }
 
+@api_router.get("/contacts/{contact_id}")
+async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
+    """Get a single contact by ID"""
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+
+        try:
+            uuid.UUID(contact_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Contato não encontrado")
+
+        result = supabase.table('contacts').select('*').eq('id', contact_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Contato não encontrado")
+
+        c = result.data[0]
+        if user_tenant_id and c.get('tenant_id') != user_tenant_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
+
+        conv_count = 0
+        try:
+            conv_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', c.get('tenant_id')).eq('contact_phone', c.get('phone')).execute()
+            conv_count = conv_result.count if hasattr(conv_result, 'count') and conv_result.count else 0
+        except Exception:
+            pass
+
+        return {
+            'id': c.get('id'),
+            'tenantId': c.get('tenant_id'),
+            'name': c.get('name') or c.get('full_name'),
+            'phone': c.get('phone'),
+            'email': c.get('email'),
+            'tags': c.get('tags') or [],
+            'customFields': c.get('custom_fields') or {},
+            'socialLinks': c.get('social_links') or {},
+            'notesHtml': c.get('notes_html') or '',
+            'source': c.get('source'),
+            'createdAt': c.get('created_at'),
+            'updatedAt': c.get('updated_at'),
+            'conversationCount': conv_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting contact: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar contato: {str(e)}")
+
 @api_router.patch("/contacts/{contact_id}")
 async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = Depends(verify_token)):
     """
@@ -2066,6 +2095,11 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
         
         # Try to update in the contacts table
         try:
+            try:
+                uuid.UUID(contact_id)
+            except Exception:
+                raise HTTPException(status_code=404, detail="Contato não encontrado")
+
             existing = supabase.table('contacts').select('*').eq('id', contact_id).execute()
             if not existing.data:
                 raise HTTPException(status_code=404, detail="Contato não encontrado")
