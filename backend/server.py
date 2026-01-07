@@ -16,6 +16,7 @@ import jwt
 import json
 import base64
 import asyncio
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -110,6 +111,39 @@ async def ensure_auto_messages_schema():
 
     CREATE POLICY IF NOT EXISTS "Service role has full access to auto_messages" ON auto_messages FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to auto_message_logs" ON auto_message_logs FOR ALL USING (true);
+
+    CREATE TABLE IF NOT EXISTS contacts (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name VARCHAR(255),
+        full_name VARCHAR(255),
+        phone VARCHAR(50) NOT NULL,
+        email VARCHAR(255),
+        tags JSONB DEFAULT '[]',
+        custom_fields JSONB DEFAULT '{}',
+        social_links JSONB DEFAULT '{}',
+        notes_html TEXT DEFAULT '',
+        source VARCHAR(50) DEFAULT 'manual',
+        status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'unverified', 'verified')),
+        first_contact_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending';
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMP WITH TIME ZONE;
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}';
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS social_links JSONB DEFAULT '{}';
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes_html TEXT DEFAULT '';
+    ALTER TABLE contacts ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'manual';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_tenant_phone_unique ON contacts(tenant_id, phone);
+    CREATE INDEX IF NOT EXISTS idx_contacts_tenant ON contacts(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
+
+    ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access to contacts" ON contacts FOR ALL USING (true);
     """
     try:
         supabase.rpc('exec_sql', {'sql': sql}).execute()
@@ -184,6 +218,28 @@ def extract_profile_picture_url(data: Any) -> Optional[str]:
             if nested:
                 return nested
     return None
+
+def normalize_phone_number(value: Any) -> str:
+    s = str(value or '').strip()
+    if not s:
+        return ''
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    if not digits:
+        return ''
+    if len(digits) > 10:
+        digits = digits.lstrip('0')
+    if digits.startswith('00'):
+        digits = digits[2:]
+        digits = digits.lstrip('0')
+    if digits.startswith('55'):
+        return digits
+    if len(digits) == 11 and digits[0] in ('1', '7'):
+        return digits
+    if len(digits) == 10:
+        return f"55{digits}"
+    if len(digits) == 11:
+        return f"55{digits}"
+    return digits
 
 @app.post("/test-login")
 async def test_login(data: dict):
@@ -360,6 +416,7 @@ class ContactUpdate(BaseModel):
     custom_fields: Optional[dict] = None
     social_links: Optional[dict] = None
     notes_html: Optional[str] = None
+    status: Optional[str] = None
 
 class ContactCreate(BaseModel):
     name: str
@@ -368,6 +425,7 @@ class ContactCreate(BaseModel):
     tags: Optional[List[str]] = None
     custom_fields: Optional[dict] = None
     source: Optional[str] = None
+    status: Optional[str] = None
 
 class AutoMessageCreate(BaseModel):
     type: str  # 'welcome', 'away', 'keyword'
@@ -1937,6 +1995,8 @@ async def list_contacts(
                 'email': c.get('email'),
                 'tags': c.get('tags') or [],
                 'customFields': c.get('custom_fields') or {},
+                'status': c.get('status'),
+                'firstContactAt': c.get('first_contact_at'),
                 'source': c.get('source'),
                 'createdAt': c.get('created_at'),
                 'updatedAt': c.get('updated_at')
@@ -1968,20 +2028,38 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
             raise HTTPException(status_code=403, detail="Tenant não identificado")
 
         name = (data.name or '').strip()
-        phone = (data.phone or '').strip()
+        raw_phone = (data.phone or '').strip()
 
         if not name:
             raise HTTPException(status_code=400, detail="Nome é obrigatório")
-        if not phone:
+        if not raw_phone:
             raise HTTPException(status_code=400, detail="Telefone é obrigatório")
 
+        phone = normalize_phone_number(raw_phone)
+        if not phone:
+            raise HTTPException(status_code=400, detail="Telefone é inválido")
+
         # Check if contact with same phone already exists
-        existing = supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', phone).execute()
+        existing = supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', phone).limit(1).execute()
+        if (not existing.data) and raw_phone != phone:
+            existing = supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', raw_phone).limit(1).execute()
         if existing.data:
             raise HTTPException(status_code=400, detail="Já existe um contato com este telefone")
 
         insert_result = None
         try:
+            raw_status = str(data.status or '').strip().lower()
+            normalized_status = {
+                'pendente': 'pending',
+                'pending': 'pending',
+                'nao verificado': 'unverified',
+                'não verificado': 'unverified',
+                'unverified': 'unverified',
+                'verificado': 'verified',
+                'verified': 'verified'
+            }.get(raw_status, None)
+            final_status = normalized_status or 'verified'
+
             insert_data = {
                 'tenant_id': user_tenant_id,
                 'name': name,
@@ -1989,7 +2067,9 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
                 'email': (data.email or '').strip() or None,
                 'tags': data.tags or [],
                 'custom_fields': data.custom_fields or {},
-                'source': data.source or 'manual'
+                'source': data.source or 'manual',
+                'status': final_status,
+                'first_contact_at': datetime.utcnow().isoformat()
             }
             insert_result = supabase.table('contacts').insert(insert_data).execute()
         except Exception:
@@ -2002,7 +2082,9 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
                     'full_name': name,
                     'phone': phone,
                     'social_links': {},
-                    'notes_html': ''
+                    'notes_html': '',
+                    'status': final_status,
+                    'first_contact_at': datetime.utcnow().isoformat()
                 }
                 insert_result = supabase.table('contacts').insert(insert_data_alt).execute()
             except Exception as e:
@@ -2033,6 +2115,8 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
             'customFields': c.get('custom_fields') or {},
             'socialLinks': c.get('social_links') or {},
             'notesHtml': c.get('notes_html') or '',
+            'status': c.get('status'),
+            'firstContactAt': c.get('first_contact_at'),
             'source': c.get('source'),
             'createdAt': c.get('created_at'),
             'updatedAt': c.get('updated_at')
@@ -2058,7 +2142,8 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
         if user_tenant_id and tenant_id != user_tenant_id:
             raise HTTPException(status_code=403, detail="Acesso negado")
 
-        normalized_phone = (phone or '').strip()
+        raw_phone = (phone or '').strip()
+        normalized_phone = normalize_phone_number(raw_phone) or raw_phone
         if not normalized_phone:
             raise HTTPException(status_code=400, detail="Telefone inválido")
 
@@ -2067,6 +2152,8 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
         # Try to find contact in the contacts table
         try:
             existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+            if (not existing.data) and raw_phone and raw_phone != normalized_phone:
+                existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', raw_phone).limit(1).execute()
             if existing.data:
                 c = existing.data[0]
                 full_name = c.get('full_name') or c.get('name') or normalized_phone
@@ -2081,6 +2168,8 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
                     'customFields': c.get('custom_fields') or {},
                     'socialLinks': c.get('social_links') or {},
                     'notesHtml': c.get('notes_html') or '',
+                    'status': c.get('status'),
+                    'firstContactAt': c.get('first_contact_at'),
                     'source': c.get('source'),
                     'createdAt': c.get('created_at'),
                     'updatedAt': c.get('updated_at')
@@ -2107,6 +2196,8 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
                 'email': None,
                 'tags': [],
                 'customFields': {},
+                'status': 'pending',
+                'firstContactAt': None,
                 'source': 'conversation',
                 'createdAt': None,
                 'updatedAt': None,
@@ -2122,6 +2213,8 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
             'email': None,
             'tags': [],
             'customFields': {},
+            'status': 'pending',
+            'firstContactAt': None,
             'source': None,
             'createdAt': None,
             'updatedAt': None,
@@ -2142,6 +2235,8 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
             'customFields': {},
             'socialLinks': {},
             'notesHtml': '',
+            'status': 'pending',
+            'firstContactAt': None,
             'source': None,
             'createdAt': None,
             'updatedAt': None,
@@ -2169,7 +2264,11 @@ async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
 
         conv_count = 0
         try:
-            conv_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', c.get('tenant_id')).eq('contact_phone', c.get('phone')).execute()
+            phone_value = c.get('phone')
+            normalized_phone = normalize_phone_number(phone_value) or phone_value
+            conv_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', c.get('tenant_id')).eq('contact_phone', normalized_phone).execute()
+            if (not conv_result.count) and phone_value and normalized_phone and phone_value != normalized_phone:
+                conv_result = supabase.table('conversations').select('id', count='exact').eq('tenant_id', c.get('tenant_id')).eq('contact_phone', phone_value).execute()
             conv_count = conv_result.count if hasattr(conv_result, 'count') and conv_result.count else 0
         except Exception:
             pass
@@ -2184,6 +2283,8 @@ async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
             'customFields': c.get('custom_fields') or {},
             'socialLinks': c.get('social_links') or {},
             'notesHtml': c.get('notes_html') or '',
+            'status': c.get('status'),
+            'firstContactAt': c.get('first_contact_at'),
             'source': c.get('source'),
             'createdAt': c.get('created_at'),
             'updatedAt': c.get('updated_at'),
@@ -2281,6 +2382,20 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                     update_data['social_links'] = data.social_links or {}
                 if data.notes_html is not None:
                     update_data['notes_html'] = data.notes_html or ''
+                if data.status is not None:
+                    raw_status = str(data.status or '').strip().lower()
+                    normalized_status = {
+                        'pendente': 'pending',
+                        'pending': 'pending',
+                        'nao verificado': 'unverified',
+                        'não verificado': 'unverified',
+                        'unverified': 'unverified',
+                        'verificado': 'verified',
+                        'verified': 'verified'
+                    }.get(raw_status)
+                    if not normalized_status:
+                        raise HTTPException(status_code=400, detail="Status inválido")
+                    update_data['status'] = normalized_status
                 if update_data:
                     update_data['updated_at'] = datetime.utcnow().isoformat()
                 return update_data
@@ -2318,6 +2433,8 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                         'customFields': contact.get('custom_fields') or {},
                         'socialLinks': contact.get('social_links') or {},
                         'notesHtml': contact.get('notes_html') or '',
+                        'status': contact.get('status'),
+                        'firstContactAt': contact.get('first_contact_at'),
                         'createdAt': contact.get('created_at'),
                         'updatedAt': datetime.utcnow().isoformat()
                     }
@@ -2352,6 +2469,8 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                 'customFields': after.get('custom_fields') or {},
                 'socialLinks': after.get('social_links') or {},
                 'notesHtml': after.get('notes_html') or '',
+                'status': after.get('status'),
+                'firstContactAt': after.get('first_contact_at'),
                 'createdAt': after.get('created_at'),
                 'updatedAt': after.get('updated_at')
             }
@@ -2927,7 +3046,8 @@ async def evolution_webhook(instance_name: str, payload: dict):
             if conn.data:
                 connection = conn.data[0]
                 tenant_id = connection['tenant_id']
-                phone = parsed['remote_jid']
+                raw_phone = parsed['remote_jid']
+                phone = normalize_phone_number(raw_phone) or (raw_phone or '').strip()
                 if not phone or phone in ['status', 'broadcast']:
                     logger.info(f"Ignoring message with invalid remote_jid: {phone} raw_jid={raw_jid}")
                     return {"success": True, "ignored": "invalid_remote_jid"}
@@ -2935,6 +3055,18 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 def is_placeholder_text(text: str) -> bool:
                     t = (text or '').strip().lower()
                     return t in ['[mensagem]', '[message]']
+
+                first_contact_dt = datetime.utcnow()
+                ts = parsed.get('timestamp')
+                try:
+                    ts_int = int(ts)
+                    if ts_int > 10**12:
+                        ts_int = ts_int // 1000
+                    if ts_int > 0:
+                        first_contact_dt = datetime.utcfromtimestamp(ts_int)
+                except Exception:
+                    first_contact_dt = datetime.utcnow()
+                first_contact_at_iso = first_contact_dt.isoformat()
 
                 if is_placeholder_text(parsed.get('content') or ''):
                     try:
@@ -2991,14 +3123,9 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 
                 # Find or create conversation
                 is_new_conversation = False
-                conv = (
-                    supabase.table('conversations')
-                    .select('*')
-                    .eq('tenant_id', tenant_id)
-                    .eq('connection_id', connection['id'])
-                    .eq('contact_phone', phone)
-                    .execute()
-                )
+                conv = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('connection_id', connection['id']).eq('contact_phone', phone).execute()
+                if (not conv.data) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
+                    conv = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('connection_id', connection['id']).eq('contact_phone', str(raw_phone).strip()).execute()
                 
                 if conv.data:
                     conversation = conv.data[0]
@@ -3034,6 +3161,39 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     conv_result = supabase.table('conversations').insert(conv_data).execute()
                     conversation = conv_result.data[0]
                     is_new_conversation = True
+
+                if not is_from_me:
+                    try:
+                        existing_contact = supabase.table('contacts').select('id, first_contact_at, status').eq('tenant_id', tenant_id).eq('phone', phone).limit(1).execute()
+                        if (not existing_contact.data) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
+                            existing_contact = supabase.table('contacts').select('id, first_contact_at, status').eq('tenant_id', tenant_id).eq('phone', str(raw_phone).strip()).limit(1).execute()
+
+                        if existing_contact.data:
+                            row = existing_contact.data[0]
+                            if not row.get('first_contact_at'):
+                                supabase.table('contacts').update({'first_contact_at': first_contact_at_iso, 'updated_at': datetime.utcnow().isoformat()}).eq('id', row.get('id')).execute()
+                        else:
+                            push_name = (parsed.get('push_name') or '').strip() or None
+                            try:
+                                supabase.table('contacts').insert({
+                                    'tenant_id': tenant_id,
+                                    'name': push_name,
+                                    'phone': phone,
+                                    'source': 'whatsapp',
+                                    'status': 'pending',
+                                    'first_contact_at': first_contact_at_iso
+                                }).execute()
+                            except Exception:
+                                supabase.table('contacts').insert({
+                                    'tenant_id': tenant_id,
+                                    'full_name': push_name,
+                                    'phone': phone,
+                                    'source': 'whatsapp',
+                                    'status': 'pending',
+                                    'first_contact_at': first_contact_at_iso
+                                }).execute()
+                    except Exception as e:
+                        logger.warning(f"Auto-create contact failed for {tenant_id} phone={phone}: {e}")
                 
                 # Save message with correct direction
                 parsed_type_raw = parsed.get('type') or 'text'

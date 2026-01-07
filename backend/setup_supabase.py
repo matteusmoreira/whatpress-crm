@@ -85,6 +85,29 @@ def setup_database():
         timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
+    -- Contacts table
+    CREATE TABLE IF NOT EXISTS contacts (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name VARCHAR(255),
+        full_name VARCHAR(255),
+        phone VARCHAR(50) NOT NULL,
+        email VARCHAR(255),
+        tags JSONB DEFAULT '[]',
+        custom_fields JSONB DEFAULT '{}',
+        social_links JSONB DEFAULT '{}',
+        notes_html TEXT DEFAULT '',
+        source VARCHAR(50) DEFAULT 'manual',
+        status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'unverified', 'verified')),
+        first_contact_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_tenant_phone_unique ON contacts(tenant_id, phone);
+    CREATE INDEX IF NOT EXISTS idx_contacts_tenant ON contacts(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
+
     -- Auto messages table
     CREATE TABLE IF NOT EXISTS auto_messages (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -130,6 +153,7 @@ def setup_database():
     ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
     ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
     ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
     ALTER TABLE auto_messages ENABLE ROW LEVEL SECURITY;
     ALTER TABLE auto_message_logs ENABLE ROW LEVEL SECURITY;
 
@@ -139,6 +163,7 @@ def setup_database():
     CREATE POLICY IF NOT EXISTS "Service role has full access to connections" ON connections FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to conversations" ON conversations FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to messages" ON messages FOR ALL USING (true);
+    CREATE POLICY IF NOT EXISTS "Service role has full access to contacts" ON contacts FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to auto_messages" ON auto_messages FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to auto_message_logs" ON auto_message_logs FOR ALL USING (true);
     """
