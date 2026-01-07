@@ -1,14 +1,21 @@
 import React from 'react';
 import { cn } from '../lib/utils';
+import { useTheme } from '../context/ThemeContext';
 
 export const GlassCard = ({ children, className, hover = true, ...props }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
   return (
     <div
       className={cn(
-        'backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5',
-        'border border-white/20 shadow-2xl shadow-emerald-500/10',
-        'rounded-3xl p-6',
-        hover && 'hover:scale-[1.01] transition-all duration-300 hover:shadow-emerald-500/20',
+        isDark
+          ? 'backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 shadow-2xl shadow-emerald-500/10 rounded-3xl'
+          : 'bg-white border border-slate-200 shadow-sm rounded-2xl',
+        'p-6',
+        hover && (isDark
+          ? 'hover:scale-[1.01] transition-all duration-300 hover:shadow-emerald-500/20'
+          : 'transition-all duration-200 hover:shadow-md hover:border-slate-300'),
         className
       )}
       {...props}
@@ -19,14 +26,20 @@ export const GlassCard = ({ children, className, hover = true, ...props }) => {
 };
 
 export const GlassInput = React.forwardRef(({ className, ...props }, ref) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
   return (
     <input
       ref={ref}
       className={cn(
         'w-full px-4 py-3 rounded-xl',
-        'bg-white/10 backdrop-blur-sm border border-white/20',
-        'text-foreground placeholder:text-muted-foreground',
-        'focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50',
+        isDark
+          ? 'bg-white/10 backdrop-blur-sm border border-white/20 text-foreground placeholder:text-muted-foreground'
+          : 'bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400',
+        isDark
+          ? 'focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50'
+          : 'focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500',
         'transition-all duration-200',
         className
       )}
@@ -37,11 +50,22 @@ export const GlassInput = React.forwardRef(({ className, ...props }, ref) => {
 GlassInput.displayName = 'GlassInput';
 
 export const GlassButton = ({ children, className, variant = 'primary', loading = false, ...props }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
   const variants = {
-    primary: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30',
-    secondary: 'bg-white/10 hover:bg-white/20 text-foreground border border-white/20',
-    danger: 'bg-red-500/80 hover:bg-red-600/80 text-white',
-    ghost: 'bg-transparent hover:bg-white/10 text-foreground'
+    primary: isDark
+      ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm',
+    secondary: isDark
+      ? 'bg-white/10 hover:bg-white/20 text-foreground border border-white/20'
+      : 'bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-sm',
+    danger: isDark
+      ? 'bg-red-500/80 hover:bg-red-600/80 text-white'
+      : 'bg-red-600 hover:bg-red-700 text-white shadow-sm',
+    ghost: isDark
+      ? 'bg-transparent hover:bg-white/10 text-foreground'
+      : 'bg-transparent hover:bg-slate-100 text-slate-900'
   };
 
   return (
@@ -71,12 +95,15 @@ export const GlassButton = ({ children, className, variant = 'primary', loading 
 };
 
 export const GlassBadge = ({ children, variant = 'default', className }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
   const variants = {
-    default: 'bg-white/20 text-foreground',
-    success: 'bg-emerald-500/30 text-emerald-300',
-    warning: 'bg-amber-500/30 text-amber-300',
-    danger: 'bg-red-500/30 text-red-300',
-    info: 'bg-blue-500/30 text-blue-300'
+    default: isDark ? 'bg-white/20 text-foreground' : 'bg-slate-100 text-slate-700',
+    success: isDark ? 'bg-emerald-500/30 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+    warning: isDark ? 'bg-amber-500/30 text-amber-300' : 'bg-amber-50 text-amber-800 border border-amber-100',
+    danger: isDark ? 'bg-red-500/30 text-red-300' : 'bg-red-50 text-red-700 border border-red-100',
+    info: isDark ? 'bg-blue-500/30 text-blue-300' : 'bg-blue-50 text-blue-700 border border-blue-100'
   };
 
   return (

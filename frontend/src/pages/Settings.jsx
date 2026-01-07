@@ -3,7 +3,6 @@ import {
   User,
   Bell,
   Shield,
-  Palette,
   Globe,
   CreditCard,
   ChevronRight,
@@ -82,12 +81,6 @@ const Settings = () => {
     {
       title: 'Preferências',
       items: [
-        {
-          icon: Palette,
-          title: 'Temas',
-          description: 'Personalize o tema e cores do sistema',
-          to: '/app/settings/themes'
-        },
         {
           icon: Globe,
           title: 'Idioma e Região',

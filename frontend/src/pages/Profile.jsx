@@ -419,7 +419,7 @@ const Profile = () => {
                 onClick={toggleTheme}
                 className={cn(
                   'relative w-14 h-8 rounded-full transition-all duration-300',
-                  theme === 'dark' ? 'bg-emerald-500' : 'bg-white/30'
+                  theme === 'dark' ? 'bg-emerald-500' : 'bg-slate-200 border border-slate-300'
                 )}
               >
                 <span
@@ -441,9 +441,9 @@ const Profile = () => {
                 </div>
               </div>
               <select className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none">
-                <option value="pt-BR" className="bg-emerald-900">Português (BR)</option>
-                <option value="en" className="bg-emerald-900">English</option>
-                <option value="es" className="bg-emerald-900">Español</option>
+                <option value="pt-BR">Português (BR)</option>
+                <option value="en">English</option>
+                <option value="es">Español</option>
               </select>
             </div>
 

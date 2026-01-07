@@ -27,7 +27,6 @@ const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const Connections = lazy(() => import("./pages/Connections"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
-const ThemesPage = lazy(() => import("./pages/ThemesPage"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 
 // Layout
@@ -99,6 +98,7 @@ function App() {
                   <Route path="tenants" element={<TenantsPage />} />
                   <Route path="plans" element={<PlansPage />} />
                   <Route path="users" element={<UsersPage />} />
+                  <Route path="*" element={<Navigate to="/superadmin" replace />} />
                 </Route>
 
                 {/* App Routes (Admin/Agent) */}
@@ -120,9 +120,9 @@ function App() {
                   <Route path="kb" element={<KnowledgeBase />} />
                   <Route path="settings/connections" element={<Connections />} />
                   <Route path="settings/profile" element={<Profile />} />
-                  <Route path="settings/themes" element={<ThemesPage />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="profile" element={<Profile />} />
+                  <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
                 </Route>
 
                 {/* Default redirect */}

@@ -5,45 +5,42 @@ const ThemeContext = createContext();
 const THEMES = {
   dark: {
     name: 'Escuro',
-    description: 'Tema elegante com tons de esmeralda e glassmorphism',
+    description: 'Tema escuro com alto contraste e foco em leitura',
     preview: 'from-emerald-800 to-teal-900'
   },
   light: {
     name: 'Claro',
-    description: 'Tema luminoso com alta legibilidade e contraste',
+    description: 'Tema claro clean e profissional, sem efeitos de vidro',
     preview: 'from-emerald-100 via-green-200 to-emerald-300'
-  },
-  black: {
-    name: 'Preto (AMOLED)',
-    description: 'Preto puro para telas OLED - economia de bateria',
-    preview: 'from-zinc-900 to-black'
-  },
-  purple: {
-    name: 'Roxo',
-    description: 'Gradiente premium roxo com visual moderno',
-    preview: 'from-purple-700 via-violet-800 to-indigo-900'
   }
 };
 
 export const ThemeProvider = ({ children }) => {
+  const normalizeTheme = (value) => {
+    if (value === 'black' || value === 'purple') return 'dark';
+    if (value === 'dark' || value === 'light') return value;
+    return 'light';
+  };
+
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('whatsapp-crm-theme');
-    return saved || 'dark';
+    return normalizeTheme(saved);
   });
 
   useEffect(() => {
-    localStorage.setItem('whatsapp-crm-theme', theme);
-    // Remove all theme classes
+    const nextTheme = normalizeTheme(theme);
+    if (nextTheme !== theme) {
+      setTheme(nextTheme);
+      return;
+    }
+
+    localStorage.setItem('whatsapp-crm-theme', nextTheme);
     document.documentElement.classList.remove('light', 'dark', 'black', 'purple');
-    // Add current theme class
-    document.documentElement.classList.add(theme);
+    document.documentElement.classList.add(nextTheme);
   }, [theme]);
 
   const toggleTheme = () => {
-    const themeKeys = Object.keys(THEMES);
-    const currentIndex = themeKeys.indexOf(theme);
-    const nextIndex = (currentIndex + 1) % themeKeys.length;
-    setTheme(themeKeys[nextIndex]);
+    setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
   return (

@@ -142,17 +142,24 @@ code {
 
 /* Light: Glass Card com estilo sólido */
 .light .glass-card {
-  @apply bg-white/95 border-slate-200 shadow-lg shadow-slate-200/50;
-  backdrop-filter: blur(8px);
+  @apply bg-white border-slate-200 shadow-sm;
+  backdrop-filter: none;
 }
 
 .light .glass-input {
   @apply bg-white border-slate-300 text-slate-900 placeholder:text-slate-400;
 }
 
+.light .backdrop-blur-sm,
+.light .backdrop-blur-md,
+.light .backdrop-blur-lg,
+.light .backdrop-blur-xl {
+  backdrop-filter: none;
+}
+
 /* Light: Background principal */
 .light body {
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 30%, #a7f3d0 70%, #6ee7b7 100%);
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
 /* Light: Textos - cores escuras para contraste */

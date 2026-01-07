@@ -10,9 +10,10 @@ const ThemeToggle = ({ className }) => {
     <button
       onClick={toggleTheme}
       className={cn(
-        'relative p-2 rounded-xl transition-all duration-300',
-        'bg-white/10 hover:bg-white/20 dark:bg-white/10 dark:hover:bg-white/20',
-        'light:bg-gray-200 light:hover:bg-gray-300',
+        'relative p-2 rounded-xl transition-all duration-200',
+        theme === 'dark'
+          ? 'bg-white/10 hover:bg-white/20'
+          : 'bg-white border border-slate-200 hover:bg-slate-50 shadow-sm',
         className
       )}
       title={theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
