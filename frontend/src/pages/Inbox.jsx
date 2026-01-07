@@ -51,7 +51,7 @@ import QuickRepliesPanel from '../components/QuickRepliesPanel';
 import LabelsManager from '../components/LabelsManager';
 import TypingIndicator, { useTypingIndicator } from '../components/TypingIndicator';
 import { EmojiPicker } from '../components/EmojiPicker';
-import { AgentsAPI, LabelsAPI, ConversationsAPI, ContactsAPI } from '../lib/api';
+import { AgentsAPI, LabelsAPI, ConversationsAPI, ContactsAPI, MediaAPI } from '../lib/api';
 
 // Labels are now loaded from the database
 
@@ -412,16 +412,66 @@ const WhatsAppMediaDisplay = ({
   content,
   direction,
   onImageClick,
-  messageId
+  messageId,
+  proxyInfo
 }) => {
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [proxyTried, setProxyTried] = useState(false);
+  const [proxiedUrl, setProxiedUrl] = useState('');
 
   // Check if it's a WhatsApp CDN URL that might be expired
   const isWhatsAppUrl = mediaUrl && (
     mediaUrl.includes('mmg.whatsapp.net') ||
     mediaUrl.includes('whatsapp.net')
   );
+
+  const effectiveUrl = proxiedUrl || mediaUrl;
+
+  const canProxy = Boolean(
+    proxyInfo &&
+    typeof proxyInfo === 'object' &&
+    proxyInfo.messageId &&
+    proxyInfo.remoteJid &&
+    proxyInfo.instanceName
+  );
+
+  const fetchProxy = useCallback(async () => {
+    if (proxyTried) return;
+    setProxyTried(true);
+    if (!canProxy) return;
+    try {
+      const result = await MediaAPI.proxy({
+        messageId: proxyInfo.messageId,
+        remoteJid: proxyInfo.remoteJid,
+        instanceName: proxyInfo.instanceName,
+        fromMe: Boolean(proxyInfo.fromMe)
+      });
+      const dataUrl = result?.dataUrl;
+      if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+        setProxiedUrl(dataUrl);
+        setLoadError(false);
+        setLoading(false);
+      }
+    } catch {
+      setLoading(false);
+      setLoadError(true);
+    }
+  }, [proxyInfo, canProxy, proxyTried]);
+
+  useEffect(() => {
+    setProxyTried(false);
+    setProxiedUrl('');
+    setLoadError(false);
+    setLoading(true);
+  }, [mediaUrl, type]);
+
+  useEffect(() => {
+    if (!isWhatsAppUrl) return;
+    if (!canProxy) return;
+    if (type !== 'audio' && type !== 'video') return;
+    fetchProxy();
+  }, [isWhatsAppUrl, canProxy, type, fetchProxy]);
 
   if ((type === 'image' || type === 'sticker') && mediaUrl) {
     const label = type === 'sticker' ? 'Figurinha' : 'Imagem';
@@ -430,7 +480,7 @@ const WhatsAppMediaDisplay = ({
       <div className="relative">
         <button
           type="button"
-          onClick={() => onImageClick?.({ open: true, url: mediaUrl, title, messageId, kind: type })}
+          onClick={() => onImageClick?.({ open: true, url: mediaUrl, title, messageId, kind: type, proxyInfo })}
           className={cn(
             'flex items-center gap-3 p-3 rounded-xl border w-full text-left focus:outline-none focus:ring-2 focus:ring-white/30',
             direction === 'outbound'
@@ -452,7 +502,7 @@ const WhatsAppMediaDisplay = ({
   }
 
   // For video type with valid mediaUrl
-  if (type === 'video' && mediaUrl && !loadError) {
+  if (type === 'video' && effectiveUrl && !loadError) {
     return (
       <div className="relative">
         {loading && (
@@ -461,14 +511,19 @@ const WhatsAppMediaDisplay = ({
           </div>
         )}
         <video
+          key={effectiveUrl}
           className="w-full max-h-80 rounded-xl bg-black/20"
           controls
           preload="metadata"
           playsInline
-          src={mediaUrl}
+          src={effectiveUrl}
           aria-label="Reprodutor de vídeo"
           onLoadedMetadata={() => setLoading(false)}
           onError={() => {
+            if (isWhatsAppUrl && canProxy && !proxyTried) {
+              fetchProxy();
+              return;
+            }
             setLoading(false);
             setLoadError(true);
           }}
@@ -478,9 +533,9 @@ const WhatsAppMediaDisplay = ({
   }
 
   // For audio type with valid mediaUrl
-  if (type === 'audio' && mediaUrl && !loadError) {
+  if (type === 'audio' && effectiveUrl && !loadError) {
     return (
-      <InlineAudioPlayer src={mediaUrl} title={content || 'Áudio'} />
+      <InlineAudioPlayer src={effectiveUrl} title={content || 'Áudio'} />
     );
   }
 
@@ -496,7 +551,7 @@ const WhatsAppMediaDisplay = ({
 
     return (
       <a
-        href={mediaUrl}
+        href={effectiveUrl}
         target="_blank"
         rel="noreferrer"
         className={cn(
@@ -568,7 +623,7 @@ const Inbox = () => {
   const [labels, setLabels] = useState([]);
   const [selectedLabelFilter, setSelectedLabelFilter] = useState('all');
   const [replyToMessage, setReplyToMessage] = useState(null);
-  const [mediaViewer, setMediaViewer] = useState({ open: false, url: '', title: '', messageId: null, kind: null });
+  const [mediaViewer, setMediaViewer] = useState({ open: false, url: '', title: '', messageId: null, kind: null, proxyInfo: null });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [editingContactName, setEditingContactName] = useState(false);
@@ -1124,6 +1179,8 @@ const Inbox = () => {
   const [viewerZoom, setViewerZoom] = useState(1);
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerLoadError, setViewerLoadError] = useState(false);
+  const [viewerResolvedUrl, setViewerResolvedUrl] = useState('');
+  const [viewerResolvedMimeType, setViewerResolvedMimeType] = useState('');
 
   useEffect(() => {
     if (!mediaViewer?.open) return;
@@ -1134,7 +1191,63 @@ const Inbox = () => {
     if (!mediaViewer?.open) return;
     setViewerLoading(true);
     setViewerLoadError(false);
+    setViewerResolvedUrl(currentViewerItem?.url || '');
+    setViewerResolvedMimeType('');
   }, [mediaViewer?.open, currentViewerItem?.url]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!mediaViewer?.open) return;
+      const url = currentViewerItem?.url || '';
+      if (!url) return;
+      if (typeof url !== 'string') return;
+      if (url.startsWith('data:')) {
+        setViewerResolvedUrl(url);
+        setViewerLoading(false);
+        return;
+      }
+      if (!isWhatsappMediaUrl(url)) {
+        setViewerResolvedUrl(url);
+        setViewerLoading(false);
+        return;
+      }
+      const proxyInfo = mediaViewer?.proxyInfo;
+      const canProxy = Boolean(
+        proxyInfo &&
+        typeof proxyInfo === 'object' &&
+        proxyInfo.messageId &&
+        proxyInfo.remoteJid &&
+        proxyInfo.instanceName
+      );
+      if (!canProxy) {
+        setViewerResolvedUrl(url);
+        setViewerLoading(false);
+        return;
+      }
+      try {
+        const result = await MediaAPI.proxy({
+          messageId: proxyInfo.messageId,
+          remoteJid: proxyInfo.remoteJid,
+          instanceName: proxyInfo.instanceName,
+          fromMe: Boolean(proxyInfo.fromMe)
+        });
+        const dataUrl = result?.dataUrl;
+        const mimetype = result?.mimetype;
+        if (typeof mimetype === 'string') setViewerResolvedMimeType(mimetype);
+        if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+          setViewerResolvedUrl(dataUrl);
+          setViewerLoading(false);
+          return;
+        }
+        setViewerResolvedUrl(url);
+        setViewerLoading(false);
+      } catch {
+        setViewerLoading(false);
+        setViewerLoadError(true);
+      }
+    };
+    run();
+  }, [mediaViewer?.open, currentViewerItem?.url, mediaViewer?.proxyInfo]);
 
   const getMessageTypeBadgeInfo = (type) => {
     switch (type) {
@@ -1654,6 +1767,30 @@ const Inbox = () => {
                           const effectiveMediaUrl = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
                           const inferredKindFromUrl = effectiveMediaUrl ? inferWhatsappMediaKind(effectiveMediaUrl) : 'unknown';
                           const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
+                          const proxyInfo = (() => {
+                            if (!msg?.id) return null;
+                            if (!meta) return null;
+                            const remoteJid = meta.remote_jid ?? meta.remoteJid ?? meta.remotejid ?? null;
+                            const instanceName = meta.instance_name ?? meta.instanceName ?? meta.instancename ?? null;
+                            const rawFromMe = meta.from_me ?? meta.fromMe ?? meta.fromme ?? null;
+                            const fromMe = (() => {
+                              if (typeof rawFromMe === 'boolean') return rawFromMe;
+                              if (typeof rawFromMe === 'number') return Boolean(rawFromMe);
+                              if (typeof rawFromMe === 'string') {
+                                const v = rawFromMe.trim().toLowerCase();
+                                if (['true', '1', 'yes', 'y', 'sim'].includes(v)) return true;
+                                if (['false', '0', 'no', 'n', 'nao', 'não', ''].includes(v)) return false;
+                              }
+                              return false;
+                            })();
+                            if (!remoteJid || !instanceName) return null;
+                            return {
+                              messageId: msg.id,
+                              remoteJid,
+                              instanceName,
+                              fromMe
+                            };
+                          })();
                           const metaKindRaw = meta ? (meta.media_kind ?? meta.mediaKind ?? meta.kind ?? meta.type) : null;
                           const metaKind = normalizeMessageType(metaKindRaw);
                           const metaMimeRaw = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) : null;
@@ -1745,13 +1882,13 @@ const Inbox = () => {
                                     direction={msg.direction}
                                     onImageClick={setMediaViewer}
                                     messageId={msg.id}
+                                    proxyInfo={proxyInfo}
                                   />
                                 )}
                                 {shouldRenderMedia && renderType === 'document' && (
-                                  <a
-                                    href={effectiveMediaUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaViewer({ open: true, url: effectiveMediaUrl, title: displayContent || 'Documento', messageId: msg.id || null, kind: 'document', proxyInfo })}
                                     className={cn(
                                       'flex items-center gap-3 p-3 rounded-xl border w-full',
                                       msg.direction === 'outbound'
@@ -1764,7 +1901,7 @@ const Inbox = () => {
                                       <p className="text-sm font-medium truncate">{displayContent || 'Documento'}</p>
                                       <p className="text-xs opacity-70 truncate">{shortenUrl(effectiveMediaUrl)}</p>
                                     </div>
-                                  </a>
+                                  </button>
                                 )}
                                 {/* WhatsApp media URL in text message - render inline */}
                                 {normalizedType === 'text' && hasOnlyUrl && isWhatsappMedia && (
@@ -1775,6 +1912,7 @@ const Inbox = () => {
                                     direction={msg.direction}
                                     onImageClick={setMediaViewer}
                                     messageId={msg.id}
+                                    proxyInfo={proxyInfo}
                                   />
                                 )}
                                 {normalizedType === 'text' && hasOnlyUrl && !isWhatsappMedia && (
@@ -2047,7 +2185,7 @@ const Inbox = () => {
                 onClick={() => {
                   if (currentViewerIndex > 0) {
                     const prev = imageViewerItems[currentViewerIndex - 1];
-                    setMediaViewer({ open: true, url: prev.url, title: prev.title, messageId: prev.id || null, kind: prev.kind || null });
+                    setMediaViewer({ open: true, url: prev.url, title: prev.title, messageId: prev.id || null, kind: prev.kind || null, proxyInfo: mediaViewer?.proxyInfo || null });
                   }
                 }}
                 disabled={currentViewerIndex <= 0}
@@ -2061,7 +2199,7 @@ const Inbox = () => {
                 onClick={() => {
                   if (currentViewerIndex >= 0 && currentViewerIndex < imageViewerItems.length - 1) {
                     const next = imageViewerItems[currentViewerIndex + 1];
-                    setMediaViewer({ open: true, url: next.url, title: next.title, messageId: next.id || null, kind: next.kind || null });
+                    setMediaViewer({ open: true, url: next.url, title: next.title, messageId: next.id || null, kind: next.kind || null, proxyInfo: mediaViewer?.proxyInfo || null });
                   }
                 }}
                 disabled={currentViewerIndex < 0 || currentViewerIndex >= imageViewerItems.length - 1}
@@ -2102,7 +2240,7 @@ const Inbox = () => {
 
               {currentViewerItem?.url && (
                 <a
-                  href={currentViewerItem.url}
+                  href={viewerResolvedUrl || currentViewerItem.url}
                   download
                   target="_blank"
                   rel="noreferrer"
@@ -2132,9 +2270,9 @@ const Inbox = () => {
             {viewerLoadError && (
               <div className="h-full flex items-center justify-center p-6 text-white/70">
                 <div className="max-w-md text-center">
-                  <p className="text-sm">Não foi possível carregar esta imagem.</p>
-                  {currentViewerItem?.url && (
-                    <a href={currentViewerItem.url} target="_blank" rel="noreferrer" className="text-white underline mt-2 inline-block">
+                  <p className="text-sm">Não foi possível carregar esta mídia.</p>
+                  {(viewerResolvedUrl || currentViewerItem?.url) && (
+                    <a href={viewerResolvedUrl || currentViewerItem.url} target="_blank" rel="noreferrer" className="text-white underline mt-2 inline-block">
                       Abrir em nova aba
                     </a>
                   )}
@@ -2142,22 +2280,84 @@ const Inbox = () => {
               </div>
             )}
 
-            {!viewerLoadError && currentViewerItem?.url && (
-              <div className="min-h-full flex items-center justify-center p-4">
-                <img
-                  src={currentViewerItem.url}
-                  alt={currentViewerItem.title || 'Imagem'}
-                  className="max-w-full h-auto object-contain rounded-lg"
-                  style={{ transform: `scale(${viewerZoom})`, transformOrigin: 'center' }}
-                  referrerPolicy="no-referrer"
-                  onLoad={() => setViewerLoading(false)}
-                  onError={() => {
-                    setViewerLoading(false);
-                    setViewerLoadError(true);
-                  }}
-                />
-              </div>
-            )}
+            {!viewerLoadError && (viewerResolvedUrl || currentViewerItem?.url) && (() => {
+              const kind = currentViewerItem?.kind || mediaViewer?.kind || 'image';
+              const url = viewerResolvedUrl || currentViewerItem?.url || '';
+              const lc = String(url || '').toLowerCase();
+              const isPdf =
+                viewerResolvedMimeType === 'application/pdf' ||
+                lc.startsWith('data:application/pdf') ||
+                lc.includes('.pdf');
+
+              if (kind === 'document') {
+                if (isPdf) {
+                  return (
+                    <div className="min-h-full p-0">
+                      <iframe
+                        title={currentViewerItem?.title || 'Documento'}
+                        src={url}
+                        className="w-full h-[80vh] rounded-b-lg"
+                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                        onLoad={() => setViewerLoading(false)}
+                      />
+                    </div>
+                  );
+                }
+
+                setTimeout(() => setViewerLoading(false), 0);
+                return (
+                  <div className="min-h-full flex items-center justify-center p-6">
+                    <div className="w-full max-w-md rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                          <FileText className="w-5 h-5 opacity-80" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{currentViewerItem?.title || 'Documento'}</p>
+                          <p className="text-xs text-white/60 truncate">{shortenUrl(url)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex items-center justify-end gap-2">
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                        >
+                          Abrir
+                        </a>
+                        <a
+                          href={url}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100 text-sm"
+                        >
+                          Baixar
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="min-h-full flex items-center justify-center p-4">
+                  <img
+                    src={url}
+                    alt={currentViewerItem?.title || 'Imagem'}
+                    className="max-w-full h-auto object-contain rounded-lg"
+                    style={{ transform: `scale(${viewerZoom})`, transformOrigin: 'center' }}
+                    referrerPolicy="no-referrer"
+                    onLoad={() => setViewerLoading(false)}
+                    onError={() => {
+                      setViewerLoading(false);
+                      setViewerLoadError(true);
+                    }}
+                  />
+                </div>
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>

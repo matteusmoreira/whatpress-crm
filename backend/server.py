@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 from supabase_client import supabase
 from evolution_api import evolution_api, EvolutionAPI
+from media_detection import detect_media_kind
 from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
 import jwt
 import json
@@ -2926,6 +2927,8 @@ async def send_whatsapp_message(instance_name: str, phone: str, content: str, ms
             await evolution_api.send_audio(instance_name, phone, content)
         elif msg_type == 'document':
             await evolution_api.send_media(instance_name, phone, 'document', media_url=content)
+        elif msg_type == 'sticker':
+            await evolution_api.send_sticker(instance_name, phone, content)
         
         # Update message status to delivered
         supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
@@ -4824,19 +4827,23 @@ async def upload_file(
         file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'bin'
         unique_filename = f"{uuid.uuid4()}.{file_ext}"
         
-        # Determine file type
-        content_type = file.content_type or 'application/octet-stream'
-        if content_type.startswith('image/'):
-            file_type = 'image'
+        detected = detect_media_kind(
+            declared_mime_type=file.content_type,
+            filename=file.filename,
+            head_bytes=content[:96] if isinstance(content, (bytes, bytearray)) else b"",
+        )
+        file_type = detected.kind if detected.kind in {'image', 'video', 'audio', 'document', 'sticker'} else 'document'
+        content_type = detected.mime_type or (file.content_type or 'application/octet-stream')
+
+        if file_type == 'image':
             folder = 'images'
-        elif content_type.startswith('video/'):
-            file_type = 'video'
+        elif file_type == 'video':
             folder = 'videos'
-        elif content_type.startswith('audio/'):
-            file_type = 'audio'
+        elif file_type == 'audio':
             folder = 'audios'
+        elif file_type == 'sticker':
+            folder = 'stickers'
         else:
-            file_type = 'document'
             folder = 'documents'
         
         # Upload to Supabase Storage
@@ -4967,13 +4974,18 @@ async def send_media_message(
 async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, message_id: str):
     """Background task to send WhatsApp media"""
     try:
-        await evolution_api.send_media(
-            instance_name, 
-            phone, 
-            media_type,
-            media_url=media_url,
-            caption=caption
-        )
+        if (media_type or '').lower() == 'sticker':
+            await evolution_api.send_sticker(instance_name, phone, media_url)
+        elif (media_type or '').lower() == 'audio':
+            await evolution_api.send_audio(instance_name, phone, media_url)
+        else:
+            await evolution_api.send_media(
+                instance_name,
+                phone,
+                media_type,
+                media_url=media_url,
+                caption=caption
+            )
         supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
     except Exception as e:
         logger.error(f"Failed to send WhatsApp media: {e}")
@@ -5012,11 +5024,29 @@ async def proxy_whatsapp_media(
         if not base64_data:
             raise HTTPException(status_code=404, detail="Dados da mídia não disponíveis")
         
+        head_bytes = b""
+        try:
+            if isinstance(base64_data, str) and base64_data:
+                want_bytes = 96
+                take_chars = ((want_bytes + 2) // 3) * 4
+                chunk = base64_data[: max(0, take_chars)]
+                chunk += "=" * ((4 - (len(chunk) % 4)) % 4)
+                head_bytes = base64.b64decode(chunk, validate=False)[:want_bytes]
+        except Exception:
+            head_bytes = b""
+
+        detected = detect_media_kind(
+            declared_mime_type=mimetype,
+            head_bytes=head_bytes,
+        )
+
         # Return as data URL
         return {
             "success": True,
             "dataUrl": f"data:{mimetype};base64,{base64_data}",
-            "mimetype": mimetype
+            "mimetype": mimetype,
+            "kind": detected.kind,
+            "confidence": detected.confidence
         }
         
     except HTTPException:

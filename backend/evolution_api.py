@@ -175,6 +175,17 @@ class EvolutionAPI:
         }
         
         return await self._request('POST', f'/message/sendWhatsAppAudio/{instance_name}', data)
+
+    async def send_sticker(self, instance_name: str, phone: str, sticker_url: str) -> dict:
+        """Send sticker (url or base64)"""
+        number = self._format_phone(phone)
+
+        data = {
+            'number': number,
+            'sticker': sticker_url
+        }
+
+        return await self._request('POST', f'/message/sendSticker/{instance_name}', data)
     
     async def send_location(self, instance_name: str, phone: str, 
                             latitude: float, longitude: float,
