@@ -203,7 +203,43 @@ const formatMediaTime = (seconds) => {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 };
 
-const InlineAudioPlayer = ({ src, title }) => {
+const INLINE_WAVEFORM_BARS = Array.from({ length: 32 }, (_, i) => {
+  const base = 0.3 + 0.7 * Math.abs(Math.sin(i * 0.45));
+  return Math.min(1, Math.max(0.25, base));
+});
+
+const extractQualityVariants = (meta, fallbackUrl) => {
+  if (!meta || typeof meta !== 'object') return [];
+  const baseArrays = [];
+  if (Array.isArray(meta.qualities)) baseArrays.push(meta.qualities);
+  if (Array.isArray(meta.variants)) baseArrays.push(meta.variants);
+  if (Array.isArray(meta.qualityVariants)) baseArrays.push(meta.qualityVariants);
+  const flat = baseArrays.flat();
+  const variants = flat
+    .map((v, index) => {
+      if (!v || typeof v !== 'object') return null;
+      const url = v.url ?? v.mediaUrl ?? v.src ?? v.href ?? null;
+      if (!url || typeof url !== 'string') return null;
+      const rawLabel = v.label ?? v.quality ?? v.resolution ?? v.name ?? null;
+      const label = rawLabel ? String(rawLabel) : `Opção ${index + 1}`;
+      return { url, label };
+    })
+    .filter(Boolean);
+  if (fallbackUrl && typeof fallbackUrl === 'string') {
+    const hasFallback = variants.some(v => v.url === fallbackUrl);
+    if (!hasFallback) variants.unshift({ url: fallbackUrl, label: 'Padrão' });
+  }
+  const seen = new Set();
+  const unique = [];
+  for (const v of variants) {
+    if (seen.has(v.url)) continue;
+    seen.add(v.url);
+    unique.push(v);
+  }
+  return unique;
+};
+
+const InlineAudioPlayer = ({ src, title, meta }) => {
   const audioRef = useRef(null);
   const [readySrc, setReadySrc] = useState('');
   const [pendingPlay, setPendingPlay] = useState(false);
@@ -330,9 +366,22 @@ const InlineAudioPlayer = ({ src, title }) => {
 
   const progressMax = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const progressNow = Number.isFinite(currentTime) && currentTime > 0 ? Math.min(currentTime, progressMax) : 0;
+  const progressRatio = progressMax > 0 ? progressNow / progressMax : 0;
+
+  const rawSize = meta ? (meta.file_size ?? meta.fileSize ?? meta.size ?? meta.bytes ?? null) : null;
+  const sizeNumber = typeof rawSize === 'number' ? rawSize : rawSize ? Number(rawSize) : 0;
+  const sizeDisplay = (() => {
+    if (!sizeNumber || Number.isNaN(sizeNumber)) return '';
+    const kb = sizeNumber / 1024;
+    const mb = kb / 1024;
+    if (mb >= 1) return `${mb.toFixed(2)} MB`;
+    return `${kb.toFixed(1)} KB`;
+  })();
+
+  const mimeDisplay = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime ?? '') : '';
 
   return (
-    <div className="w-full min-w-[240px] rounded-xl border border-white/10 bg-black/20 p-3">
+    <div className="w-full min-w-[260px] rounded-xl border border-white/10 bg-black/20 p-3">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -382,6 +431,62 @@ const InlineAudioPlayer = ({ src, title }) => {
         </div>
       </div>
 
+      <div className="mt-3 relative h-10 rounded-lg bg-black/40 overflow-hidden">
+        <div className="absolute inset-0 flex items-end gap-[2px] px-2">
+          {INLINE_WAVEFORM_BARS.map((h, index) => (
+            <div
+              key={index}
+              className="flex-1 bg-white/20 rounded-full"
+              style={{ height: `${h * 100}%` }}
+            />
+          ))}
+        </div>
+        <div
+          className="absolute inset-0 overflow-hidden"
+          style={{ width: `${Math.max(0, Math.min(1, progressRatio)) * 100}%` }}
+        >
+          <div className="absolute inset-0 flex items-end gap-[2px] px-2">
+            {INLINE_WAVEFORM_BARS.map((h, index) => (
+              <div
+                key={index}
+                className={cn(
+                  'flex-1 rounded-full',
+                  loadError ? 'bg-red-400/70' : 'bg-emerald-400/80'
+                )}
+                style={{ height: `${h * 100}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-white/60">
+        <span className="truncate">
+          {progressMax ? `Duração: ${formatMediaTime(progressMax)}` : 'Duração desconhecida'}
+        </span>
+        {mimeDisplay && (
+          <span className="truncate hidden sm:inline">
+            Formato: {String(mimeDisplay)}
+          </span>
+        )}
+        {sizeDisplay && (
+          <span className="truncate hidden sm:inline">
+            Tamanho: {sizeDisplay}
+          </span>
+        )}
+        {src && (
+          <a
+            href={readySrc || src}
+            download
+            target="_blank"
+            rel="noreferrer"
+            className="text-emerald-200 hover:text-emerald-100 underline-offset-2 hover:underline"
+          >
+            Baixar áudio
+          </a>
+        )}
+      </div>
+
       {isLoading && !loadError && (
         <div className="mt-2 flex items-center gap-2 text-xs text-white/60">
           <div className="w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
@@ -413,12 +518,15 @@ const WhatsAppMediaDisplay = ({
   direction,
   onImageClick,
   messageId,
-  proxyInfo
+  proxyInfo,
+  meta
 }) => {
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [proxyTried, setProxyTried] = useState(false);
   const [proxiedUrl, setProxiedUrl] = useState('');
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [qualityUrl, setQualityUrl] = useState('');
 
   // Check if it's a WhatsApp CDN URL that might be expired
   const isWhatsAppUrl = mediaUrl && (
@@ -427,6 +535,10 @@ const WhatsAppMediaDisplay = ({
   );
 
   const effectiveUrl = proxiedUrl || mediaUrl;
+  const qualityVariants = useMemo(
+    () => extractQualityVariants(meta, mediaUrl),
+    [meta, mediaUrl]
+  );
 
   const canProxy = Boolean(
     proxyInfo &&
@@ -467,6 +579,15 @@ const WhatsAppMediaDisplay = ({
   }, [mediaUrl, type]);
 
   useEffect(() => {
+    if (!qualityVariants.length) {
+      setQualityUrl('');
+      return;
+    }
+    const preferred = qualityVariants.find(v => v.url === mediaUrl) || qualityVariants[0];
+    setQualityUrl(preferred.url);
+  }, [mediaUrl, qualityVariants]);
+
+  useEffect(() => {
     if (!isWhatsAppUrl) return;
     if (!canProxy) return;
     if (type !== 'audio' && type !== 'video') return;
@@ -501,8 +622,9 @@ const WhatsAppMediaDisplay = ({
     );
   }
 
-  // For video type with valid mediaUrl
-  if (type === 'video' && effectiveUrl && !loadError) {
+  const videoUrl = qualityUrl || effectiveUrl;
+
+  if (type === 'video' && videoUrl && !loadError) {
     return (
       <div className="relative">
         {loading && (
@@ -511,14 +633,19 @@ const WhatsAppMediaDisplay = ({
           </div>
         )}
         <video
-          key={effectiveUrl}
+          key={videoUrl}
           className="w-full max-h-80 rounded-xl bg-black/20"
           controls
           preload="metadata"
           playsInline
-          src={effectiveUrl}
+          src={videoUrl}
           aria-label="Reprodutor de vídeo"
-          onLoadedMetadata={() => setLoading(false)}
+          onLoadedMetadata={(e) => {
+            setLoading(false);
+            const el = e.currentTarget;
+            const dur = Number.isFinite(el.duration) ? el.duration : 0;
+            if (dur > 0) setVideoDuration(dur);
+          }}
           onError={() => {
             if (isWhatsAppUrl && canProxy && !proxyTried) {
               fetchProxy();
@@ -528,14 +655,70 @@ const WhatsAppMediaDisplay = ({
             setLoadError(true);
           }}
         />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/70">
+          <span className="truncate">
+            {videoDuration ? `Duração: ${formatMediaTime(videoDuration)}` : 'Duração desconhecida'}
+          </span>
+          {(() => {
+            const mime =
+              meta && (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) ?
+                (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) :
+                '';
+            if (!mime) return null;
+            return (
+              <span className="truncate hidden sm:inline">
+                Formato: {String(mime)}
+              </span>
+            );
+          })()}
+          {(() => {
+            const rawSize = meta ? (meta.file_size ?? meta.fileSize ?? meta.size ?? meta.bytes ?? null) : null;
+            const sizeNumber = typeof rawSize === 'number' ? rawSize : rawSize ? Number(rawSize) : 0;
+            if (!sizeNumber || Number.isNaN(sizeNumber)) return null;
+            const kb = sizeNumber / 1024;
+            const mb = kb / 1024;
+            const formatted = mb >= 1 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(1)} KB`;
+            return (
+              <span className="truncate hidden sm:inline">
+                Tamanho: {formatted}
+              </span>
+            );
+          })()}
+          {qualityVariants.length > 1 && (
+            <select
+              value={qualityUrl || ''}
+              onChange={(e) => {
+                const next = e.target.value || '';
+                setQualityUrl(next);
+                setVideoDuration(0);
+                setLoading(true);
+              }}
+              className="h-7 rounded-md bg-black/40 border border-white/15 text-xs px-2 text-white"
+            >
+              {qualityVariants.map(v => (
+                <option key={v.url} value={v.url}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <a
+            href={videoUrl}
+            download
+            target="_blank"
+            rel="noreferrer"
+            className="text-emerald-200 hover:text-emerald-100 underline-offset-2 hover:underline"
+          >
+            Baixar vídeo
+          </a>
+        </div>
       </div>
     );
   }
 
-  // For audio type with valid mediaUrl
   if (type === 'audio' && effectiveUrl && !loadError) {
     return (
-      <InlineAudioPlayer src={effectiveUrl} title={content || 'Áudio'} />
+      <InlineAudioPlayer src={effectiveUrl} title={content || 'Áudio'} meta={meta} />
     );
   }
 
@@ -1142,7 +1325,8 @@ const Inbox = () => {
         id: msg.id || null,
         url: effectiveUrl,
         title,
-        kind
+        kind,
+        metadata: meta || null
       });
     }
     return items;
@@ -1177,6 +1361,7 @@ const Inbox = () => {
   }, [currentViewerIndex, imageViewerItems, mediaViewer]);
 
   const [viewerZoom, setViewerZoom] = useState(1);
+  const [viewerRotation, setViewerRotation] = useState(0);
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerLoadError, setViewerLoadError] = useState(false);
   const [viewerResolvedUrl, setViewerResolvedUrl] = useState('');
@@ -1185,7 +1370,15 @@ const Inbox = () => {
   useEffect(() => {
     if (!mediaViewer?.open) return;
     setViewerZoom(1);
+    setViewerRotation(0);
   }, [mediaViewer?.open]);
+
+  const currentViewerMessage = useMemo(() => {
+    const list = Array.isArray(messages) ? messages : [];
+    const id = currentViewerItem?.id || mediaViewer?.messageId;
+    if (!id) return null;
+    return list.find(m => m && typeof m === 'object' && m.id === id) || null;
+  }, [messages, currentViewerItem, mediaViewer]);
 
   useEffect(() => {
     if (!mediaViewer?.open) return;
@@ -1876,6 +2069,7 @@ const Inbox = () => {
                                     onImageClick={setMediaViewer}
                                     messageId={msg.id}
                                     proxyInfo={proxyInfo}
+                                    meta={meta}
                                   />
                                 )}
                                 {shouldRenderMedia && renderType === 'document' && (
@@ -1906,6 +2100,7 @@ const Inbox = () => {
                                     onImageClick={setMediaViewer}
                                     messageId={msg.id}
                                     proxyInfo={proxyInfo}
+                                    meta={meta}
                                   />
                                 )}
                                 {normalizedType === 'text' && hasOnlyUrl && !isWhatsappMedia && (
@@ -2231,6 +2426,25 @@ const Inbox = () => {
 
               <div className="w-px h-6 bg-white/10 mx-1" />
 
+              <button
+                type="button"
+                onClick={() => setViewerRotation(r => (r - 90) % 360)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                aria-label="Rotacionar à esquerda"
+              >
+                90°
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewerRotation(r => (r + 90) % 360)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                aria-label="Rotacionar à direita"
+              >
+                90°
+              </button>
+
+              <div className="w-px h-6 bg-white/10 mx-1" />
+
               {currentViewerItem?.url && (
                 <a
                   href={viewerResolvedUrl || currentViewerItem.url}
@@ -2335,19 +2549,36 @@ const Inbox = () => {
               }
 
               return (
-                <div className="min-h-full flex items-center justify-center p-4">
-                  <img
-                    src={url}
-                    alt={currentViewerItem?.title || 'Imagem'}
-                    className="max-w-full h-auto object-contain rounded-lg"
-                    style={{ transform: `scale(${viewerZoom})`, transformOrigin: 'center' }}
-                    referrerPolicy="no-referrer"
-                    onLoad={() => setViewerLoading(false)}
-                    onError={() => {
-                      setViewerLoading(false);
-                      setViewerLoadError(true);
-                    }}
-                  />
+                <div className="min-h-full flex flex-col items-center justify-center p-4 gap-2">
+                  <div className="flex-1 flex items-center justify-center w-full">
+                    <img
+                      src={url}
+                      alt={currentViewerItem?.title || 'Imagem'}
+                      className="max-w-full h-auto object-contain rounded-lg"
+                      style={{ transform: `scale(${viewerZoom}) rotate(${viewerRotation}deg)`, transformOrigin: 'center' }}
+                      referrerPolicy="no-referrer"
+                      onLoad={() => setViewerLoading(false)}
+                      onError={() => {
+                        setViewerLoading(false);
+                        setViewerLoadError(true);
+                      }}
+                    />
+                  </div>
+                  <div className="w-full max-w-2xl text-xs text-white/70 flex flex-wrap items-center justify-between gap-2">
+                    <span className="truncate">
+                      {viewerResolvedMimeType || currentViewerItem?.metadata?.mime_type || currentViewerItem?.metadata?.mimeType || 'Formato desconhecido'}
+                    </span>
+                    {(() => {
+                      const meta = currentViewerMessage && typeof currentViewerMessage.metadata === 'object' ? currentViewerMessage.metadata : currentViewerItem?.metadata;
+                      const rawSize = meta ? (meta.file_size ?? meta.fileSize ?? meta.size ?? meta.bytes ?? null) : null;
+                      const sizeNumber = typeof rawSize === 'number' ? rawSize : rawSize ? Number(rawSize) : 0;
+                      if (!sizeNumber || Number.isNaN(sizeNumber)) return null;
+                      const kb = sizeNumber / 1024;
+                      const mb = kb / 1024;
+                      const formatted = mb >= 1 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(1)} KB`;
+                      return <span className="truncate">Tamanho: {formatted}</span>;
+                    })()}
+                  </div>
                 </div>
               );
             })()}
