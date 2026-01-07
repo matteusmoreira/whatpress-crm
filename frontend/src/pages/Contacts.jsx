@@ -208,7 +208,8 @@ const Contacts = () => {
 
     const handleViewInInbox = (contact) => {
         // Navigate to inbox with contact phone as filter
-        navigate(`/app/inbox?search=${encodeURIComponent(contact.phone)}`);
+        const phone = String(contact?.phone || '').replace(/\D/g, '');
+        navigate(`/app/inbox?search=${encodeURIComponent(phone)}`);
     };
 
     const formatDate = (date) => {

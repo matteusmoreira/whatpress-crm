@@ -372,6 +372,8 @@ const Inbox = () => {
   const [useSignature, setUseSignature] = useState(user?.signatureEnabled ?? true);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const urlSearchHandledRef = useRef(null);
+  const urlSearchInFlightRef = useRef(false);
 
   const tenantId = user?.tenantId || 'tenant-1';
 
@@ -410,44 +412,46 @@ const Inbox = () => {
   useEffect(() => {
     const searchParam = searchParams.get('search');
     if (!searchParam || conversationsLoading) return;
+    if (urlSearchHandledRef.current === searchParam || urlSearchInFlightRef.current) return;
+    urlSearchHandledRef.current = searchParam;
+    urlSearchInFlightRef.current = true;
 
     const phone = decodeURIComponent(searchParam).replace(/\D/g, ''); // Simple cleanup
-    if (!phone) return;
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('search');
+    setSearchParams(newParams);
+    if (!phone) {
+      urlSearchInFlightRef.current = false;
+      return;
+    }
 
     // Check if conversation already exists
-    const existing = conversations.find(c =>
-      c.contactPhone?.includes(phone) ||
-      c.contactPhone?.replace(/\D/g, '') === phone
-    );
+    const matches = (conversations || []).filter(c => (String(c?.contactPhone || '')).replace(/\D/g, '') === phone);
+    const existing = matches.reduce((best, cur) => {
+      if (!best) return cur;
+      const bestTs = Date.parse(best?.lastMessageAt || '') || 0;
+      const curTs = Date.parse(cur?.lastMessageAt || '') || 0;
+      return curTs > bestTs ? cur : best;
+    }, null);
 
     if (existing) {
-      setSelectedConversation(existing.id);
+      setSelectedConversation(existing);
       setSearchQuery(phone);
-      // Clear param to avoid re-triggering
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete('search');
-      setSearchParams(newParams);
+      urlSearchInFlightRef.current = false;
     } else {
-      // Create new conversation
-      const initiate = async () => {
+      (async () => {
         try {
           const newConv = await ConversationsAPI.initiate(phone);
-          // Refresh conversations to include the new one (or optimize by adding to store directly if possible)
-          // For now, re-fetching or simulating addition:
-          await fetchConversations(tenantId);
-          setSelectedConversation(newConv.id);
+          setSelectedConversation(newConv);
           setSearchQuery(phone);
-
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete('search');
-          setSearchParams(newParams);
+          await fetchConversations(tenantId);
         } catch (error) {
           console.error("Error initiating conversation:", error);
           toast.error("Erro ao iniciar conversa");
+        } finally {
+          urlSearchInFlightRef.current = false;
         }
-      };
-
-      initiate();
+      })();
     }
   }, [searchParams, conversations, conversationsLoading, tenantId, fetchConversations, setSelectedConversation, setSearchParams]);
 
@@ -533,17 +537,36 @@ const Inbox = () => {
     };
   }, []);
 
-  const filteredConversations = conversations.filter(conv => {
-    const matchesSearch = conv.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      conv.contactPhone.includes(searchQuery);
-    const matchesStatus = conversationFilter === 'all' || conv.status === conversationFilter;
-    const matchesConnection = selectedConnectionFilter === 'all' || conv.connectionId === selectedConnectionFilter;
-    const matchesLabel = selectedLabelFilter === 'all' || (conv.labels || []).includes(selectedLabelFilter);
-    const matchesAgent = selectedAgentFilter === 'all' ||
-      (selectedAgentFilter === 'mine' && conv.assignedTo === user?.id) ||
-      conv.assignedTo === selectedAgentFilter;
-    return matchesSearch && matchesStatus && matchesConnection && matchesLabel && matchesAgent;
-  });
+  const filteredConversations = (() => {
+    const byPhone = new Map();
+    for (const conv of conversations || []) {
+      const key = String(conv?.contactPhone || '').replace(/\D/g, '') || conv?.id;
+      const existing = byPhone.get(key);
+      if (!existing) {
+        byPhone.set(key, conv);
+        continue;
+      }
+      const existingTs = Date.parse(existing?.lastMessageAt || '') || 0;
+      const nextTs = Date.parse(conv?.lastMessageAt || '') || 0;
+      if (nextTs > existingTs) byPhone.set(key, conv);
+    }
+
+    const unique = Array.from(byPhone.values());
+    const q = String(searchQuery || '').toLowerCase();
+
+    return unique.filter(conv => {
+      const contactName = String(conv?.contactName || '').toLowerCase();
+      const contactPhone = String(conv?.contactPhone || '');
+      const matchesSearch = contactName.includes(q) || contactPhone.includes(String(searchQuery || ''));
+      const matchesStatus = conversationFilter === 'all' || conv.status === conversationFilter;
+      const matchesConnection = selectedConnectionFilter === 'all' || conv.connectionId === selectedConnectionFilter;
+      const matchesLabel = selectedLabelFilter === 'all' || (conv.labels || []).includes(selectedLabelFilter);
+      const matchesAgent = selectedAgentFilter === 'all' ||
+        (selectedAgentFilter === 'mine' && conv.assignedTo === user?.id) ||
+        conv.assignedTo === selectedAgentFilter;
+      return matchesSearch && matchesStatus && matchesConnection && matchesLabel && matchesAgent;
+    });
+  })();
 
   // Helper to get label info by ID
   const getLabelById = (labelId) => labels.find(l => l.id === labelId);
@@ -662,14 +685,20 @@ const Inbox = () => {
     }
 
     try {
-      // First get or create the contact
-      const contact = await ContactsAPI.getByPhone(tenantId, selectedConversation.contactPhone);
+      const nextName = contactNameValue.trim();
 
-      // Update contact name
-      await ContactsAPI.update(contact.id, { full_name: contactNameValue.trim() });
+      await ContactsAPI.update(`conv-${selectedConversation.id}`, { full_name: nextName });
+
+      try {
+        const contact = await ContactsAPI.getByPhone(tenantId, selectedConversation.contactPhone);
+        if (contact?.id && !String(contact.id).startsWith('conv-')) {
+          await ContactsAPI.update(contact.id, { full_name: nextName });
+        }
+      } catch (e) {
+      }
 
       // Update local state
-      const updatedConv = { ...selectedConversation, contactName: contactNameValue.trim() };
+      const updatedConv = { ...selectedConversation, contactName: nextName };
       setSelectedConversation(updatedConv);
 
       // Refresh conversations

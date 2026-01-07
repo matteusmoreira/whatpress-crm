@@ -35,7 +35,13 @@ def setup_database():
         role VARCHAR(50) DEFAULT 'agent' CHECK (role IN ('superadmin', 'admin', 'agent')),
         tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
         avatar VARCHAR(512),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        job_title VARCHAR(120),
+        department VARCHAR(120),
+        signature_enabled BOOLEAN DEFAULT true,
+        signature_include_title BOOLEAN DEFAULT false,
+        signature_include_department BOOLEAN DEFAULT false,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
     -- Connections table

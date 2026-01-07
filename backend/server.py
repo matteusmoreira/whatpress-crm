@@ -5,7 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
@@ -25,12 +25,29 @@ app = FastAPI(title="WhatsApp CRM API")
 
 # Configure CORS immediately - Fix for Railway deployment
 # allow_origins=["*"] fails with allow_credentials=True in some browsers/proxies
+def resolve_cors_allow_origins() -> List[str]:
+    raw = (os.getenv("CORS_ALLOW_ORIGINS") or "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [
+        "https://whatpress-crm.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+
+CORS_ALLOW_ORIGINS = resolve_cors_allow_origins()
+CORS_ALLOW_ORIGIN_REGEX = os.getenv(
+    "CORS_ALLOW_ORIGIN_REGEX", r"^https://(.*\.)?whatpress-crm(-.*)?\.vercel\.app$"
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",  # Allow all origins via regex to support credentials
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Healthcheck endpoint (required for Railway)
@@ -250,12 +267,13 @@ class ConversationTransferCreate(BaseModel):
     reason: Optional[str] = None
 
 class UserProfileUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
     name: Optional[str] = None
-    job_title: Optional[str] = None
+    job_title: Optional[str] = Field(default=None, alias="jobTitle")
     department: Optional[str] = None
-    signature_enabled: Optional[bool] = None
-    signature_include_title: Optional[bool] = None
-    signature_include_department: Optional[bool] = None
+    signature_enabled: Optional[bool] = Field(default=None, alias="signatureEnabled")
+    signature_include_title: Optional[bool] = Field(default=None, alias="signatureIncludeTitle")
+    signature_include_department: Optional[bool] = Field(default=None, alias="signatureIncludeDepartment")
 
 class ContactUpsertByPhone(BaseModel):
     tenant_id: str
@@ -516,11 +534,11 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
     user_id = payload['user_id']
     update_data: Dict[str, Any] = {}
     if data.name is not None:
-        update_data['name'] = data.name
+        update_data['name'] = (data.name or '').strip()
     if data.job_title is not None:
-        update_data['job_title'] = data.job_title
+        update_data['job_title'] = (data.job_title or '').strip()
     if data.department is not None:
-        update_data['department'] = data.department
+        update_data['department'] = (data.department or '').strip()
     if data.signature_enabled is not None:
         update_data['signature_enabled'] = data.signature_enabled
     if data.signature_include_title is not None:
@@ -547,7 +565,18 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
             'signatureIncludeDepartment': u.get('signature_include_department', False),
         }
 
-    result = supabase.table('users').update(update_data).eq('id', user_id).execute()
+    update_data['updated_at'] = datetime.utcnow().isoformat()
+    try:
+        result = supabase.table('users').update(update_data).eq('id', user_id).execute()
+    except Exception as e:
+        msg = str(e) or ""
+        lowered = msg.lower()
+        if "column" in lowered or "does not exist" in lowered:
+            raise HTTPException(
+                status_code=400,
+                detail="Banco de dados sem colunas de perfil (cargo/departamento/assinatura). Aplique a migração 009_contacts_transfer_signature_audit.sql.",
+            )
+        raise HTTPException(status_code=400, detail="Erro ao salvar perfil.")
     if not result.data:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     u = result.data[0]
@@ -1731,7 +1760,7 @@ async def list_contacts(
             contacts.append({
                 'id': c.get('id'),
                 'tenantId': c.get('tenant_id'),
-                'name': c.get('name'),
+                'name': c.get('name') or c.get('full_name'),
                 'phone': c.get('phone'),
                 'email': c.get('email'),
                 'tags': c.get('tags') or [],
@@ -1779,21 +1808,39 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
         if existing.data:
             raise HTTPException(status_code=400, detail="Já existe um contato com este telefone")
 
-        insert_data = {
-            'tenant_id': user_tenant_id,
-            'name': name,
-            'phone': phone,
-            'email': (data.email or '').strip() or None,
-            'tags': data.tags or [],
-            'custom_fields': data.custom_fields or {},
-            'source': data.source or 'manual'
-        }
+        insert_result = None
+        try:
+            insert_data = {
+                'tenant_id': user_tenant_id,
+                'name': name,
+                'phone': phone,
+                'email': (data.email or '').strip() or None,
+                'tags': data.tags or [],
+                'custom_fields': data.custom_fields or {},
+                'source': data.source or 'manual'
+            }
+            insert_result = supabase.table('contacts').insert(insert_data).execute()
+        except Exception:
+            insert_result = None
 
-        result = supabase.table('contacts').insert(insert_data).execute()
-        if not result.data:
+        if not insert_result or not insert_result.data:
+            try:
+                insert_data_alt = {
+                    'tenant_id': user_tenant_id,
+                    'full_name': name,
+                    'phone': phone,
+                    'social_links': {},
+                    'notes_html': ''
+                }
+                insert_result = supabase.table('contacts').insert(insert_data_alt).execute()
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Erro ao criar contato: {str(e)}")
+
+        if not insert_result or not insert_result.data:
             raise HTTPException(status_code=400, detail="Erro ao criar contato")
 
-        c = result.data[0]
+        c = insert_result.data[0]
+        name_value = c.get('name') or c.get('full_name') or name
         
         safe_insert_audit_log(
             tenant_id=user_tenant_id,
@@ -1807,11 +1854,13 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
         return {
             'id': c.get('id'),
             'tenantId': c.get('tenant_id'),
-            'name': c.get('name'),
+            'name': name_value,
             'phone': c.get('phone'),
             'email': c.get('email'),
             'tags': c.get('tags') or [],
             'customFields': c.get('custom_fields') or {},
+            'socialLinks': c.get('social_links') or {},
+            'notesHtml': c.get('notes_html') or '',
             'source': c.get('source'),
             'createdAt': c.get('created_at'),
             'updatedAt': c.get('updated_at')
@@ -1848,11 +1897,13 @@ async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
         return {
             'id': c.get('id'),
             'tenantId': c.get('tenant_id'),
-            'name': c.get('name'),
+            'name': c.get('name') or c.get('full_name'),
             'phone': c.get('phone'),
             'email': c.get('email'),
             'tags': c.get('tags') or [],
             'customFields': c.get('custom_fields') or {},
+            'socialLinks': c.get('social_links') or {},
+            'notesHtml': c.get('notes_html') or '',
             'source': c.get('source'),
             'createdAt': c.get('created_at'),
             'updatedAt': c.get('updated_at'),
@@ -1890,15 +1941,18 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
             existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
             if existing.data:
                 c = existing.data[0]
+                full_name = c.get('full_name') or c.get('name') or normalized_phone
                 # Return with actual schema columns
                 return {
                     'id': c.get('id'),
                     'tenantId': c.get('tenant_id'),
                     'phone': c.get('phone'),
-                    'fullName': c.get('name') or normalized_phone,  # Use 'name' column
+                    'fullName': full_name,
                     'email': c.get('email'),
                     'tags': c.get('tags') or [],
                     'customFields': c.get('custom_fields') or {},
+                    'socialLinks': c.get('social_links') or {},
+                    'notesHtml': c.get('notes_html') or '',
                     'source': c.get('source'),
                     'createdAt': c.get('created_at'),
                     'updatedAt': c.get('updated_at')
@@ -1908,9 +1962,13 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
             logger.warning(f"Could not query contacts table: {table_error}")
 
         # Fallback: get contact info from conversations table
-        conv = supabase.table('conversations').select('id, contact_name, contact_avatar, contact_phone').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
+        try:
+            conv = supabase.table('conversations').select('id, contact_name, contact_avatar, contact_phone').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).order('last_message_at', desc=True).limit(1).execute()
+        except Exception as conv_error:
+            logger.warning(f"Could not query conversations table for contact fallback: {conv_error}")
+            conv = None
         
-        if conv.data:
+        if conv and conv.data:
             c = conv.data[0]
             # Return contact-like object from conversation data
             return {
@@ -1946,7 +2004,21 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
         raise
     except Exception as e:
         logger.error(f"Error in get_contact_by_phone: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar contato: {str(e)}")
+        return {
+            'id': None,
+            'tenantId': tenant_id,
+            'phone': (phone or '').strip(),
+            'fullName': (phone or '').strip(),
+            'email': None,
+            'tags': [],
+            'customFields': {},
+            'socialLinks': {},
+            'notesHtml': '',
+            'source': None,
+            'createdAt': None,
+            'updatedAt': None,
+            'isNew': True
+        }
 
 @api_router.patch("/contacts/{contact_id}")
 async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = Depends(verify_token)):
@@ -2001,29 +2073,81 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
             if user_tenant_id and contact.get('tenant_id') != user_tenant_id:
                 raise HTTPException(status_code=403, detail="Acesso negado")
 
-            update_data: Dict[str, Any] = {}
-            # NOTE: The database uses 'name' column, not 'full_name'
+            desired_name = None
             if data.full_name is not None:
-                name = (data.full_name or '').strip()
-                if not name:
+                desired_name = (data.full_name or '').strip()
+                if not desired_name:
                     raise HTTPException(status_code=400, detail="Nome é obrigatório")
-                update_data['name'] = name  # Use 'name' column (actual schema)
 
+                try:
+                    supabase.table('conversations').update({
+                        'contact_name': desired_name
+                    }).eq('tenant_id', contact.get('tenant_id')).eq('contact_phone', contact.get('phone')).execute()
+                except Exception:
+                    pass
+
+            def build_update_payload(name_field: str) -> Dict[str, Any]:
+                update_data: Dict[str, Any] = {}
+                if desired_name is not None:
+                    update_data[name_field] = desired_name
+                if data.email is not None:
+                    update_data['email'] = (data.email or '').strip() or None
+                if data.tags is not None:
+                    update_data['tags'] = data.tags or []
+                if data.custom_fields is not None:
+                    update_data['custom_fields'] = data.custom_fields or {}
+                if data.social_links is not None:
+                    update_data['social_links'] = data.social_links or {}
+                if data.notes_html is not None:
+                    update_data['notes_html'] = data.notes_html or ''
+                if update_data:
+                    update_data['updated_at'] = datetime.utcnow().isoformat()
+                return update_data
+
+            update_data = build_update_payload('name')
             if not update_data:
                 return {"success": True}
 
-            update_data['updated_at'] = datetime.utcnow().isoformat()
-            updated = supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
-            if not updated.data:
+            after = None
+            try:
+                updated = supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
+                if updated.data:
+                    after = updated.data[0]
+            except Exception:
+                after = None
+
+            if after is None:
+                update_data_alt = build_update_payload('full_name')
+                try:
+                    updated_alt = supabase.table('contacts').update(update_data_alt).eq('id', contact_id).execute()
+                    if updated_alt.data:
+                        after = updated_alt.data[0]
+                except Exception:
+                    after = None
+
+            if after is None:
+                if desired_name is not None:
+                    return {
+                        'id': contact.get('id') or contact_id,
+                        'tenantId': contact.get('tenant_id'),
+                        'phone': contact.get('phone'),
+                        'fullName': desired_name,
+                        'email': contact.get('email'),
+                        'tags': contact.get('tags') or [],
+                        'customFields': contact.get('custom_fields') or {},
+                        'socialLinks': contact.get('social_links') or {},
+                        'notesHtml': contact.get('notes_html') or '',
+                        'createdAt': contact.get('created_at'),
+                        'updatedAt': datetime.utcnow().isoformat()
+                    }
                 raise HTTPException(status_code=400, detail="Erro ao atualizar contato")
 
-            after = updated.data[0]
-            
-            # Update conversation contact_name if name was changed
-            if data.full_name is not None:
+            full_name_value = after.get('full_name') or after.get('name')
+
+            if desired_name is not None:
                 try:
                     supabase.table('conversations').update({
-                        'contact_name': after.get('name')
+                        'contact_name': desired_name
                     }).eq('tenant_id', contact.get('tenant_id')).eq('contact_phone', contact.get('phone')).execute()
                 except Exception:
                     pass
@@ -2034,17 +2158,19 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                 action='contact.updated',
                 entity_type='contact',
                 entity_id=contact_id,
-                metadata={'fields': list(update_data.keys())}
+                metadata={'fields': list((update_data or {}).keys())}
             )
 
             return {
                 'id': after.get('id'),
                 'tenantId': after.get('tenant_id'),
                 'phone': after.get('phone'),
-                'fullName': after.get('name'),  # Return 'name' as 'fullName'
+                'fullName': full_name_value,
                 'email': after.get('email'),
                 'tags': after.get('tags') or [],
                 'customFields': after.get('custom_fields') or {},
+                'socialLinks': after.get('social_links') or {},
+                'notesHtml': after.get('notes_html') or '',
                 'createdAt': after.get('created_at'),
                 'updatedAt': after.get('updated_at')
             }
@@ -4495,4 +4621,16 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
+    sql = """
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(120);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(120);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_enabled BOOLEAN DEFAULT true;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_include_title BOOLEAN DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_include_department BOOLEAN DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+    """
+    try:
+        supabase.rpc('exec_sql', {'sql': sql}).execute()
+    except Exception:
+        pass
     logger.info("WhatsApp CRM API v2.0 started successfully")
