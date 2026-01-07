@@ -31,7 +31,18 @@ CREATE INDEX IF NOT EXISTS idx_contacts_tenant ON contacts(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
 
 ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Service role full access contacts" ON contacts FOR ALL USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname IN ('public')
+          AND tablename = 'contacts'
+          AND policyname = 'Service role full access contacts'
+    ) THEN
+        EXECUTE 'CREATE POLICY "Service role full access contacts" ON contacts FOR ALL USING (true) WITH CHECK (true)';
+    END IF;
+END $$;
 
 -- Contacts: redes sociais e observações ricas
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS social_links JSONB DEFAULT '{}'::jsonb;
@@ -53,7 +64,18 @@ CREATE INDEX IF NOT EXISTS idx_contact_history_contact ON contact_history(contac
 CREATE INDEX IF NOT EXISTS idx_contact_history_tenant ON contact_history(tenant_id);
 
 ALTER TABLE contact_history ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Service role full access contact_history" ON contact_history FOR ALL USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname IN ('public')
+          AND tablename = 'contact_history'
+          AND policyname = 'Service role full access contact_history'
+    ) THEN
+        EXECUTE 'CREATE POLICY "Service role full access contact_history" ON contact_history FOR ALL USING (true) WITH CHECK (true)';
+    END IF;
+END $$;
 
 -- Transferência de atendimento
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS transfer_status VARCHAR(20);
@@ -84,4 +106,15 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Service role full access audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname IN ('public')
+          AND tablename = 'audit_logs'
+          AND policyname = 'Service role full access audit_logs'
+    ) THEN
+        EXECUTE 'CREATE POLICY "Service role full access audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true)';
+    END IF;
+END $$;
