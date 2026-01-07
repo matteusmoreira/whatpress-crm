@@ -2680,6 +2680,10 @@ async def delete_message(message_id: str, payload: dict = Depends(verify_token))
             return '[Vídeo]'
         if msg_type == 'document':
             return '[Documento]'
+        if msg_type == 'sticker':
+            return '[Figurinha]'
+        return '[Mensagem]'
+            return '[Figurinha]'
         return '[Mensagem]'
 
     latest = supabase.table('messages').select('content, timestamp, type').eq('conversation_id', conversation_id).order('timestamp', desc=True).limit(1).execute()
@@ -3032,10 +3036,19 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     is_new_conversation = True
                 
                 # Save message with correct direction
+                parsed_type_raw = parsed.get('type') or 'text'
+                parsed_kind_raw = parsed.get('media_kind')
+                parsed_type = str(parsed_type_raw or '').strip().lower() or 'text'
+                parsed_kind = str(parsed_kind_raw or '').strip().lower() if parsed_kind_raw is not None else ''
+                allowed_message_types = {'text', 'image', 'video', 'audio', 'document', 'sticker', 'system'}
+                message_type_to_store = parsed_kind if parsed_kind in allowed_message_types else parsed_type
+                if message_type_to_store not in allowed_message_types:
+                    message_type_to_store = 'text'
+
                 msg_data = {
                     'conversation_id': conversation['id'],
                     'content': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or ''),
-                    'type': parsed['type'],
+                    'type': message_type_to_store,
                     'direction': direction,  # 'inbound' for received, 'outbound' for sent
                     'status': 'read' if is_from_me else 'delivered',
                     'media_url': parsed.get('media_url'),

@@ -644,6 +644,7 @@ class EvolutionAPI:
                     mime_type = img.get('mimetype') or img.get('mimeType')
                     if isinstance(mime_type, str) and 'webp' in mime_type.lower():
                         media_kind = 'sticker'
+                        msg_type = 'sticker'
                 elif 'videoMessage' in message_content:
                     msg_type = 'video'
                     vid = message_content.get('videoMessage') or {}
@@ -672,7 +673,7 @@ class EvolutionAPI:
                         media_url = doc.get('url')
                 elif 'stickerMessage' in message_content:
                     st = message_content.get('stickerMessage') or {}
-                    msg_type = 'image'
+                    msg_type = 'sticker'
                     media_kind = 'sticker'
                     text = '[Figurinha]'
                     media_url = st.get('url')
@@ -686,8 +687,8 @@ class EvolutionAPI:
 
                 if msg_type == 'audio' and not (text or '').strip():
                     text = '[Áudio]'
-                if msg_type == 'image' and not (text or '').strip():
-                    text = media_kind == 'sticker' and '[Figurinha]' or '[Imagem]'
+                if msg_type in ['image', 'sticker'] and not (text or '').strip():
+                    text = msg_type == 'sticker' and '[Figurinha]' or '[Imagem]'
                 if msg_type == 'video' and not (text or '').strip():
                     text = '[Vídeo]'
                 if msg_type == 'document' and not (text or '').strip():

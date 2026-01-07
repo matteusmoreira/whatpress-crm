@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -22,6 +22,8 @@ import {
   Image,
   FileText,
   Mic,
+  Play,
+  Pause,
   Video,
   Wifi,
   WifiOff,
@@ -194,13 +196,223 @@ const ContactAvatar = ({ src, name, sizeClassName, className }) => {
   );
 };
 
+const formatMediaTime = (seconds) => {
+  const s = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const mins = Math.floor(s / 60);
+  const secs = Math.floor(s % 60);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+};
+
+const InlineAudioPlayer = ({ src, title }) => {
+  const audioRef = useRef(null);
+  const [readySrc, setReadySrc] = useState('');
+  const [pendingPlay, setPendingPlay] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [loadError, setLoadError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setReadySrc('');
+    setPendingPlay(false);
+    setIsPlaying(false);
+    setDuration(0);
+    setCurrentTime(0);
+    setLoadError(false);
+    setIsLoading(false);
+  }, [src]);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    const handleLoadedMetadata = () => {
+      setDuration(Number.isFinite(a.duration) ? a.duration : 0);
+      setIsLoading(false);
+    };
+    const handleTimeUpdate = () => setCurrentTime(a.currentTime || 0);
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleEnded = () => setIsPlaying(false);
+    const handleError = () => {
+      setIsLoading(false);
+      setLoadError(true);
+      setIsPlaying(false);
+    };
+    const handleWaiting = () => setIsLoading(true);
+    const handleCanPlay = () => setIsLoading(false);
+
+    a.addEventListener('loadedmetadata', handleLoadedMetadata);
+    a.addEventListener('timeupdate', handleTimeUpdate);
+    a.addEventListener('play', handlePlay);
+    a.addEventListener('pause', handlePause);
+    a.addEventListener('ended', handleEnded);
+    a.addEventListener('error', handleError);
+    a.addEventListener('waiting', handleWaiting);
+    a.addEventListener('canplay', handleCanPlay);
+
+    a.volume = volume;
+
+    return () => {
+      a.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      a.removeEventListener('timeupdate', handleTimeUpdate);
+      a.removeEventListener('play', handlePlay);
+      a.removeEventListener('pause', handlePause);
+      a.removeEventListener('ended', handleEnded);
+      a.removeEventListener('error', handleError);
+      a.removeEventListener('waiting', handleWaiting);
+      a.removeEventListener('canplay', handleCanPlay);
+    };
+  }, [volume]);
+
+  useEffect(() => {
+    if (!pendingPlay) return;
+    if (!readySrc) return;
+    const a = audioRef.current;
+    if (!a) return;
+    setPendingPlay(false);
+    Promise.resolve(a.play()).catch(() => {
+      setLoadError(true);
+      setIsPlaying(false);
+      setIsLoading(false);
+    });
+  }, [pendingPlay, readySrc]);
+
+  const ensureSrc = () => {
+    if (!readySrc) {
+      setReadySrc(src);
+      setIsLoading(true);
+      return false;
+    }
+    return true;
+  };
+
+  const togglePlay = () => {
+    if (!src) return;
+    const a = audioRef.current;
+    if (!a) return;
+    if (loadError) return;
+
+    if (!ensureSrc()) {
+      setPendingPlay(true);
+      return;
+    }
+
+    if (a.paused) {
+      setIsLoading(true);
+      Promise.resolve(a.play()).catch(() => {
+        setLoadError(true);
+        setIsPlaying(false);
+        setIsLoading(false);
+      });
+    } else {
+      a.pause();
+    }
+  };
+
+  const seekTo = (nextTime) => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!ensureSrc()) return;
+    const t = Math.max(0, Math.min(Number(nextTime) || 0, duration || 0));
+    a.currentTime = t;
+    setCurrentTime(t);
+  };
+
+  const setPlayerVolume = (nextVolume) => {
+    const a = audioRef.current;
+    const v = Math.max(0, Math.min(Number(nextVolume) || 0, 1));
+    setVolume(v);
+    if (a) a.volume = v;
+  };
+
+  const progressMax = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const progressNow = Number.isFinite(currentTime) && currentTime > 0 ? Math.min(currentTime, progressMax) : 0;
+
+  return (
+    <div className="w-full min-w-[240px] rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={!src || loadError}
+          className={cn(
+            'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border',
+            loadError ? 'bg-red-500/10 border-red-400/30 text-red-200' : 'bg-emerald-500/15 border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/25'
+          )}
+          aria-label={isPlaying ? 'Pausar áudio' : 'Reproduzir áudio'}
+        >
+          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium truncate">{title || 'Áudio'}</p>
+            <p className="text-xs text-white/60 tabular-nums">
+              {formatMediaTime(progressNow)} / {formatMediaTime(progressMax)}
+            </p>
+          </div>
+
+          <div className="mt-2 flex items-center gap-3">
+            <input
+              type="range"
+              min={0}
+              max={progressMax || 0}
+              step={0.1}
+              value={progressNow}
+              onChange={(e) => seekTo(e.target.value)}
+              disabled={!readySrc || loadError || !progressMax}
+              className="flex-1"
+              aria-label="Progresso do áudio"
+            />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => setPlayerVolume(e.target.value)}
+              disabled={loadError}
+              className="w-24"
+              aria-label="Volume do áudio"
+            />
+          </div>
+        </div>
+      </div>
+
+      {isLoading && !loadError && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-white/60">
+          <div className="w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+          Carregando…
+        </div>
+      )}
+
+      {loadError && (
+        <div className="mt-2 flex items-center justify-between gap-3 text-xs text-red-200">
+          <span className="truncate">Não foi possível reproduzir este áudio.</span>
+          {src && (
+            <a href={src} target="_blank" rel="noreferrer" className="text-white/80 hover:text-white underline">
+              Abrir
+            </a>
+          )}
+        </div>
+      )}
+
+      <audio ref={audioRef} src={readySrc || undefined} preload="none" />
+    </div>
+  );
+};
+
 // Component to display WhatsApp media (images/videos) inline
 const WhatsAppMediaDisplay = ({
   type,
   mediaUrl,
   content,
   direction,
-  onImageClick
+  onImageClick,
+  messageId
 }) => {
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -211,36 +423,29 @@ const WhatsAppMediaDisplay = ({
     mediaUrl.includes('whatsapp.net')
   );
 
-  // For image type with valid mediaUrl
-  if (type === 'image' && mediaUrl && !loadError) {
+  if ((type === 'image' || type === 'sticker') && mediaUrl) {
+    const label = type === 'sticker' ? 'Figurinha' : 'Imagem';
+    const title = type === 'sticker' ? (content || 'Figurinha') : (content || 'Imagem');
     return (
       <div className="relative">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
-            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          </div>
-        )}
         <button
           type="button"
-          onClick={() => onImageClick?.({ open: true, url: mediaUrl, title: content || 'Imagem' })}
-          className="block w-full rounded-xl overflow-hidden bg-black/20 focus:outline-none focus:ring-2 focus:ring-white/30"
-          aria-label="Abrir imagem"
+          onClick={() => onImageClick?.({ open: true, url: mediaUrl, title, messageId, kind: type })}
+          className={cn(
+            'flex items-center gap-3 p-3 rounded-xl border w-full text-left focus:outline-none focus:ring-2 focus:ring-white/30',
+            direction === 'outbound'
+              ? 'bg-white/10 border-white/20 hover:bg-white/15'
+              : 'bg-black/20 border-white/10 hover:bg-black/30'
+          )}
+          aria-label={`Visualizar ${label.toLowerCase()}`}
         >
-          <img
-            src={mediaUrl}
-            alt={content || 'Imagem'}
-            className={cn(
-              'w-full h-auto max-h-80 object-cover transition-opacity',
-              loading ? 'opacity-0' : 'opacity-100'
-            )}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onLoad={() => setLoading(false)}
-            onError={() => {
-              setLoading(false);
-              setLoadError(true);
-            }}
-          />
+          <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+            <Image className="w-5 h-5 opacity-80" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{label}</p>
+            <p className="text-xs opacity-70 truncate">Clique para visualizar</p>
+          </div>
         </button>
       </div>
     );
@@ -275,32 +480,19 @@ const WhatsAppMediaDisplay = ({
   // For audio type with valid mediaUrl
   if (type === 'audio' && mediaUrl && !loadError) {
     return (
-      <div className="relative flex items-center gap-3 p-2 rounded-xl bg-black/20 min-w-[200px]">
-        <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-          <Mic className="w-5 h-5 text-emerald-400" />
-        </div>
-        <audio
-          className="flex-1 h-8"
-          controls
-          preload="metadata"
-          src={mediaUrl}
-          aria-label="Reprodutor de áudio"
-          onError={() => setLoadError(true)}
-          style={{
-            height: '32px',
-            filter: 'invert(1) hue-rotate(180deg)',
-            opacity: 0.8
-          }}
-        />
-      </div>
+      <InlineAudioPlayer src={mediaUrl} title={content || 'Áudio'} />
     );
   }
 
   // Fallback for failed loads or WhatsApp URLs that expired - show clickable placeholder
   if (loadError || (isWhatsAppUrl && !mediaUrl)) {
-    const mediaKind = type === 'video' ? 'video' : type === 'audio' ? 'audio' : 'image';
+    const mediaKind =
+      type === 'video' ? 'video' :
+        type === 'audio' ? 'audio' :
+          type === 'sticker' ? 'sticker' :
+            'image';
     const IconComponent = mediaKind === 'video' ? Video : mediaKind === 'audio' ? Mic : Image;
-    const label = mediaKind === 'video' ? 'Vídeo' : mediaKind === 'audio' ? 'Áudio' : 'Imagem';
+    const label = mediaKind === 'video' ? 'Vídeo' : mediaKind === 'audio' ? 'Áudio' : mediaKind === 'sticker' ? 'Figurinha' : 'Imagem';
 
     return (
       <a
@@ -376,7 +568,7 @@ const Inbox = () => {
   const [labels, setLabels] = useState([]);
   const [selectedLabelFilter, setSelectedLabelFilter] = useState('all');
   const [replyToMessage, setReplyToMessage] = useState(null);
-  const [mediaViewer, setMediaViewer] = useState({ open: false, url: '', title: '' });
+  const [mediaViewer, setMediaViewer] = useState({ open: false, url: '', title: '', messageId: null, kind: null });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [editingContactName, setEditingContactName] = useState(false);
@@ -848,6 +1040,101 @@ const Inbox = () => {
 
     return 'unknown';
   };
+
+  const imageViewerItems = useMemo(() => {
+    const items = [];
+    const list = Array.isArray(messages) ? messages : [];
+    for (const msg of list) {
+      if (!msg || typeof msg !== 'object') continue;
+      const rawContent = typeof msg.content === 'string'
+        ? msg.content
+        : msg.content == null
+          ? ''
+          : String(msg.content);
+
+      const mediaUrlRaw =
+        typeof msg.mediaUrl === 'string' ? msg.mediaUrl :
+          typeof msg.media_url === 'string' ? msg.media_url :
+            typeof msg.url === 'string' ? msg.url :
+              '';
+      const mediaUrl = typeof mediaUrlRaw === 'string' && mediaUrlRaw.trim() ? mediaUrlRaw.trim() : '';
+
+      const urls = extractUrls(rawContent);
+      const urlFromContent = urls.length ? urls[0] : '';
+
+      const effectiveUrl = mediaUrl || urlFromContent;
+      if (!effectiveUrl) continue;
+
+      const normalizedType = normalizeMessageType(msg.type);
+      const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
+      const metaMimeRaw = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) : null;
+      const metaMime = String(metaMimeRaw || '').toLowerCase();
+      const kindFromMime = metaMime.includes('webp')
+        ? 'sticker'
+        : (metaMime.startsWith('image/'))
+          ? 'image'
+          : null;
+
+      const kindFromUrl = effectiveUrl ? inferWhatsappMediaKind(effectiveUrl) : 'unknown';
+      const kind = (normalizedType && normalizedType !== 'unknown' && normalizedType !== 'text')
+        ? normalizedType
+        : (kindFromMime || (kindFromUrl !== 'unknown' ? kindFromUrl : null));
+
+      if (kind !== 'image' && kind !== 'sticker') continue;
+
+      const title = kind === 'sticker' ? 'Figurinha' : 'Imagem';
+      items.push({
+        id: msg.id || null,
+        url: effectiveUrl,
+        title,
+        kind
+      });
+    }
+    return items;
+  }, [messages, normalizeMessageType]);
+
+  const currentViewerIndex = useMemo(() => {
+    if (!mediaViewer?.open) return -1;
+    const id = mediaViewer?.messageId;
+    const url = mediaViewer?.url;
+    if (id) {
+      const idx = imageViewerItems.findIndex(i => i.id && i.id === id);
+      if (idx >= 0) return idx;
+    }
+    if (url) {
+      const idx = imageViewerItems.findIndex(i => i.url === url);
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  }, [mediaViewer, imageViewerItems]);
+
+  const currentViewerItem = useMemo(() => {
+    if (currentViewerIndex >= 0) return imageViewerItems[currentViewerIndex];
+    if (mediaViewer?.url) {
+      return {
+        id: mediaViewer?.messageId || null,
+        url: mediaViewer.url,
+        title: mediaViewer.title || 'Imagem',
+        kind: mediaViewer.kind || 'image'
+      };
+    }
+    return null;
+  }, [currentViewerIndex, imageViewerItems, mediaViewer]);
+
+  const [viewerZoom, setViewerZoom] = useState(1);
+  const [viewerLoading, setViewerLoading] = useState(false);
+  const [viewerLoadError, setViewerLoadError] = useState(false);
+
+  useEffect(() => {
+    if (!mediaViewer?.open) return;
+    setViewerZoom(1);
+  }, [mediaViewer?.open]);
+
+  useEffect(() => {
+    if (!mediaViewer?.open) return;
+    setViewerLoading(true);
+    setViewerLoadError(false);
+  }, [mediaViewer?.open, currentViewerItem?.url]);
 
   const getMessageTypeBadgeInfo = (type) => {
     switch (type) {
@@ -1369,9 +1656,20 @@ const Inbox = () => {
                           const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
                           const metaKindRaw = meta ? (meta.media_kind ?? meta.mediaKind ?? meta.kind ?? meta.type) : null;
                           const metaKind = normalizeMessageType(metaKindRaw);
+                          const metaMimeRaw = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) : null;
+                          const metaMime = String(metaMimeRaw || '').toLowerCase();
+                          const kindFromMime = metaMime.includes('webp')
+                            ? 'sticker'
+                            : (metaMime.startsWith('audio/') || metaMime.includes('opus') || metaMime.includes('ogg'))
+                              ? 'audio'
+                              : metaMime.startsWith('video/')
+                                ? 'video'
+                                : metaMime.startsWith('image/')
+                                  ? 'image'
+                                  : null;
                           const resolvedKind = (metaKind && metaKind !== 'unknown' && metaKind !== 'text')
                             ? metaKind
-                            : (inferredKindFromUrl !== 'unknown' ? inferredKindFromUrl : null);
+                            : (kindFromMime && kindFromMime !== 'unknown' ? kindFromMime : (inferredKindFromUrl !== 'unknown' ? inferredKindFromUrl : null));
 
                           const renderType = (resolvedKind && resolvedKind !== 'unknown' && resolvedKind !== 'text')
                             ? resolvedKind
@@ -1439,22 +1737,14 @@ const Inbox = () => {
                                     </div>
                                   </div>
                                 )}
-                                {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio') && (
+                                {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio' || renderType === 'sticker') && (
                                   <WhatsAppMediaDisplay
                                     type={renderType}
                                     mediaUrl={effectiveMediaUrl}
                                     content={displayContent}
                                     direction={msg.direction}
                                     onImageClick={setMediaViewer}
-                                  />
-                                )}
-                                {shouldRenderMedia && renderType === 'sticker' && (
-                                  <WhatsAppMediaDisplay
-                                    type="image"
-                                    mediaUrl={effectiveMediaUrl}
-                                    content="Figurinha"
-                                    direction={msg.direction}
-                                    onImageClick={setMediaViewer}
+                                    messageId={msg.id}
                                   />
                                 )}
                                 {shouldRenderMedia && renderType === 'document' && (
@@ -1484,6 +1774,7 @@ const Inbox = () => {
                                     content={whatsappMeta?.label || 'Mídia do WhatsApp'}
                                     direction={msg.direction}
                                     onImageClick={setMediaViewer}
+                                    messageId={msg.id}
                                   />
                                 )}
                                 {normalizedType === 'text' && hasOnlyUrl && !isWhatsappMedia && (
@@ -1743,13 +2034,131 @@ const Inbox = () => {
       </TooltipProvider>
 
       <Dialog open={mediaViewer.open} onOpenChange={(open) => setMediaViewer(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-4xl bg-black/80 border border-white/10 p-3">
-          <img
-            src={mediaViewer.url}
-            alt={mediaViewer.title || 'Imagem'}
-            className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
-            referrerPolicy="no-referrer"
-          />
+        <DialogContent className="max-w-5xl bg-black/80 border border-white/10 p-0">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white truncate">
+                {currentViewerItem?.title || mediaViewer.title || 'Mídia'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentViewerIndex > 0) {
+                    const prev = imageViewerItems[currentViewerIndex - 1];
+                    setMediaViewer({ open: true, url: prev.url, title: prev.title, messageId: prev.id || null, kind: prev.kind || null });
+                  }
+                }}
+                disabled={currentViewerIndex <= 0}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:hover:bg-white/10 text-white text-sm"
+                aria-label="Mídia anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentViewerIndex >= 0 && currentViewerIndex < imageViewerItems.length - 1) {
+                    const next = imageViewerItems[currentViewerIndex + 1];
+                    setMediaViewer({ open: true, url: next.url, title: next.title, messageId: next.id || null, kind: next.kind || null });
+                  }
+                }}
+                disabled={currentViewerIndex < 0 || currentViewerIndex >= imageViewerItems.length - 1}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:hover:bg-white/10 text-white text-sm"
+                aria-label="Próxima mídia"
+              >
+                <ChevronLeft className="w-4 h-4 rotate-180" />
+              </button>
+
+              <div className="w-px h-6 bg-white/10 mx-1" />
+
+              <button
+                type="button"
+                onClick={() => setViewerZoom(z => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                aria-label="Diminuir zoom"
+              >
+                –
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewerZoom(1)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm tabular-nums"
+                aria-label="Resetar zoom"
+              >
+                {Math.round(viewerZoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewerZoom(z => Math.min(4, Math.round((z + 0.25) * 100) / 100))}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                aria-label="Aumentar zoom"
+              >
+                +
+              </button>
+
+              <div className="w-px h-6 bg-white/10 mx-1" />
+
+              {currentViewerItem?.url && (
+                <a
+                  href={currentViewerItem.url}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100 text-sm"
+                >
+                  Baixar
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setMediaViewer(prev => ({ ...prev, open: false }))}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/15 text-white"
+                aria-label="Fechar visualizador"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="relative h-[80vh] overflow-auto">
+            {viewerLoading && !viewerLoadError && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-white/20 border-t-white/70 rounded-full animate-spin" />
+              </div>
+            )}
+
+            {viewerLoadError && (
+              <div className="h-full flex items-center justify-center p-6 text-white/70">
+                <div className="max-w-md text-center">
+                  <p className="text-sm">Não foi possível carregar esta imagem.</p>
+                  {currentViewerItem?.url && (
+                    <a href={currentViewerItem.url} target="_blank" rel="noreferrer" className="text-white underline mt-2 inline-block">
+                      Abrir em nova aba
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!viewerLoadError && currentViewerItem?.url && (
+              <div className="min-h-full flex items-center justify-center p-4">
+                <img
+                  src={currentViewerItem.url}
+                  alt={currentViewerItem.title || 'Imagem'}
+                  className="max-w-full h-auto object-contain rounded-lg"
+                  style={{ transform: `scale(${viewerZoom})`, transformOrigin: 'center' }}
+                  referrerPolicy="no-referrer"
+                  onLoad={() => setViewerLoading(false)}
+                  onError={() => {
+                    setViewerLoading(false);
+                    setViewerLoadError(true);
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
