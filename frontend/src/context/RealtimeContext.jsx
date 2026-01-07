@@ -132,26 +132,57 @@ export const RealtimeProvider = ({ children }) => {
 
   // Subscribe to realtime updates
   useEffect(() => {
-    if (!isAuthenticated || !tenantId) return;
+    if (!isAuthenticated) return;
 
-    // Set auth token for realtime RLS
-    const token = useAuthStore.getState().token;
-    if (token) {
-      setRealtimeAuth(token);
+    console.log('[Realtime] Initializing...', { isAuthenticated, tenantId });
+
+    if (!tenantId) {
+      console.warn('[Realtime] Missing tenantId, skipping subscription');
+      return;
     }
 
-    // Subscribe to conversations
-    const unsubConversations = subscribeToConversations(tenantId, handleConversationUpdate);
+    let unsubConversations;
+    let unsubConnections;
+    let mounted = true;
 
-    // Subscribe to connection status
-    const unsubConnections = subscribeToConnectionStatus(tenantId, handleConnectionUpdate);
+    const initRealtime = async () => {
+      try {
+        // Set auth token for realtime RLS
+        const token = useAuthStore.getState().token;
+        if (token) {
+          console.log('[Realtime] Setting auth token...');
+          await setRealtimeAuth(token);
+          console.log('[Realtime] Auth token set');
+        } else {
+          console.warn('[Realtime] No token found in authStore');
+        }
 
-    const newUnsubscribers = [unsubConversations, unsubConnections];
-    setUnsubscribers(newUnsubscribers);
-    setIsConnected(true);
+        if (!mounted) return;
+
+        // Subscribe to conversations
+        console.log('[Realtime] Subscribing to conversations for tenant:', tenantId);
+        unsubConversations = subscribeToConversations(tenantId, handleConversationUpdate);
+
+        // Subscribe to connection status
+        console.log('[Realtime] Subscribing to connections for tenant:', tenantId);
+        unsubConnections = subscribeToConnectionStatus(tenantId, handleConnectionUpdate);
+
+        const newUnsubscribers = [unsubConversations, unsubConnections];
+        setUnsubscribers(newUnsubscribers);
+        setIsConnected(true);
+        console.log('[Realtime] Connected and subscribed');
+      } catch (err) {
+        console.error('[Realtime] Initialization error:', err);
+      }
+    };
+
+    initRealtime();
 
     return () => {
-      newUnsubscribers.forEach(unsub => unsub?.());
+      mounted = false;
+      console.log('[Realtime] Cleaning up subscriptions');
+      unsubConversations?.();
+      unsubConnections?.();
       setIsConnected(false);
     };
   }, [isAuthenticated, tenantId, handleConversationUpdate, handleConnectionUpdate]);
