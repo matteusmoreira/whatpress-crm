@@ -1365,7 +1365,19 @@ const Inbox = () => {
 
                           // Use mediaUrl if available, otherwise try to extract from content for media types
                           const effectiveMediaUrl = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
-                          const shouldRenderMedia = Boolean(effectiveMediaUrl) && isMediaType;
+                          const inferredKindFromUrl = effectiveMediaUrl ? inferWhatsappMediaKind(effectiveMediaUrl) : 'unknown';
+                          const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
+                          const metaKindRaw = meta ? (meta.media_kind ?? meta.mediaKind ?? meta.kind ?? meta.type) : null;
+                          const metaKind = normalizeMessageType(metaKindRaw);
+                          const resolvedKind = (metaKind && metaKind !== 'unknown' && metaKind !== 'text')
+                            ? metaKind
+                            : (inferredKindFromUrl !== 'unknown' ? inferredKindFromUrl : null);
+
+                          const renderType = (resolvedKind && resolvedKind !== 'unknown' && resolvedKind !== 'text')
+                            ? resolvedKind
+                            : normalizedType;
+
+                          const shouldRenderMedia = Boolean(effectiveMediaUrl) && ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
 
                           const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) :
                             (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
@@ -1373,7 +1385,7 @@ const Inbox = () => {
                           const originInfo = getMessageOriginInfo(msg);
                           const typeForBadge =
                             normalizedType !== 'text'
-                              ? normalizedType
+                              ? renderType
                               : (hasOnlyUrl && isWhatsappMedia
                                 ? (mediaKind === 'sticker' ? 'sticker' : mediaKind === 'audio' ? 'audio' : mediaKind === 'video' ? 'video' : 'image')
                                 : null);
@@ -1427,37 +1439,25 @@ const Inbox = () => {
                                     </div>
                                   </div>
                                 )}
-                                {shouldRenderMedia && (normalizedType === 'image' || normalizedType === 'video' || normalizedType === 'audio') && (
+                                {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio') && (
                                   <WhatsAppMediaDisplay
-                                    type={normalizedType}
+                                    type={renderType}
                                     mediaUrl={effectiveMediaUrl}
                                     content={displayContent}
                                     direction={msg.direction}
                                     onImageClick={setMediaViewer}
                                   />
                                 )}
-                                {shouldRenderMedia && normalizedType === 'sticker' && (
-                                  <a
-                                    href={effectiveMediaUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className={cn(
-                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
-                                      msg.direction === 'outbound'
-                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
-                                    )}
-                                  >
-                                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
-                                      <Image className="w-5 h-5 opacity-80" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">Figurinha</p>
-                                      <p className="text-xs opacity-70 truncate">Clique para abrir</p>
-                                    </div>
-                                  </a>
+                                {shouldRenderMedia && renderType === 'sticker' && (
+                                  <WhatsAppMediaDisplay
+                                    type="image"
+                                    mediaUrl={effectiveMediaUrl}
+                                    content="Figurinha"
+                                    direction={msg.direction}
+                                    onImageClick={setMediaViewer}
+                                  />
                                 )}
-                                {shouldRenderMedia && normalizedType === 'document' && (
+                                {shouldRenderMedia && renderType === 'document' && (
                                   <a
                                     href={effectiveMediaUrl}
                                     target="_blank"
@@ -1512,7 +1512,7 @@ const Inbox = () => {
                                     {renderTextWithLinks(displayContent)}
                                   </p>
                                 )}
-                                {shouldRenderMedia && hasContent && normalizedType !== 'document' && (
+                                {shouldRenderMedia && hasContent && renderType !== 'document' && (
                                   <p className="whitespace-pre-wrap mt-2">
                                     {renderTextWithLinks(rawContent)}
                                   </p>

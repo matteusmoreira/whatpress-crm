@@ -3043,7 +3043,9 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     'metadata': {
                         'remote_jid': parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
                         'instance_name': instance_name,
-                        'from_me': is_from_me
+                        'from_me': is_from_me,
+                        'media_kind': parsed.get('media_kind'),
+                        'mime_type': parsed.get('mime_type')
                     }
                 }
                 supabase.table('messages').insert(msg_data).execute()

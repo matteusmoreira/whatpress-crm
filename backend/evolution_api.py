@@ -609,6 +609,8 @@ class EvolutionAPI:
                 text = None
                 msg_type = 'text'
                 media_url = None
+                mime_type = None
+                media_kind = None
                 
                 if 'conversation' in message_content:
                     text = message_content['conversation']
@@ -636,21 +638,45 @@ class EvolutionAPI:
                         text = rx.get('text')
                 elif 'imageMessage' in message_content:
                     msg_type = 'image'
-                    text = message_content['imageMessage'].get('caption', '')
-                    media_url = message_content['imageMessage'].get('url')
+                    img = message_content.get('imageMessage') or {}
+                    text = img.get('caption', '')
+                    media_url = img.get('url')
+                    mime_type = img.get('mimetype') or img.get('mimeType')
+                    if isinstance(mime_type, str) and 'webp' in mime_type.lower():
+                        media_kind = 'sticker'
                 elif 'videoMessage' in message_content:
                     msg_type = 'video'
-                    text = message_content['videoMessage'].get('caption', '')
-                    media_url = message_content['videoMessage'].get('url')
+                    vid = message_content.get('videoMessage') or {}
+                    text = vid.get('caption', '')
+                    media_url = vid.get('url')
+                    mime_type = vid.get('mimetype') or vid.get('mimeType')
+                    media_kind = 'video'
                 elif 'audioMessage' in message_content:
                     msg_type = 'audio'
-                    media_url = message_content['audioMessage'].get('url')
+                    aud = message_content.get('audioMessage') or {}
+                    media_url = aud.get('url')
+                    mime_type = aud.get('mimetype') or aud.get('mimeType')
+                    media_kind = 'audio'
                 elif 'documentMessage' in message_content:
-                    msg_type = 'document'
-                    text = message_content['documentMessage'].get('fileName', 'document')
-                    media_url = message_content['documentMessage'].get('url')
+                    doc = message_content.get('documentMessage') or {}
+                    mime_type = doc.get('mimetype') or doc.get('mimeType')
+                    candidate_mime = str(mime_type or '').lower()
+                    if candidate_mime.startswith('audio/') or 'opus' in candidate_mime or 'ogg' in candidate_mime:
+                        msg_type = 'audio'
+                        media_kind = 'audio'
+                        media_url = doc.get('url')
+                    else:
+                        msg_type = 'document'
+                        media_kind = 'document'
+                        text = doc.get('fileName', 'document')
+                        media_url = doc.get('url')
                 elif 'stickerMessage' in message_content:
-                    text = '[Sticker]'
+                    st = message_content.get('stickerMessage') or {}
+                    msg_type = 'image'
+                    media_kind = 'sticker'
+                    text = '[Figurinha]'
+                    media_url = st.get('url')
+                    mime_type = st.get('mimetype') or st.get('mimeType')
                 elif 'locationMessage' in message_content:
                     text = '[Localização]'
                 elif 'contactMessage' in message_content:
@@ -661,7 +687,7 @@ class EvolutionAPI:
                 if msg_type == 'audio' and not (text or '').strip():
                     text = '[Áudio]'
                 if msg_type == 'image' and not (text or '').strip():
-                    text = '[Imagem]'
+                    text = media_kind == 'sticker' and '[Figurinha]' or '[Imagem]'
                 if msg_type == 'video' and not (text or '').strip():
                     text = '[Vídeo]'
                 if msg_type == 'document' and not (text or '').strip():
@@ -763,6 +789,8 @@ class EvolutionAPI:
                     'remote_jid_raw': remote_jid_raw,
                     'content': text,
                     'type': msg_type,
+                    'media_kind': media_kind or msg_type,
+                    'mime_type': mime_type,
                     'media_url': media_url,
                     'timestamp': msg.get('messageTimestamp'),
                     'push_name': msg.get('pushName')
