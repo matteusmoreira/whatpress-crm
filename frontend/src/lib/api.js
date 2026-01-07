@@ -803,4 +803,18 @@ export const UploadAPI = {
   }
 };
 
+export const MediaAPI = {
+  async proxy({ messageId, remoteJid, instanceName, fromMe = false }) {
+    const response = await apiClient.get('/media/proxy', {
+      params: {
+        message_id: messageId,
+        remote_jid: remoteJid,
+        instance_name: instanceName,
+        from_me: Boolean(fromMe)
+      }
+    });
+    return response.data;
+  }
+};
+
 export default apiClient;
