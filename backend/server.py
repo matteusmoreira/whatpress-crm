@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -92,6 +92,30 @@ def create_token(user_id: str, email: str, role: str):
         "exp": datetime.utcnow().timestamp() + 86400 * 7  # 7 days
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+def resolve_public_base_url(request: Optional[Request] = None) -> str:
+    configured = (
+        os.getenv("PUBLIC_BASE_URL")
+        or os.getenv("BACKEND_PUBLIC_URL")
+        or os.getenv("WEBHOOK_BASE_URL")
+        or os.getenv("APP_BASE_URL")
+        or ""
+    ).strip()
+    if configured:
+        return configured.rstrip("/")
+
+    if request is not None:
+        proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").strip()
+        host = (
+            request.headers.get("x-forwarded-host")
+            or request.headers.get("host")
+            or request.url.netloc
+            or ""
+        ).strip()
+        if host:
+            return f"{proto}://{host}".rstrip("/")
+
+    return "https://whatpress-crm-production.up.railway.app"
 
 def extract_profile_picture_url(data: Any) -> Optional[str]:
     if not isinstance(data, dict):
@@ -1132,7 +1156,7 @@ async def create_connection(connection: ConnectionCreate, payload: dict = Depend
     }
 
 @api_router.post("/connections/{connection_id}/test")
-async def test_connection(connection_id: str, payload: dict = Depends(verify_token)):
+async def test_connection(connection_id: str, request: Request, payload: dict = Depends(verify_token)):
     """Test a connection"""
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     if not conn.data:
@@ -1147,7 +1171,7 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
             
             if state.get('instance', {}).get('state') == 'open':
                 # Already connected
-                webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
+                webhook_url = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{connection['instance_name']}"
                 try:
                     await evolution_api.set_webhook(connection['instance_name'], webhook_url)
                 except Exception as e:
@@ -1170,7 +1194,7 @@ async def test_connection(connection_id: str, payload: dict = Depends(verify_tok
         except Exception as e:
             # Instance might not exist, try to create it
             try:
-                webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
+                webhook_url = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{connection['instance_name']}"
                 create_result = await evolution_api.create_instance(
                     connection['instance_name'],
                     webhook_url
@@ -1218,7 +1242,7 @@ async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/connections/{connection_id}/sync")
-async def sync_connection_status(connection_id: str, payload: dict = Depends(verify_token)):
+async def sync_connection_status(connection_id: str, request: Request, payload: dict = Depends(verify_token)):
     """Sincronizar status da conexão com a Evolution API"""
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     if not conn.data:
@@ -1243,7 +1267,7 @@ async def sync_connection_status(connection_id: str, payload: dict = Depends(ver
         # Atualizar banco de dados
         update_data = {'status': new_status}
         if is_connected:
-            update_data['webhook_url'] = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{connection['instance_name']}"
+            update_data['webhook_url'] = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{connection['instance_name']}"
             try:
                 await evolution_api.set_webhook(connection['instance_name'], update_data['webhook_url'])
             except Exception as e:
@@ -4398,10 +4422,10 @@ async def list_evolution_instances(tenant_id: str = None, payload: dict = Depend
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/evolution/instances")
-async def create_evolution_instance(name: str, payload: dict = Depends(verify_token)):
+async def create_evolution_instance(name: str, request: Request, payload: dict = Depends(verify_token)):
     """Create new Evolution API instance"""
     try:
-        webhook_url = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{name}"
+        webhook_url = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{name}"
         result = await evolution_api.create_instance(name, webhook_url)
         return result
     except Exception as e:
