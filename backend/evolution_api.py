@@ -706,11 +706,59 @@ class EvolutionAPI:
                 else:
                     remote_id = ''
 
+                def parse_bool(value: Any) -> bool:
+                    if isinstance(value, bool):
+                        return value
+                    if isinstance(value, (int, float)):
+                        return bool(value)
+                    if isinstance(value, str):
+                        v = value.strip().lower()
+                        if v in ['true', '1', 'yes', 'y', 'sim']:
+                            return True
+                        if v in ['false', '0', 'no', 'n', 'nao', 'não', '']:
+                            return False
+                    return False
+
+                from_me = False
+                from_me_candidates = []
+                if isinstance(key, dict):
+                    from_me_candidates.extend([key.get('fromMe'), key.get('from_me')])
+                if isinstance(msg, dict):
+                    from_me_candidates.extend([msg.get('fromMe'), msg.get('from_me')])
+                if isinstance(data, dict):
+                    from_me_candidates.extend([data.get('fromMe'), data.get('from_me')])
+                    data_key = data.get('key')
+                    if isinstance(data_key, dict):
+                        from_me_candidates.extend([data_key.get('fromMe'), data_key.get('from_me')])
+                    data_msg = data.get('message')
+                    if isinstance(data_msg, dict):
+                        data_msg_key = data_msg.get('key')
+                        if isinstance(data_msg_key, dict):
+                            from_me_candidates.extend([data_msg_key.get('fromMe'), data_msg_key.get('from_me')])
+                if isinstance(payload, dict):
+                    from_me_candidates.extend([payload.get('fromMe'), payload.get('from_me')])
+                    payload_data = payload.get('data')
+                    if isinstance(payload_data, dict):
+                        payload_data_key = payload_data.get('key')
+                        if isinstance(payload_data_key, dict):
+                            from_me_candidates.extend([payload_data_key.get('fromMe'), payload_data_key.get('from_me')])
+                        payload_messages = payload_data.get('messages')
+                        if isinstance(payload_messages, list) and payload_messages and isinstance(payload_messages[0], dict):
+                            payload_msg_key = (payload_messages[0].get('key') or {})
+                            if isinstance(payload_msg_key, dict):
+                                from_me_candidates.extend([payload_msg_key.get('fromMe'), payload_msg_key.get('from_me')])
+
+                for candidate in from_me_candidates:
+                    if candidate is None:
+                        continue
+                    from_me = parse_bool(candidate)
+                    break
+
                 return {
                     'event': 'message',
                     'instance': instance,
                     'message_id': key.get('id') if isinstance(key, dict) else None,
-                    'from_me': key.get('fromMe', False) if isinstance(key, dict) else False,
+                    'from_me': from_me,
                     'remote_jid': remote_id,
                     'remote_jid_raw': remote_jid_raw,
                     'content': text,

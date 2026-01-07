@@ -2406,20 +2406,40 @@ async def list_messages(
     
     messages = []
     for m in rows:
-        direction = m.get('direction') or 'inbound'
+        def parse_bool(value: Any) -> bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return bool(value)
+            if isinstance(value, str):
+                v = value.strip().lower()
+                if v in ['true', '1', 'yes', 'y', 'sim']:
+                    return True
+                if v in ['false', '0', 'no', 'n', 'nao', 'não', '']:
+                    return False
+            return False
+
+        raw_direction = m.get('direction') or 'inbound'
+        metadata = m.get('metadata') or {}
+        from_me = False
+        if isinstance(metadata, dict):
+            from_me = parse_bool(metadata.get('from_me')) or parse_bool(metadata.get('fromMe'))
+        direction = 'outbound' if from_me else raw_direction
+
         msg_type = (m.get('type') or 'text').lower()
-        if direction == 'inbound':
-            origin = 'customer'
-        elif msg_type == 'system':
+        if msg_type == 'system':
             origin = 'system'
-        else:
+            direction = 'outbound'
+        elif direction == 'outbound':
             origin = 'agent'
+        else:
+            origin = 'customer'
         messages.append({
             'id': m['id'],
             'conversationId': m['conversation_id'],
             'content': normalize_message_content(m.get('content'), m.get('type') or 'text'),
             'type': m['type'],
-            'direction': m['direction'],
+            'direction': direction,
             'status': m['status'],
             'mediaUrl': m['media_url'],
             'externalId': m.get('external_id'),
