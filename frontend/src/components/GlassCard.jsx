@@ -100,10 +100,12 @@ export const GlassBadge = ({ children, variant = 'default', className }) => {
 
   const variants = {
     default: isDark ? 'bg-white/20 text-foreground' : 'bg-slate-100 text-slate-700',
+    neutral: isDark ? 'bg-gray-500/30 text-gray-300' : 'bg-slate-100 text-slate-700 border border-slate-200',
     success: isDark ? 'bg-emerald-500/30 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100',
     warning: isDark ? 'bg-amber-500/30 text-amber-300' : 'bg-amber-50 text-amber-800 border border-amber-100',
     danger: isDark ? 'bg-red-500/30 text-red-300' : 'bg-red-50 text-red-700 border border-red-100',
-    info: isDark ? 'bg-blue-500/30 text-blue-300' : 'bg-blue-50 text-blue-700 border border-blue-100'
+    info: isDark ? 'bg-blue-500/30 text-blue-300' : 'bg-blue-50 text-blue-700 border border-blue-100',
+    purple: isDark ? 'bg-purple-500/30 text-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-100'
   };
 
   return (

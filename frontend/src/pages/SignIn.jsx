@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { MessageSquare, Mail, Lock, ArrowRight } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
+import { useTheme } from '../context/ThemeContext';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error, clearError } = useAuthStore();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -27,12 +30,18 @@ const SignIn = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 flex items-center justify-center p-4">
+    <div
+      className={
+        isDark
+          ? 'min-h-screen bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 flex items-center justify-center p-4'
+          : 'min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4'
+      }
+    >
       {/* Decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-400/10 rounded-full blur-3xl" />
+        <div className={isDark ? "absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/20 rounded-full blur-3xl" : "absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl"} />
+        <div className={isDark ? "absolute -bottom-40 -left-40 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl" : "absolute -bottom-40 -left-40 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl"} />
+        <div className={isDark ? "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-400/10 rounded-full blur-3xl" : "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl"} />
       </div>
 
       <GlassCard className="w-full max-w-md relative z-10" hover={false}>
@@ -78,7 +87,7 @@ const SignIn = () => {
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+            <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm">
               {error}
             </div>
           )}

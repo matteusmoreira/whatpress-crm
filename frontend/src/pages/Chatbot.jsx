@@ -17,7 +17,7 @@ import {
     ChevronRight,
     Zap
 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { ChatbotAPI, AgentsAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
@@ -46,7 +46,7 @@ const FlowCard = ({ flow, onEdit, onDelete, onToggle, onViewSteps }) => {
             'p-4 rounded-xl border transition-all',
             flow.isActive
                 ? 'bg-white/5 border-white/20 hover:border-emerald-500/50'
-                : 'bg-white/2 border-white/10 opacity-60'
+                : 'bg-white/5 border-white/10 opacity-60'
         )}>
             <div className="flex items-start gap-4">
                 <div className="p-3 rounded-xl bg-purple-500/20">
@@ -56,12 +56,12 @@ const FlowCard = ({ flow, onEdit, onDelete, onToggle, onViewSteps }) => {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                         <h3 className="text-white font-medium">{flow.name}</h3>
-                        <span className={cn(
-                            'text-xs px-2 py-0.5 rounded-full',
-                            flow.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'
-                        )}>
+                        <GlassBadge
+                            variant={flow.isActive ? 'success' : 'neutral'}
+                            className="px-2 py-0.5 text-xs"
+                        >
                             {flow.isActive ? 'Ativo' : 'Inativo'}
-                        </span>
+                        </GlassBadge>
                     </div>
 
                     {flow.description && (

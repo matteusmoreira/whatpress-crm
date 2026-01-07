@@ -167,6 +167,15 @@ code {
   @apply text-slate-800;
 }
 
+.light .text-white\/10,
+.light .text-white\/20 {
+  @apply text-slate-300;
+}
+
+.light .text-white\/30 {
+  @apply text-slate-400;
+}
+
 .light .text-white\/40,
 .light .text-white\/50 {
   @apply text-slate-500;
@@ -183,6 +192,15 @@ code {
 }
 
 /* Light: Backgrounds transparentes -> sólidos */
+.light .bg-white\/2,
+.light .bg-white\/3 {
+  @apply bg-slate-50;
+}
+
+.light .bg-white\/4 {
+  @apply bg-slate-100;
+}
+
 .light .bg-white\/5 {
   @apply bg-slate-100;
 }
@@ -199,18 +217,53 @@ code {
   @apply bg-slate-200;
 }
 
+.light .bg-white\/30 {
+  @apply bg-slate-300;
+}
+
+.light .bg-white\/40 {
+  @apply bg-slate-300;
+}
+
+.light .bg-white\/50 {
+  @apply bg-slate-300;
+}
+
 .light .bg-black\/20 {
   @apply bg-slate-100;
+}
+
+.light .bg-black\/40 {
+  @apply bg-slate-900/30;
+}
+
+.light .bg-black\/50 {
+  @apply bg-slate-900/35;
+}
+
+.light .bg-black\/60,
+.light .bg-black\/70 {
+  @apply bg-slate-900/40;
 }
 
 /* Light: Borders visíveis */
 .light .border-white\/5,
 .light .border-white\/10,
-.light .border-white\/20 {
+.light .border-white\/20,
+.light .border-white\/30 {
   @apply border-slate-300;
 }
 
 /* Light: Hover states */
+.light .hover\:bg-white\/2:hover,
+.light .hover\:bg-white\/3:hover {
+  @apply bg-slate-100;
+}
+
+.light .hover\:bg-white\/4:hover {
+  @apply bg-slate-100;
+}
+
 .light .hover\:bg-white\/5:hover {
   background-color: rgb(241 245 249);
 }
@@ -235,6 +288,7 @@ code {
 }
 
 .light .from-emerald-900,
+.light .from-emerald-900\/95,
 .light .from-emerald-900\/90,
 .light .from-emerald-950,
 .light .from-emerald-950\/50,
@@ -243,21 +297,115 @@ code {
 }
 
 .light .to-emerald-950,
+.light .to-emerald-950\/98,
 .light .to-emerald-950\/50,
 .light .to-emerald-950\/95,
 .light .to-teal-900,
+.light .to-teal-900\/95,
 .light .to-teal-950,
 .light .to-teal-950\/50 {
   --tw-gradient-to: rgb(241 245 249);
 }
 
 /* Light: Emerald accent colors */
+.light .bg-emerald-500\/10 {
+  @apply bg-emerald-50;
+}
+
 .light .bg-emerald-500\/20 {
   @apply bg-emerald-100;
 }
 
 .light .bg-emerald-500\/30 {
   @apply bg-emerald-200;
+}
+
+.light .bg-blue-500\/10 {
+  @apply bg-blue-50;
+}
+
+.light .bg-blue-500\/20 {
+  @apply bg-blue-100;
+}
+
+.light .bg-blue-500\/30 {
+  @apply bg-blue-200;
+}
+
+.light .bg-amber-500\/10 {
+  @apply bg-amber-50;
+}
+
+.light .bg-amber-500\/20 {
+  @apply bg-amber-100;
+}
+
+.light .bg-amber-500\/30 {
+  @apply bg-amber-200;
+}
+
+.light .bg-purple-500\/10 {
+  @apply bg-purple-50;
+}
+
+.light .bg-purple-500\/20 {
+  @apply bg-purple-100;
+}
+
+.light .bg-purple-500\/30 {
+  @apply bg-purple-200;
+}
+
+.light .bg-red-500\/10 {
+  @apply bg-red-50;
+}
+
+.light .bg-red-500\/20 {
+  @apply bg-red-100;
+}
+
+.light .bg-red-500\/30 {
+  @apply bg-red-200;
+}
+
+.light .border-emerald-500\/30 {
+  @apply border-emerald-200;
+}
+
+.light .border-blue-500\/30 {
+  @apply border-blue-200;
+}
+
+.light .border-amber-500\/30 {
+  @apply border-amber-200;
+}
+
+.light .border-purple-500\/30 {
+  @apply border-purple-200;
+}
+
+.light .border-red-500\/30 {
+  @apply border-red-200;
+}
+
+.light .hover\:bg-emerald-500\/20:hover {
+  @apply bg-emerald-100;
+}
+
+.light .hover\:bg-blue-500\/20:hover {
+  @apply bg-blue-100;
+}
+
+.light .hover\:bg-amber-500\/20:hover {
+  @apply bg-amber-100;
+}
+
+.light .hover\:bg-purple-500\/20:hover {
+  @apply bg-purple-100;
+}
+
+.light .hover\:bg-red-500\/20:hover {
+  @apply bg-red-100;
 }
 
 /* Light: Status colors - mais vibrantes */

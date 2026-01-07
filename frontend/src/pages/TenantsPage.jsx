@@ -135,16 +135,17 @@ const TenantsPage = () => {
     };
 
     const getPlanBadge = (plan) => {
-        const colors = {
-            free: 'bg-gray-500/30 text-gray-300',
-            starter: 'bg-blue-500/30 text-blue-300',
-            pro: 'bg-purple-500/30 text-purple-300',
-            enterprise: 'bg-amber-500/30 text-amber-300'
+        const variants = {
+            free: 'neutral',
+            starter: 'info',
+            pro: 'purple',
+            enterprise: 'warning'
         };
+        const variant = variants[plan] || variants.free;
         return (
-            <span className={cn('px-2 py-1 rounded-lg text-xs font-medium uppercase', colors[plan] || colors.free)}>
+            <GlassBadge variant={variant} className="px-2 py-1 rounded-lg text-xs font-medium uppercase">
                 {plan || 'free'}
-            </span>
+            </GlassBadge>
         );
     };
 

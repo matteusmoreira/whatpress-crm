@@ -231,17 +231,13 @@ const PlansPage = () => {
                             <div className="mt-4 pt-4 border-t border-white/10">
                                 <div className="flex flex-wrap gap-2">
                                     {Object.entries(plan.features || {}).map(([key, value]) => (
-                                        <span
+                                        <GlassBadge
                                             key={key}
-                                            className={cn(
-                                                'px-2 py-1 rounded text-xs font-medium',
-                                                value
-                                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                                    : 'bg-red-500/20 text-red-400 line-through'
-                                            )}
+                                            variant={value ? 'success' : 'danger'}
+                                            className={cn('px-2 py-1 text-xs font-medium rounded', !value && 'line-through')}
                                         >
                                             {key}
-                                        </span>
+                                        </GlassBadge>
                                     ))}
                                 </div>
                             </div>

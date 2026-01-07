@@ -166,12 +166,12 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
 
       {/* Test result */}
       {testResult && (
-        <div className={cn(
-          'p-3 rounded-xl mb-4 flex items-center gap-2',
-          testResult.success ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
-        )}>
-          {testResult.success ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-          <span className="text-sm">{testResult.message}</span>
+        <div className="p-3 rounded-xl mb-4 flex items-center gap-2 bg-white/5 border border-white/10">
+          <GlassBadge variant={testResult.success ? 'success' : 'danger'} className="px-2 py-0.5 text-xs">
+            {testResult.success ? 'Sucesso' : 'Erro'}
+          </GlassBadge>
+          {testResult.success ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <XCircle className="w-5 h-5 text-red-400" />}
+          <span className="text-sm text-white/80">{testResult.message}</span>
         </div>
       )}
 

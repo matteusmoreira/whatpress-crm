@@ -143,15 +143,10 @@ const UsersPage = () => {
         };
         const config = variants[role] || variants.agent;
         return (
-            <span className={cn(
-                'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium',
-                role === 'superadmin' && 'bg-red-500/20 text-red-400',
-                role === 'admin' && 'bg-amber-500/20 text-amber-400',
-                role === 'agent' && 'bg-blue-500/20 text-blue-400'
-            )}>
+            <GlassBadge variant={config.variant} className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium">
                 <config.icon className="w-3 h-3" />
                 {config.label}
-            </span>
+            </GlassBadge>
         );
     };
 

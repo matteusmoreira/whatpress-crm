@@ -9,7 +9,7 @@ import {
   Plug
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { GlassCard } from '../components/GlassCard';
+import { GlassBadge, GlassCard } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
 
@@ -33,9 +33,9 @@ const SettingItem = ({ icon: Icon, title, description, to, comingSoon }) => {
         <div className="flex items-center gap-2">
           <h3 className="text-white font-medium">{title}</h3>
           {comingSoon && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+            <GlassBadge variant="warning" className="text-xs px-2 py-0.5">
               Em breve
-            </span>
+            </GlassBadge>
           )}
         </div>
         <p className="text-white/50 text-sm">{description}</p>
@@ -121,9 +121,9 @@ const Settings = () => {
           <div>
             <h2 className="text-xl font-bold text-white">{user?.name}</h2>
             <p className="text-white/60">{user?.email}</p>
-            <span className="inline-block mt-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium capitalize">
+            <GlassBadge variant="success" className="inline-block mt-2 px-3 py-1 text-sm font-medium capitalize">
               {user?.role}
-            </span>
+            </GlassBadge>
           </div>
         </div>
       </GlassCard>

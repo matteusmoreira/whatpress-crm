@@ -36,6 +36,7 @@ import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/Gl
 import { useAppStore } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
 import { useRealtime } from '../context/RealtimeContext';
+import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -329,6 +330,8 @@ const WhatsAppMediaDisplay = ({
 const Inbox = () => {
   const { user } = useAuthStore();
   const { isConnected: realtimeConnected } = useRealtime();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const {
     conversations,
     selectedConversation,
@@ -357,6 +360,14 @@ const Inbox = () => {
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showLabelsMenu, setShowLabelsMenu] = useState(false);
   const [showAssignMenu, setShowAssignMenu] = useState(false);
+
+  const normalizeHexColor = (value) => {
+    if (typeof value !== 'string') return null;
+    const v = value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
+    if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v}`;
+    return null;
+  };
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showLabelsManager, setShowLabelsManager] = useState(false);
   const [agents, setAgents] = useState([]);
@@ -841,13 +852,13 @@ const Inbox = () => {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-white">Conversas</h1>
             {/* Realtime indicator */}
-            <div className={cn(
-              'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs',
-              realtimeConnected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
-            )}>
+            <GlassBadge
+              variant={realtimeConnected ? 'success' : 'danger'}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs"
+            >
               {realtimeConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
               {realtimeConnected ? 'Ao vivo' : 'Offline'}
-            </div>
+            </GlassBadge>
           </div>
 
           {/* Search */}
@@ -957,7 +968,8 @@ const Inbox = () => {
                       sizeClassName="w-12 h-12"
                     />
                     <div className={cn(
-                      'absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-emerald-900',
+                      'absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2',
+                      isDark ? 'border-emerald-900' : 'border-slate-200',
                       getConversationStatusColor(conv.status)
                     )} />
                   </div>
@@ -976,8 +988,18 @@ const Inbox = () => {
                         return (
                           <span
                             key={labelId}
-                            className="text-xs px-1.5 py-0.5 rounded-full text-white/90"
-                            style={{ backgroundColor: label.color + '40' }}
+                            className={cn(
+                              'text-xs px-1.5 py-0.5 rounded-full font-medium',
+                              isDark ? 'text-white/90' : 'text-slate-700 border border-slate-200'
+                            )}
+                            style={(() => {
+                              const hex = normalizeHexColor(label.color);
+                              if (!hex) return undefined;
+                              return {
+                                backgroundColor: `${hex}${isDark ? '40' : '1A'}`,
+                                borderColor: !isDark ? `${hex}33` : undefined
+                              };
+                            })()}
                           >
                             {label.name}
                           </span>
@@ -1092,7 +1114,8 @@ const Inbox = () => {
                                     <img src={agent.avatar} alt={agent.name} className="w-6 h-6 rounded-full" />
                                     <span
                                       className={cn(
-                                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-emerald-900',
+                                        'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border',
+                                        isDark ? 'border-emerald-900' : 'border-slate-200',
                                         getAgentStatusColor(agent.status)
                                       )}
                                     />
@@ -1265,7 +1288,7 @@ const Inbox = () => {
                                 <div className="self-center mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                   <button
                                     onClick={() => handleDeleteMessage(msg.id)}
-                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
+                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-all"
                                     title="Excluir"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -1405,7 +1428,7 @@ const Inbox = () => {
                                 <div className="self-center ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                   <button
                                     onClick={() => handleDeleteMessage(msg.id)}
-                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-300 transition-all"
+                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-all"
                                     title="Excluir"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -1599,7 +1622,7 @@ const Inbox = () => {
 
       {/* Contact View Modal */}
       <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
-        <DialogContent className="max-w-md bg-gradient-to-br from-emerald-900/95 to-teal-900/95 backdrop-blur-xl border border-white/20">
+        <DialogContent className="max-w-md bg-white/10 backdrop-blur-xl border border-white/20">
           <div className="p-6">
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
               <Users className="w-5 h-5 text-emerald-400" />
@@ -1653,9 +1676,9 @@ const Inbox = () => {
                       <p className="text-white/50 text-xs mb-2">Tags</p>
                       <div className="flex flex-wrap gap-2">
                         {contactData.tags.map((tag, idx) => (
-                          <span key={idx} className="px-2 py-1 bg-emerald-500/20 text-emerald-300 text-xs rounded-full">
+                          <GlassBadge key={idx} variant="success" className="px-2 py-1 text-xs">
                             {tag}
-                          </span>
+                          </GlassBadge>
                         ))}
                       </div>
                     </div>

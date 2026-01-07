@@ -96,14 +96,15 @@ const Sidebar = () => {
         className={cn(
           'fixed lg:static inset-y-0 left-0 z-40',
           'w-72 h-full overflow-y-auto',
-          'backdrop-blur-xl border-r',
+          'border-r',
           'flex flex-col',
           'transition-all duration-300 ease-in-out',
           sidebarCollapsed ? '-translate-x-full lg:translate-x-0 lg:w-20' : 'translate-x-0',
+          theme !== 'light' && 'backdrop-blur-xl',
           theme === 'dark'
             ? 'bg-gradient-to-b from-emerald-900/90 to-emerald-950/95 border-white/10'
             : theme === 'light'
-              ? 'bg-gradient-to-b from-white/95 to-slate-50/98 border-slate-200 shadow-lg'
+              ? 'bg-white border-slate-200 shadow-lg'
               : theme === 'black'
                 ? 'bg-gradient-to-b from-zinc-950 to-black border-white/5'
                 : theme === 'purple'
@@ -114,7 +115,7 @@ const Sidebar = () => {
         {/* Logo */}
         <div className={cn(
           "p-6 border-b",
-          theme === 'dark' ? 'border-white/10' : 'border-slate-200/50'
+          theme === 'dark' ? 'border-white/10' : 'border-slate-200'
         )}>
           <div className={cn(
             "flex items-center gap-3",
@@ -161,7 +162,7 @@ const Sidebar = () => {
         {!isSuperAdmin && (
           <div className={cn(
             "p-4 border-b",
-            theme === 'dark' ? 'border-white/10' : 'border-slate-200/50'
+            theme === 'dark' ? 'border-white/10' : 'border-slate-200'
           )}>
             <button
               onClick={() => setShowSearch(true)}
@@ -217,7 +218,7 @@ const Sidebar = () => {
         {/* Theme Toggle & User section */}
         <div className={cn(
           "p-4 border-t",
-          theme === 'dark' ? 'border-white/10' : 'border-slate-200/50'
+          theme === 'dark' ? 'border-white/10' : 'border-slate-200'
         )}>
           {/* Theme Toggle */}
           <div className={cn(

@@ -16,7 +16,7 @@ import {
     ChevronLeft,
     ChevronRight
 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -302,12 +302,13 @@ const Contacts = () => {
                                         {contact.tags && contact.tags.length > 0 && (
                                             <div className="flex items-center gap-1 mt-2 flex-wrap">
                                                 {contact.tags.slice(0, 3).map((tag, i) => (
-                                                    <span
+                                                    <GlassBadge
                                                         key={i}
-                                                        className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400"
+                                                        variant="success"
+                                                        className="px-2 py-0.5 text-xs"
                                                     >
                                                         {tag}
-                                                    </span>
+                                                    </GlassBadge>
                                                 ))}
                                                 {contact.tags.length > 3 && (
                                                     <span className="text-xs text-white/40">
@@ -440,7 +441,7 @@ const Contacts = () => {
                                     </label>
                                     <button
                                         onClick={handleAddCustomField}
-                                        className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                                        className="text-xs text-emerald-400 hover:text-emerald-500 flex items-center gap-1"
                                     >
                                         <Plus className="w-3 h-3" />
                                         Adicionar
@@ -560,7 +561,7 @@ const Contacts = () => {
                                     </label>
                                     <button
                                         onClick={handleAddCustomField}
-                                        className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                                        className="text-xs text-emerald-400 hover:text-emerald-500 flex items-center gap-1"
                                     >
                                         <Plus className="w-3 h-3" />
                                         Adicionar

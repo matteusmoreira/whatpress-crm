@@ -4,6 +4,7 @@ import { GlassButton } from './GlassCard';
 import { cn } from '../lib/utils';
 import { toast } from './ui/glass-toaster';
 import { UploadAPI } from '../lib/api';
+import { useTheme } from '../context/ThemeContext';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -31,6 +32,8 @@ const getFileIcon = (type) => {
 };
 
 const FileUpload = ({ conversationId, onUpload, onCancel, disabled }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -120,10 +123,20 @@ const FileUpload = ({ conversationId, onUpload, onCancel, disabled }) => {
 
   if (file) {
     return (
-      <div className="p-4 backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 rounded-2xl">
+      <div
+        className={cn(
+          'p-4 border rounded-2xl',
+          isDark
+            ? 'backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border-white/20'
+            : 'bg-white border-slate-200 shadow-sm'
+        )}
+      >
         <div className="flex items-start gap-4">
           {/* Preview */}
-          <div className="w-20 h-20 rounded-xl bg-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+          <div className={cn(
+            'w-20 h-20 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0',
+            isDark ? 'bg-white/10' : 'bg-slate-100'
+          )}>
             {preview ? (
               <img src={preview} alt="Preview" className="w-full h-full object-cover" />
             ) : (
@@ -145,7 +158,12 @@ const FileUpload = ({ conversationId, onUpload, onCancel, disabled }) => {
             <button
               onClick={handleCancel}
               disabled={uploading}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors disabled:opacity-50"
+              className={cn(
+                'p-2 rounded-lg transition-colors disabled:opacity-50',
+                isDark
+                  ? 'bg-white/10 hover:bg-white/20 text-white/60 hover:text-white'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900'
+              )}
             >
               <X className="w-5 h-5" />
             </button>
@@ -154,7 +172,7 @@ const FileUpload = ({ conversationId, onUpload, onCancel, disabled }) => {
 
         {/* Progress bar */}
         {uploading && (
-          <div className="mt-3 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <div className={cn('mt-3 w-full h-1.5 rounded-full overflow-hidden', isDark ? 'bg-white/10' : 'bg-slate-100')}>
             <div 
               className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-300"
               style={{ width: `${uploadProgress}%` }}
@@ -186,7 +204,9 @@ const FileUpload = ({ conversationId, onUpload, onCancel, disabled }) => {
         'p-6 border-2 border-dashed rounded-2xl transition-all cursor-pointer',
         dragOver
           ? 'border-emerald-500 bg-emerald-500/10'
-          : 'border-white/20 hover:border-white/40 bg-white/5'
+          : isDark
+            ? 'border-white/20 hover:border-white/40 bg-white/5'
+            : 'border-slate-200 hover:border-slate-300 bg-white'
       )}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}

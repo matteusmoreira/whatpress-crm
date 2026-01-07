@@ -13,7 +13,7 @@ import {
     Check,
     Send
 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { AutoMessagesAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
@@ -45,7 +45,7 @@ const AutoMessageCard = ({ message, onEdit, onDelete, onToggle }) => {
             'p-4 rounded-xl border transition-all',
             message.isActive
                 ? 'bg-white/5 border-white/20'
-                : 'bg-white/2 border-white/10 opacity-60'
+                : 'bg-white/5 border-white/10 opacity-60'
         )}>
             <div className="flex items-start gap-4">
                 <div className={cn(
@@ -58,12 +58,12 @@ const AutoMessageCard = ({ message, onEdit, onDelete, onToggle }) => {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                         <h3 className="text-white font-medium">{message.name}</h3>
-                        <span className={cn(
-                            'text-xs px-2 py-0.5 rounded-full',
-                            message.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'
-                        )}>
+                        <GlassBadge
+                            variant={message.isActive ? 'success' : 'neutral'}
+                            className="px-2 py-0.5 text-xs"
+                        >
                             {message.isActive ? 'Ativo' : 'Inativo'}
-                        </span>
+                        </GlassBadge>
                     </div>
 
                     <p className="text-white/50 text-sm mb-2">{typeInfo.description}</p>
@@ -75,9 +75,9 @@ const AutoMessageCard = ({ message, onEdit, onDelete, onToggle }) => {
                     {message.type === 'keyword' && message.triggerKeyword && (
                         <div className="mt-2 flex items-center gap-2">
                             <span className="text-white/40 text-xs">Palavra-chave:</span>
-                            <code className="text-emerald-400 text-xs bg-emerald-500/10 px-2 py-0.5 rounded">
+                            <GlassBadge variant="success" className="px-2 py-0.5 text-xs font-mono">
                                 {message.triggerKeyword}
-                            </code>
+                            </GlassBadge>
                         </div>
                     )}
 

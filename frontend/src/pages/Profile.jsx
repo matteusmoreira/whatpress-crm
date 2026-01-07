@@ -14,7 +14,7 @@ import {
   Key,
   Loader2
 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
+import { GlassBadge, GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../context/ThemeContext';
 import { TenantsAPI } from '../lib/api';
@@ -162,10 +162,10 @@ const Profile = () => {
 
             <h2 className="text-xl font-bold text-white mb-1">{user?.name}</h2>
             <p className="text-white/60 mb-2">{user?.email}</p>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-medium capitalize">
+            <GlassBadge variant="success" className="inline-flex items-center gap-1.5 text-sm font-medium capitalize">
               <Shield className="w-3.5 h-3.5" />
               {user?.role}
-            </span>
+            </GlassBadge>
 
             <div className="mt-6 pt-6 border-t border-white/10">
               <p className="text-white/50 text-sm text-center">

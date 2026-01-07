@@ -13,7 +13,7 @@ import {
     Video,
     File
 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { TemplatesAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
@@ -29,6 +29,12 @@ const CATEGORIES = [
 // Template Card
 const TemplateCard = ({ template, onEdit, onDelete, onCopy }) => {
     const category = CATEGORIES.find(c => c.id === template.category) || CATEGORIES[0];
+    const badgeVariantByCategory = {
+        general: 'neutral',
+        marketing: 'purple',
+        support: 'info',
+        sales: 'success'
+    };
 
     const getMediaIcon = () => {
         switch (template.mediaType) {
@@ -46,19 +52,12 @@ const TemplateCard = ({ template, onEdit, onDelete, onCopy }) => {
                     <FileText className="w-5 h-5 text-emerald-400" />
                     <h3 className="text-white font-medium">{template.name}</h3>
                 </div>
-                <span className={cn(
-                    'text-xs px-2 py-0.5 rounded-full',
-                    `bg-${category.color}-500/20 text-${category.color}-400`
-                )} style={{
-                    backgroundColor: category.color === 'emerald' ? 'rgba(16, 185, 129, 0.2)' :
-                        category.color === 'purple' ? 'rgba(139, 92, 246, 0.2)' :
-                            category.color === 'blue' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(107, 114, 128, 0.2)',
-                    color: category.color === 'emerald' ? '#34D399' :
-                        category.color === 'purple' ? '#A78BFA' :
-                            category.color === 'blue' ? '#60A5FA' : '#9CA3AF'
-                }}>
+                <GlassBadge
+                    variant={badgeVariantByCategory[category.id] || 'neutral'}
+                    className="text-xs px-2 py-0.5"
+                >
                     {category.label}
-                </span>
+                </GlassBadge>
             </div>
 
             <div className="p-3 bg-black/20 rounded-lg mb-3">
@@ -245,9 +244,9 @@ const TemplateFormModal = ({ isOpen, onClose, onSave, editingTemplate }) => {
                             <p className="text-white/50 text-xs mb-2">Variáveis detectadas:</p>
                             <div className="flex flex-wrap gap-2">
                                 {formData.variables.map(v => (
-                                    <span key={v.name} className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">
+                                    <GlassBadge key={v.name} variant="success" className="px-2 py-1 text-xs">
                                         {v.placeholder}
-                                    </span>
+                                    </GlassBadge>
                                 ))}
                             </div>
                         </div>

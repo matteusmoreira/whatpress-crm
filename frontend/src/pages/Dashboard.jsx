@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { GlassCard, GlassButton } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
+import { useTheme } from '../context/ThemeContext';
 import { AnalyticsAPI, ReportsAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
@@ -89,29 +90,64 @@ const DonutChart = ({ data, size = 120 }) => {
 
 // Stat Card Component
 const StatCard = ({ icon: Icon, label, value, change, changeType, color = 'emerald' }) => {
-    const colorClasses = {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+
+    const darkColorClasses = {
         emerald: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30',
         blue: 'from-blue-500/20 to-blue-600/10 border-blue-500/30',
         amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/30',
         purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/30'
     };
 
+    const iconBgClasses = isDark
+        ? {
+            emerald: 'bg-emerald-500/20',
+            blue: 'bg-blue-500/20',
+            amber: 'bg-amber-500/20',
+            purple: 'bg-purple-500/20'
+        }
+        : {
+            emerald: 'bg-emerald-50',
+            blue: 'bg-blue-50',
+            amber: 'bg-amber-50',
+            purple: 'bg-purple-50'
+        };
+
+    const iconTextClasses = isDark
+        ? {
+            emerald: 'text-emerald-400',
+            blue: 'text-blue-400',
+            amber: 'text-amber-400',
+            purple: 'text-purple-400'
+        }
+        : {
+            emerald: 'text-emerald-700',
+            blue: 'text-blue-700',
+            amber: 'text-amber-700',
+            purple: 'text-purple-700'
+        };
+
     return (
         <div className={cn(
-            'p-6 rounded-2xl backdrop-blur-xl border bg-gradient-to-br',
-            colorClasses[color]
+            'p-6 rounded-2xl border',
+            isDark
+                ? cn('backdrop-blur-xl bg-gradient-to-br', darkColorClasses[color])
+                : 'bg-white border-slate-200 shadow-sm'
         )}>
             <div className="flex items-start justify-between">
                 <div className={cn(
                     'p-3 rounded-xl',
-                    `bg-${color}-500/20`
-                )} style={{ backgroundColor: `var(--${color}-500, rgba(16, 185, 129, 0.2))` }}>
-                    <Icon className={`w-6 h-6 text-${color}-400`} style={{ color: color === 'emerald' ? '#34D399' : color === 'blue' ? '#60A5FA' : color === 'amber' ? '#FBBF24' : '#A78BFA' }} />
+                    iconBgClasses[color]
+                )}>
+                    <Icon className={cn('w-6 h-6', iconTextClasses[color])} />
                 </div>
                 {change !== undefined && (
                     <div className={cn(
                         'flex items-center gap-1 text-sm',
-                        changeType === 'up' ? 'text-emerald-400' : 'text-red-400'
+                        changeType === 'up'
+                            ? (isDark ? 'text-emerald-400' : 'text-emerald-700')
+                            : (isDark ? 'text-red-400' : 'text-red-700')
                     )}>
                         {changeType === 'up' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
                         <span>{change}%</span>
@@ -119,8 +155,8 @@ const StatCard = ({ icon: Icon, label, value, change, changeType, color = 'emera
                 )}
             </div>
             <div className="mt-4">
-                <p className="text-3xl font-bold text-white">{value}</p>
-                <p className="text-white/50 text-sm mt-1">{label}</p>
+                <p className={cn('text-3xl font-bold', isDark ? 'text-white' : 'text-slate-900')}>{value}</p>
+                <p className={cn('text-sm mt-1', isDark ? 'text-white/50' : 'text-slate-600')}>{label}</p>
             </div>
         </div>
     );
@@ -128,6 +164,8 @@ const StatCard = ({ icon: Icon, label, value, change, changeType, color = 'emera
 
 // Agent Performance Card
 const AgentCard = ({ agent }) => {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const statusColors = {
         online: 'bg-emerald-500',
         busy: 'bg-amber-500',
@@ -144,6 +182,7 @@ const AgentCard = ({ agent }) => {
                 />
                 <span className={cn(
                     'absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-emerald-900',
+                    !isDark && 'border-slate-200',
                     statusColors[agent.status] || 'bg-gray-400'
                 )} />
             </div>
@@ -161,6 +200,8 @@ const AgentCard = ({ agent }) => {
 
 const Dashboard = () => {
     const { user } = useAuthStore();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [statsLoading, setStatsLoading] = useState(true);
     const [chartsLoading, setChartsLoading] = useState(true);
     const [agentsLoading, setAgentsLoading] = useState(true);
@@ -215,13 +256,18 @@ const Dashboard = () => {
 
     // Skeleton Components
     const StatSkeleton = () => (
-        <div className="p-6 rounded-2xl backdrop-blur-xl border bg-gradient-to-br from-white/10 to-white/5 border-white/20 animate-pulse">
+        <div className={cn(
+            'p-6 rounded-2xl border animate-pulse',
+            isDark
+                ? 'backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border-white/20'
+                : 'bg-white border-slate-200 shadow-sm'
+        )}>
             <div className="flex items-start justify-between">
-                <div className="p-3 rounded-xl bg-white/10 w-12 h-12" />
+                <div className={cn('p-3 rounded-xl w-12 h-12', isDark ? 'bg-white/10' : 'bg-slate-100')} />
             </div>
             <div className="mt-4 space-y-2">
-                <div className="h-8 bg-white/10 rounded w-20" />
-                <div className="h-4 bg-white/10 rounded w-32" />
+                <div className={cn('h-8 rounded w-20', isDark ? 'bg-white/10' : 'bg-slate-100')} />
+                <div className={cn('h-4 rounded w-32', isDark ? 'bg-white/10' : 'bg-slate-100')} />
             </div>
         </div>
     );
@@ -230,22 +276,26 @@ const Dashboard = () => {
         <div className="animate-pulse">
             <div className="flex items-end gap-2" style={{ height }}>
                 {[...Array(7)].map((_, i) => (
-                    <div key={i} className="flex-1 bg-white/10 rounded" style={{ height: `${30 + Math.random() * 70}%` }} />
+                    <div
+                        key={i}
+                        className={cn('flex-1 rounded', isDark ? 'bg-white/10' : 'bg-slate-100')}
+                        style={{ height: `${30 + Math.random() * 70}%` }}
+                    />
                 ))}
             </div>
         </div>
     );
 
     const AgentSkeleton = () => (
-        <div className="flex items-center gap-4 p-4 bg-white/5 rounded-xl animate-pulse">
-            <div className="w-12 h-12 rounded-full bg-white/10" />
+        <div className={cn('flex items-center gap-4 p-4 rounded-xl animate-pulse', isDark ? 'bg-white/5' : 'bg-slate-50')}>
+            <div className={cn('w-12 h-12 rounded-full', isDark ? 'bg-white/10' : 'bg-slate-100')} />
             <div className="flex-1 space-y-2">
-                <div className="h-4 bg-white/10 rounded w-24" />
-                <div className="h-3 bg-white/10 rounded w-16" />
+                <div className={cn('h-4 rounded w-24', isDark ? 'bg-white/10' : 'bg-slate-100')} />
+                <div className={cn('h-3 rounded w-16', isDark ? 'bg-white/10' : 'bg-slate-100')} />
             </div>
             <div className="text-right space-y-2">
-                <div className="h-5 bg-white/10 rounded w-12" />
-                <div className="h-3 bg-white/10 rounded w-20" />
+                <div className={cn('h-5 rounded w-12', isDark ? 'bg-white/10' : 'bg-slate-100')} />
+                <div className={cn('h-3 rounded w-20', isDark ? 'bg-white/10' : 'bg-slate-100')} />
             </div>
         </div>
     );

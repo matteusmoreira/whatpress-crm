@@ -16,7 +16,7 @@ import {
     ChevronRight,
     Tag
 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { KnowledgeBaseAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
@@ -40,14 +40,14 @@ const ArticleCard = ({ article, onEdit, onDelete, onView }) => {
                 <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                         {article.isFeatured && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+                            <GlassBadge variant="warning" className="px-2 py-0.5 text-xs">
                                 Destaque
-                            </span>
+                            </GlassBadge>
                         )}
                         {!article.isPublished && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400">
+                            <GlassBadge variant="neutral" className="px-2 py-0.5 text-xs">
                                 Rascunho
-                            </span>
+                            </GlassBadge>
                         )}
                     </div>
                     <h3 className="text-white font-medium">{article.title}</h3>
@@ -282,7 +282,7 @@ const ArticleFormModal = ({ isOpen, onClose, onSave, editingArticle, categories 
                         {formData.keywords.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-2">
                                 {formData.keywords.map(kw => (
-                                    <span key={kw} className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-sm">
+                                    <GlassBadge key={kw} variant="success" className="flex items-center gap-1 px-2 py-1 text-sm">
                                         <Tag className="w-3 h-3" />
                                         {kw}
                                         <button
@@ -292,7 +292,7 @@ const ArticleFormModal = ({ isOpen, onClose, onSave, editingArticle, categories 
                                         >
                                             <X className="w-3 h-3" />
                                         </button>
-                                    </span>
+                                    </GlassBadge>
                                 ))}
                             </div>
                         )}
