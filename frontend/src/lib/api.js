@@ -313,6 +313,11 @@ export const ContactsAPI = {
     return response.data;
   },
 
+  async delete(contactId) {
+    const response = await apiClient.delete(`/contacts/${contactId}`);
+    return response.data;
+  },
+
   async history(contactId, limit = 20) {
     const response = await apiClient.get(`/contacts/${contactId}/history`, { params: { limit } });
     return response.data;

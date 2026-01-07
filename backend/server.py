@@ -1501,13 +1501,18 @@ async def initiate_conversation(data: InitiateConversation, payload: dict = Depe
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Tenant não identificado")
 
-    phone = (data.phone or '').strip()
-    if not phone:
+    raw_phone = (data.phone or '').strip()
+    if not raw_phone:
         raise HTTPException(status_code=400, detail="Telefone obrigatório")
 
     # Check if conversation already exists
-    query = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('contact_phone', phone)
-    result = query.execute()
+    normalized_phone = re.sub(r'\D', '', raw_phone)
+    if not normalized_phone:
+        raise HTTPException(status_code=400, detail="Telefone obrigatório")
+
+    result = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('contact_phone', normalized_phone).execute()
+    if (not result.data) and raw_phone != normalized_phone:
+        result = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('contact_phone', raw_phone).execute()
     
     if result.data:
         # Return existing conversation
@@ -1538,29 +1543,47 @@ async def initiate_conversation(data: InitiateConversation, payload: dict = Depe
     
     # Try to get profile picture and name
     avatar_url = None
-    contact_name = phone
+    contact_name = normalized_phone
     
-    # If contact_id provided, look up name
+    # If contact_id provided, look up name (and ensure tenant isolation)
     if data.contact_id:
         try:
-            contact = supabase.table('contacts').select('name').eq('id', data.contact_id).execute()
-            if contact.data:
-                contact_name = contact.data[0]['name']
-        except:
+            contact_result = supabase.table('contacts').select('id, tenant_id, name, full_name').eq('id', data.contact_id).limit(1).execute()
+            if contact_result.data:
+                contact_row = contact_result.data[0]
+                if contact_row.get('tenant_id') == tenant_id:
+                    desired = (contact_row.get('name') or contact_row.get('full_name') or '').strip()
+                    if desired:
+                        contact_name = desired
+        except Exception:
+            pass
+
+    # If no name resolved, try by phone (covers when the UI doesn't pass contact_id)
+    if not (contact_name or '').strip() or contact_name == normalized_phone:
+        try:
+            contact_result = supabase.table('contacts').select('name, full_name, phone').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+            if (not contact_result.data) and raw_phone != normalized_phone:
+                contact_result = supabase.table('contacts').select('name, full_name, phone').eq('tenant_id', tenant_id).eq('phone', raw_phone).limit(1).execute()
+            if contact_result.data:
+                contact_row = contact_result.data[0]
+                desired = (contact_row.get('name') or contact_row.get('full_name') or '').strip()
+                if desired:
+                    contact_name = desired
+        except Exception:
             pass
             
     try:
         if connection['provider'] == 'evolution':
-            profile_data = await evolution_api.get_profile_picture(connection['instance_name'], phone)
+            profile_data = await evolution_api.get_profile_picture(connection['instance_name'], normalized_phone)
             avatar_url = extract_profile_picture_url(profile_data)
-    except:
+    except Exception:
         pass
 
     conv_data = {
         'tenant_id': tenant_id,
         'connection_id': connection['id'],
-        'contact_phone': phone,
-        'contact_name': contact_name,
+        'contact_phone': normalized_phone,
+        'contact_name': (contact_name or '').strip() or normalized_phone,
         'contact_avatar': avatar_url,
         'status': 'open',
         'unread_count': 0,
@@ -2298,6 +2321,41 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
     except Exception as e:
         logger.error(f"Error updating contact: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao atualizar contato: {str(e)}")
+
+@api_router.delete("/contacts/{contact_id}")
+async def delete_contact(contact_id: str, payload: dict = Depends(verify_token)):
+    """Delete a contact by ID"""
+    user_tenant_id = get_user_tenant_id(payload)
+    if not user_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant não identificado")
+
+    if (contact_id or '').startswith('conv-'):
+        raise HTTPException(status_code=400, detail="Não é possível excluir este contato")
+
+    try:
+        uuid.UUID(contact_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+
+    existing = supabase.table('contacts').select('id, tenant_id').eq('id', contact_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    contact = existing.data[0]
+    if contact.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    supabase.table('contacts').delete().eq('id', contact_id).execute()
+
+    safe_insert_audit_log(
+        tenant_id=user_tenant_id,
+        actor_user_id=payload.get('user_id'),
+        action='contact.deleted',
+        entity_type='contact',
+        entity_id=contact_id,
+        metadata={}
+    )
+
+    return {"success": True}
 
 @api_router.get("/contacts/{contact_id}/history")
 async def list_contact_history(contact_id: str, limit: int = 20, payload: dict = Depends(verify_token)):

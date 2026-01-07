@@ -426,14 +426,17 @@ const Inbox = () => {
   // Handle URL search parameter to initiate conversation
   useEffect(() => {
     const searchParam = searchParams.get('search');
+    const contactIdParam = searchParams.get('contactId');
     if (!searchParam || conversationsLoading) return;
-    if (urlSearchHandledRef.current === searchParam || urlSearchInFlightRef.current) return;
-    urlSearchHandledRef.current = searchParam;
+    const handledKey = `${searchParam}|${contactIdParam || ''}`;
+    if (urlSearchHandledRef.current === handledKey || urlSearchInFlightRef.current) return;
+    urlSearchHandledRef.current = handledKey;
     urlSearchInFlightRef.current = true;
 
     const phone = decodeURIComponent(searchParam).replace(/\D/g, ''); // Simple cleanup
     const newParams = new URLSearchParams(searchParams);
     newParams.delete('search');
+    newParams.delete('contactId');
     setSearchParams(newParams);
     if (!phone) {
       urlSearchInFlightRef.current = false;
@@ -456,7 +459,7 @@ const Inbox = () => {
     } else {
       (async () => {
         try {
-          const newConv = await ConversationsAPI.initiate(phone);
+          const newConv = await ConversationsAPI.initiate(phone, contactIdParam || null);
           setSelectedConversation(newConv);
           setSearchQuery(phone);
           await fetchConversations(tenantId);

@@ -70,6 +70,7 @@ const Contacts = () => {
     const [formTags, setFormTags] = useState('');
     const [formCustomFields, setFormCustomFields] = useState([]);
     const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
 
     // Load contacts
     const loadContacts = useCallback(async (search = '', pageOffset = 0) => {
@@ -209,7 +210,34 @@ const Contacts = () => {
     const handleViewInInbox = (contact) => {
         // Navigate to inbox with contact phone as filter
         const phone = String(contact?.phone || '').replace(/\D/g, '');
-        navigate(`/app/inbox?search=${encodeURIComponent(phone)}`);
+        const contactId = contact?.id ? String(contact.id) : '';
+        const params = new URLSearchParams();
+        params.set('search', phone);
+        if (contactId) params.set('contactId', contactId);
+        navigate(`/app/inbox?${params.toString()}`);
+    };
+
+    const handleDeleteContact = async (contact) => {
+        const contactId = contact?.id ? String(contact.id) : '';
+        if (!contactId) return;
+
+        const displayName = String(contact?.name || '').trim() || String(contact?.phone || '').trim() || 'este contato';
+        const ok = window.confirm(`Excluir contato "${displayName}"?`);
+        if (!ok) return;
+
+        setDeletingId(contactId);
+        try {
+            await ContactsAPI.delete(contactId);
+            toast.success('Contato excluído com sucesso!');
+
+            const isLastItemOnPage = (contacts || []).length === 1;
+            const nextOffset = isLastItemOnPage ? Math.max(0, offset - limit) : offset;
+            loadContacts(searchQuery, nextOffset);
+        } catch (error) {
+            toast.error(error.message || 'Erro ao excluir contato');
+        } finally {
+            setDeletingId(null);
+        }
     };
 
     const formatDate = (date) => {
@@ -338,6 +366,17 @@ const Contacts = () => {
                                             title="Editar contato"
                                         >
                                             <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteContact(contact);
+                                            }}
+                                            disabled={deletingId === String(contact.id)}
+                                            className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                            title="Excluir contato"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
