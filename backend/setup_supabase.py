@@ -85,6 +85,32 @@ def setup_database():
         timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
+    -- Auto messages table
+    CREATE TABLE IF NOT EXISTS auto_messages (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL CHECK (type IN ('welcome', 'away', 'keyword')),
+        name VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        trigger_keyword VARCHAR(255),
+        is_active BOOLEAN DEFAULT true,
+        schedule_start VARCHAR(10),
+        schedule_end VARCHAR(10),
+        schedule_days JSONB,
+        delay_seconds INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    -- Auto message logs (avoid duplicates / track sends)
+    CREATE TABLE IF NOT EXISTS auto_message_logs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+        auto_message_id UUID NOT NULL REFERENCES auto_messages(id) ON DELETE CASCADE,
+        conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
     -- Create indexes for better performance
     CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -93,6 +119,10 @@ def setup_database():
     CREATE INDEX IF NOT EXISTS idx_conversations_connection ON conversations(connection_id);
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_last_message ON conversations(last_message_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_auto_messages_tenant ON auto_messages(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_auto_messages_active ON auto_messages(is_active);
+    CREATE INDEX IF NOT EXISTS idx_auto_message_logs_auto_message ON auto_message_logs(auto_message_id);
+    CREATE INDEX IF NOT EXISTS idx_auto_message_logs_conversation ON auto_message_logs(conversation_id);
 
     -- Enable Row Level Security
     ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
@@ -100,6 +130,8 @@ def setup_database():
     ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
     ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
     ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE auto_messages ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE auto_message_logs ENABLE ROW LEVEL SECURITY;
 
     -- Create policies for service role (bypass RLS)
     CREATE POLICY IF NOT EXISTS "Service role has full access to tenants" ON tenants FOR ALL USING (true);
@@ -107,6 +139,8 @@ def setup_database():
     CREATE POLICY IF NOT EXISTS "Service role has full access to connections" ON connections FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to conversations" ON conversations FOR ALL USING (true);
     CREATE POLICY IF NOT EXISTS "Service role has full access to messages" ON messages FOR ALL USING (true);
+    CREATE POLICY IF NOT EXISTS "Service role has full access to auto_messages" ON auto_messages FOR ALL USING (true);
+    CREATE POLICY IF NOT EXISTS "Service role has full access to auto_message_logs" ON auto_message_logs FOR ALL USING (true);
     """
     
     # Execute SQL via Supabase REST API

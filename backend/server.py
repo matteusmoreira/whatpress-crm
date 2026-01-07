@@ -71,6 +71,51 @@ async def debug_routes():
         })
     return {"routes": routes}
 
+@app.on_event("startup")
+async def ensure_auto_messages_schema():
+    sql = """
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+    CREATE TABLE IF NOT EXISTS auto_messages (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL CHECK (type IN ('welcome', 'away', 'keyword')),
+        name VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        trigger_keyword VARCHAR(255),
+        is_active BOOLEAN DEFAULT true,
+        schedule_start VARCHAR(10),
+        schedule_end VARCHAR(10),
+        schedule_days JSONB,
+        delay_seconds INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS auto_message_logs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+        auto_message_id UUID NOT NULL REFERENCES auto_messages(id) ON DELETE CASCADE,
+        conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_auto_messages_tenant ON auto_messages(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_auto_messages_active ON auto_messages(is_active);
+    CREATE INDEX IF NOT EXISTS idx_auto_message_logs_auto_message ON auto_message_logs(auto_message_id);
+    CREATE INDEX IF NOT EXISTS idx_auto_message_logs_conversation ON auto_message_logs(conversation_id);
+
+    ALTER TABLE auto_messages ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE auto_message_logs ENABLE ROW LEVEL SECURITY;
+
+    CREATE POLICY IF NOT EXISTS "Service role has full access to auto_messages" ON auto_messages FOR ALL USING (true);
+    CREATE POLICY IF NOT EXISTS "Service role has full access to auto_message_logs" ON auto_message_logs FOR ALL USING (true);
+    """
+    try:
+        supabase.rpc('exec_sql', {'sql': sql}).execute()
+    except Exception:
+        return
+
 # ==================== MODELS (defined early for login endpoint) ====================
 
 class LoginRequest(BaseModel):

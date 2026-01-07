@@ -180,7 +180,7 @@ const AutoMessageForm = ({ isOpen, onClose, onSave, editingMessage }) => {
             await onSave(formData, editingMessage?.id);
             onClose();
         } catch (error) {
-            toast.error('Erro ao salvar mensagem');
+            toast.error(error?.response?.data?.detail || 'Erro ao salvar mensagem');
         } finally {
             setSaving(false);
         }
