@@ -115,6 +115,52 @@ const inferWhatsappMediaKind = (url) => {
   }
 };
 
+const normalizeBareBase64 = (text) => {
+  if (!text) return '';
+  let s = String(text).trim();
+  const commaIndex = s.indexOf(',');
+  if (commaIndex >= 0 && s.slice(0, commaIndex).toLowerCase().includes('base64')) {
+    s = s.slice(commaIndex + 1).trim();
+  }
+  s = s.replace(/\s+/g, '');
+  if (s.includes('-') || s.includes('_')) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+  }
+  const mod = s.length % 4;
+  if (mod === 2) s += '==';
+  if (mod === 3) s += '=';
+  return s;
+};
+
+const isLikelyBareBase64 = (text) => {
+  const s = typeof text === 'string' ? text.trim() : '';
+  if (!s) return false;
+  if (s.startsWith('data:')) return false;
+  if (s.includes('http://') || s.includes('https://')) return false;
+  if (s.length < 200) return false;
+  const compact = s.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(compact)) return false;
+  return true;
+};
+
+const resolveMediaMimeType = (renderType, metaMime) => {
+  const m = String(metaMime || '').trim().toLowerCase();
+  if (m) return m;
+  if (renderType === 'sticker') return 'image/webp';
+  if (renderType === 'image') return 'image/jpeg';
+  if (renderType === 'audio') return 'audio/ogg';
+  if (renderType === 'video') return 'video/mp4';
+  if (renderType === 'document') return 'application/octet-stream';
+  return 'application/octet-stream';
+};
+
+const toDataUrlFromBareBase64 = (base64Text, mimeType) => {
+  const normalized = normalizeBareBase64(base64Text);
+  if (!normalized) return '';
+  const mime = String(mimeType || '').trim() || 'application/octet-stream';
+  return `data:${mime};base64,${normalized}`;
+};
+
 const getWhatsappMediaMeta = (kind) => {
   switch (kind) {
     case 'sticker':
@@ -1289,6 +1335,7 @@ const Inbox = () => {
         : msg.content == null
           ? ''
           : String(msg.content);
+      const rawTrim = rawContent.trim();
 
       const mediaUrlRaw =
         typeof msg.mediaUrl === 'string' ? msg.mediaUrl :
@@ -1300,10 +1347,8 @@ const Inbox = () => {
       const urls = extractUrls(rawContent);
       const urlFromContent = urls.length ? urls[0] : '';
 
-      const effectiveUrl = mediaUrl || urlFromContent;
-      if (!effectiveUrl) continue;
-
       const normalizedType = normalizeMessageType(msg.type);
+
       const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
       const metaMimeRaw = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) : null;
       const metaMime = String(metaMimeRaw || '').toLowerCase();
@@ -1312,6 +1357,18 @@ const Inbox = () => {
         : (metaMime.startsWith('image/'))
           ? 'image'
           : null;
+
+      const base64Url = (() => {
+        if (mediaUrl) return '';
+        if (normalizedType !== 'image' && normalizedType !== 'sticker') return '';
+        if (rawTrim.startsWith('data:')) return rawTrim;
+        if (!isLikelyBareBase64(rawTrim)) return '';
+        const mime = resolveMediaMimeType(normalizedType, metaMime);
+        return toDataUrlFromBareBase64(rawTrim, mime);
+      })();
+
+      const effectiveUrl = mediaUrl || urlFromContent || base64Url;
+      if (!effectiveUrl) continue;
 
       const kindFromUrl = effectiveUrl ? inferWhatsappMediaKind(effectiveUrl) : 'unknown';
       const kind = (normalizedType && normalizedType !== 'unknown' && normalizedType !== 'text')
@@ -1921,7 +1978,7 @@ const Inbox = () => {
                             : msg.content == null
                               ? ''
                               : String(msg.content);
-                          const hasContent = rawContent.trim().length > 0;
+                          const rawTrim = rawContent.trim();
                           const normalizedType = normalizeMessageType(msg.type);
                           const fallback =
                             normalizedType === 'audio' ? '[Áudio]' :
@@ -1930,7 +1987,6 @@ const Inbox = () => {
                                   normalizedType === 'document' ? '[Documento]' :
                                     normalizedType === 'sticker' ? '[Figurinha]' :
                                       '[Mensagem]';
-                          const displayContent = hasContent ? rawContent : fallback;
                           const mediaUrlRaw =
                             typeof msg.mediaUrl === 'string' ? msg.mediaUrl :
                               typeof msg.media_url === 'string' ? msg.media_url :
@@ -1939,19 +1995,15 @@ const Inbox = () => {
                           const mediaUrl = typeof mediaUrlRaw === 'string' && mediaUrlRaw.trim() ? mediaUrlRaw.trim() : '';
                           const isMediaType = ['image', 'video', 'audio', 'document', 'sticker'].includes(normalizedType);
                           const canInlineMedia = Boolean(mediaUrl) && isMediaType;
-                          const urls = extractUrls(displayContent);
-                          const hasOnlyUrl = normalizedType === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
-                          const primaryUrl = hasOnlyUrl ? urls[0] : '';
-                          const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
 
                           // Check if the content contains a WhatsApp media URL (for image/video types)
                           const contentUrls = extractUrls(rawContent);
                           const contentWhatsappUrl = contentUrls.find(u => isWhatsappMediaUrl(u)) || '';
                           const hasWhatsappMediaInContent = Boolean(contentWhatsappUrl);
 
-                          // Use mediaUrl if available, otherwise try to extract from content for media types
-                          const effectiveMediaUrl = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
-                          const inferredKindFromUrl = effectiveMediaUrl ? inferWhatsappMediaKind(effectiveMediaUrl) : 'unknown';
+                          const effectiveMediaUrlCandidate = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
+                          const inferredKindFromUrl = effectiveMediaUrlCandidate ? inferWhatsappMediaKind(effectiveMediaUrlCandidate) : 'unknown';
+
                           const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
                           const proxyInfo = (() => {
                             if (!msg?.id) return null;
@@ -2004,6 +2056,25 @@ const Inbox = () => {
                                 : (inferredKindFromUrl !== 'unknown')
                                   ? inferredKindFromUrl
                                   : normalizedType;
+
+                          const base64MediaUrl = (() => {
+                            if (!isMediaType) return '';
+                            if (!rawTrim) return '';
+                            if (rawTrim.startsWith('data:')) return rawTrim;
+                            if (!isLikelyBareBase64(rawTrim)) return '';
+                            const mime = resolveMediaMimeType(renderType, metaMime);
+                            return toDataUrlFromBareBase64(rawTrim, mime);
+                          })();
+
+                          const effectiveMediaUrl = effectiveMediaUrlCandidate || base64MediaUrl;
+
+                          const hasContent = rawTrim.length > 0 && !base64MediaUrl;
+                          const displayContent = hasContent ? rawContent : fallback;
+
+                          const urls = extractUrls(displayContent);
+                          const hasOnlyUrl = normalizedType === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
+                          const primaryUrl = hasOnlyUrl ? urls[0] : '';
+                          const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
 
                           const shouldRenderMedia = Boolean(effectiveMediaUrl) && ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
 
