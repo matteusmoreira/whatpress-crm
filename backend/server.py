@@ -145,6 +145,23 @@ async def ensure_auto_messages_schema():
 
     ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
     CREATE POLICY IF NOT EXISTS "Service role has full access to contacts" ON contacts FOR ALL USING (true);
+
+    DO $$
+    BEGIN
+      IF to_regclass('public.messages') IS NOT NULL THEN
+        ALTER TABLE messages ADD COLUMN IF NOT EXISTS external_id VARCHAR(255);
+        ALTER TABLE messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+        UPDATE messages
+        SET type = 'text'
+        WHERE type IS NULL OR type NOT IN ('text', 'image', 'audio', 'video', 'document', 'sticker', 'system');
+
+        ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check;
+        ALTER TABLE messages
+          ADD CONSTRAINT messages_type_check
+          CHECK (type IN ('text', 'image', 'audio', 'video', 'document', 'sticker', 'system'));
+      END IF;
+    END $$;
     """
     try:
         supabase.rpc('exec_sql', {'sql': sql}).execute()
@@ -2663,6 +2680,8 @@ async def list_messages(
                 return '[Vídeo]'
             if msg_type == 'document':
                 return '[Documento]'
+            if msg_type == 'sticker':
+                return '[Figurinha]'
             return '[Mensagem]'
         if isinstance(content, list):
             return '[Mensagem]'

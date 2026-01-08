@@ -78,10 +78,12 @@ def setup_database():
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         content TEXT NOT NULL,
-        type VARCHAR(50) DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio', 'video', 'document')),
+        type VARCHAR(50) DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio', 'video', 'document', 'sticker', 'system')),
         direction VARCHAR(50) NOT NULL CHECK (direction IN ('inbound', 'outbound')),
         status VARCHAR(50) DEFAULT 'sent' CHECK (status IN ('sent', 'delivered', 'read', 'failed')),
         media_url VARCHAR(512),
+        external_id VARCHAR(255),
+        metadata JSONB DEFAULT '{}'::jsonb,
         timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
