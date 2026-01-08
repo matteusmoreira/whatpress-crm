@@ -3647,7 +3647,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                             raise
                         raise
 
-                if not is_from_me:
+                if phone:
                     try:
                         cached_contact = _CONTACT_CACHE_BY_TENANT_PHONE.get(f"{tenant_id}:{phone}")
                         existing_contact_rows: List[dict] = []

@@ -92,6 +92,116 @@ async def test_webhook_transient_connection_error_queues_event(monkeypatch):
     assert server._DB_WRITE_QUEUE[0].get("kind") == "webhook_event"
 
 
+@pytest.mark.anyio
+async def test_webhook_creates_contact_when_from_me_true(monkeypatch):
+    import backend.server as server
+
+    inserted_contacts = []
+
+    def parse_stub(_payload):
+        return {
+            "event": "message",
+            "from_me": True,
+            "remote_jid": "5521999998888",
+            "remote_jid_raw": "5521999998888@s.whatsapp.net",
+            "content": "oi",
+            "timestamp": "1700000000",
+            "message_id": "MSG1",
+            "type": "text",
+        }
+
+    async def get_profile_picture_stub(_instance_name, _phone):
+        return {}
+
+    monkeypatch.setattr(
+        server.evolution_api,
+        "parse_webhook_message",
+        parse_stub,
+    )
+    monkeypatch.setattr(
+        server.evolution_api,
+        "get_profile_picture",
+        get_profile_picture_stub,
+    )
+
+    def table_handler(name, ops):
+        if name == "connections":
+            return _Result(
+                data=[
+                    {
+                        "id": "conn1",
+                        "tenant_id": "tenant1",
+                        "tenants": {},
+                    }
+                ]
+            )
+
+        if name == "conversations":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[])
+                if op[0] == "insert":
+                    conv = dict(op[1])
+                    return _Result(
+                        data=[
+                            {
+                                "id": "conv1",
+                                "unread_count": 0,
+                                **conv,
+                            }
+                        ]
+                    )
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "contacts":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[])
+                if op[0] == "insert":
+                    payload = dict(op[1])
+                    inserted_contacts.append(payload)
+                    return _Result(data=[{"id": "contact1", **payload}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "messages":
+            for op in ops:
+                if op[0] == "insert":
+                    return _Result(data=[{"id": "msg1", **dict(op[1])}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "tenants":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[{"messages_this_month": 0}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name in {"auto_messages", "audit_logs"}:
+            return _Result(data=[])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+
+    resp = await server._process_evolution_webhook(
+        "inst1",
+        {"event": "MESSAGES_UPSERT"},
+        from_queue=False,
+    )
+
+    assert resp.get("success") is True
+    assert len(inserted_contacts) == 1
+    assert inserted_contacts[0].get("phone") == "5521999998888"
+    assert inserted_contacts[0].get("source") == "whatsapp"
+
+
 def test_normalize_phone_number_variants():
     import backend.server as server
 
