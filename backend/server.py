@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -2209,6 +2209,7 @@ async def clear_conversation_messages(conversation_id: str, payload: dict = Depe
 
 @api_router.get("/contacts")
 async def list_contacts(
+    tenant_id: Optional[str] = Query(None),
     search: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
@@ -2217,7 +2218,10 @@ async def list_contacts(
     """List all contacts for the tenant"""
     try:
         user_tenant_id = get_user_tenant_id(payload)
-        if not user_tenant_id:
+        effective_tenant_id = user_tenant_id
+        if not effective_tenant_id and payload.get('role') == 'superadmin':
+            effective_tenant_id = tenant_id
+        if not effective_tenant_id:
             raise HTTPException(status_code=403, detail="Tenant não identificado")
 
         if limit < 1:
@@ -2227,7 +2231,7 @@ async def list_contacts(
         if offset < 0:
             offset = 0
 
-        query = supabase.table('contacts').select('*').eq('tenant_id', user_tenant_id)
+        query = supabase.table('contacts').select('*').eq('tenant_id', effective_tenant_id)
 
         if search:
             search_term = f"%{search}%"
@@ -2272,11 +2276,11 @@ async def list_contacts(
         # Get total count
         count_result = _db_call_with_retry(
             "contacts.count",
-            lambda: supabase.table('contacts').select('id', count='exact').eq('tenant_id', user_tenant_id).execute()
+            lambda: supabase.table('contacts').select('id', count='exact').eq('tenant_id', effective_tenant_id).execute()
         )
         total = count_result.count if hasattr(count_result, 'count') and count_result.count else len(result.data or [])
 
-        _CONTACTS_CACHE_BY_TENANT[str(user_tenant_id)] = {
+        _CONTACTS_CACHE_BY_TENANT[str(effective_tenant_id)] = {
             "data": contacts,
             "total": total,
             "cached_at": datetime.utcnow().isoformat(),
@@ -2286,7 +2290,7 @@ async def list_contacts(
         }
 
         safe_insert_audit_log(
-            tenant_id=user_tenant_id,
+            tenant_id=effective_tenant_id,
             actor_user_id=payload.get('user_id'),
             action='contact.listed',
             entity_type='contact',
@@ -2308,11 +2312,18 @@ async def list_contacts(
         raise HTTPException(status_code=500, detail=f"Erro ao listar contatos: {str(e)}")
 
 @api_router.post("/contacts")
-async def create_contact(data: ContactCreate, payload: dict = Depends(verify_token)):
+async def create_contact(
+    data: ContactCreate,
+    tenant_id: Optional[str] = Query(None),
+    payload: dict = Depends(verify_token),
+):
     """Create a new contact"""
     try:
         user_tenant_id = get_user_tenant_id(payload)
-        if not user_tenant_id:
+        effective_tenant_id = user_tenant_id
+        if not effective_tenant_id and payload.get('role') == 'superadmin':
+            effective_tenant_id = tenant_id
+        if not effective_tenant_id:
             raise HTTPException(status_code=403, detail="Tenant não identificado")
 
         name = (data.name or '').strip()
@@ -2332,12 +2343,12 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
         # Check if contact with same phone already exists
         existing = _db_call_with_retry(
             "contacts.exists",
-            lambda: supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', phone).limit(1).execute()
+            lambda: supabase.table('contacts').select('id').eq('tenant_id', effective_tenant_id).eq('phone', phone).limit(1).execute()
         )
         if (not existing.data) and raw_phone != phone:
             existing = _db_call_with_retry(
                 "contacts.exists_raw",
-                lambda: supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', raw_phone).limit(1).execute()
+                lambda: supabase.table('contacts').select('id').eq('tenant_id', effective_tenant_id).eq('phone', raw_phone).limit(1).execute()
             )
         if existing.data:
             raise HTTPException(status_code=400, detail="Já existe um contato com este telefone")
@@ -2357,7 +2368,7 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
             final_status = normalized_status or 'verified'
 
             insert_data = {
-                'tenant_id': user_tenant_id,
+                'tenant_id': effective_tenant_id,
                 'name': name,
                 'phone': phone,
                 'email': (data.email or '').strip() or None,
@@ -2377,7 +2388,7 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
         if not insert_result or not insert_result.data:
             try:
                 insert_data_alt = {
-                    'tenant_id': user_tenant_id,
+                    'tenant_id': effective_tenant_id,
                     'full_name': name,
                     'phone': phone,
                     'social_links': {},
@@ -2403,7 +2414,7 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
         name_value = c.get('name') or c.get('full_name') or name
         
         safe_insert_audit_log(
-            tenant_id=user_tenant_id,
+            tenant_id=effective_tenant_id,
             actor_user_id=payload.get('user_id'),
             action='contact.created',
             entity_type='contact',
@@ -2411,7 +2422,7 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
             metadata={'phone': phone}
         )
         safe_insert_contact_history(
-            tenant_id=user_tenant_id,
+            tenant_id=effective_tenant_id,
             contact_id=c.get('id'),
             changed_by=payload.get('user_id'),
             action='created',

@@ -286,15 +286,17 @@ export const ConversationsAPI = {
 };
 
 export const ContactsAPI = {
-  async list(search = '', limit = 50, offset = 0) {
+  async list(tenantId, search = '', limit = 50, offset = 0) {
     const params = { limit, offset };
+    if (tenantId) params.tenant_id = tenantId;
     if (search) params.search = search;
     const response = await apiClient.get('/contacts', { params });
     return response.data;
   },
 
-  async create(data) {
-    const response = await apiClient.post('/contacts', data);
+  async create(tenantId, data) {
+    const config = tenantId ? { params: { tenant_id: tenantId } } : undefined;
+    const response = await apiClient.post('/contacts', data, config);
     return response.data;
   },
 

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
+import { useAppStore } from '../store/appStore';
 import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,8 +51,11 @@ const ContactAvatar = ({ name, className }) => {
 
 const Contacts = () => {
     const { user } = useAuthStore();
+    const { selectedTenant, tenants, fetchTenants, setSelectedTenant } = useAppStore();
     const navigate = useNavigate();
-    const tenantId = user?.tenantId || 'tenant-1';
+    const tenantId = user?.role === 'superadmin'
+        ? (selectedTenant?.id || tenants?.[0]?.id || null)
+        : (user?.tenantId || null);
 
     const [contacts, setContacts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -77,7 +81,14 @@ const Contacts = () => {
     const loadContacts = useCallback(async (search = '', pageOffset = 0) => {
         try {
             setLoading(true);
-            const data = await ContactsAPI.list(search, limit, pageOffset);
+            if (!tenantId) {
+                setContacts([]);
+                setTotal(0);
+                setOffset(pageOffset);
+                toast.error('Tenant não identificado');
+                return;
+            }
+            const data = await ContactsAPI.list(tenantId, search, limit, pageOffset);
             setContacts(data.contacts || []);
             setTotal(data.total || 0);
             setOffset(pageOffset);
@@ -87,7 +98,19 @@ const Contacts = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [tenantId, limit]);
+
+    useEffect(() => {
+        if (user?.role !== 'superadmin') return;
+        if (selectedTenant || (tenants && tenants.length > 0)) return;
+        fetchTenants();
+    }, [user?.role, selectedTenant, tenants, fetchTenants]);
+
+    useEffect(() => {
+        if (user?.role !== 'superadmin') return;
+        if (selectedTenant) return;
+        if (tenants && tenants.length > 0) setSelectedTenant(tenants[0]);
+    }, [user?.role, selectedTenant, tenants, setSelectedTenant]);
 
     useEffect(() => {
         loadContacts(searchQuery, 0);
@@ -144,7 +167,7 @@ const Contacts = () => {
                 }
             });
 
-            await ContactsAPI.create({
+            await ContactsAPI.create(tenantId, {
                 name: formName.trim(),
                 phone: formPhone.trim(),
                 email: formEmail.trim() || null,
