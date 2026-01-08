@@ -3206,20 +3206,77 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 if message_type_to_store not in allowed_message_types:
                     message_type_to_store = 'text'
 
+                # Process media: convert temporary WhatsApp URLs to permanent Supabase Storage URLs
+                media_url_final = parsed.get('media_url')
+                detected_mime_type = parsed.get('mime_type')
+                
+                if message_type_to_store in ['image', 'video', 'audio', 'document', 'sticker'] and parsed.get('message_id'):
+                    try:
+                        # Fetch base64 media from Evolution API
+                        base64_result = await evolution_api.get_base64_from_media_message(
+                            instance_name=instance_name,
+                            message_id=parsed.get('message_id'),
+                            remote_jid=parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
+                            from_me=is_from_me
+                        )
+                        
+                        if base64_result:
+                            base64_data = base64_result.get('base64') or (base64_result.get('data', {}) or {}).get('base64')
+                            mimetype = base64_result.get('mimetype') or (base64_result.get('data', {}) or {}).get('mimetype') or detected_mime_type or 'application/octet-stream'
+                            
+                            if base64_data:
+                                # Generate unique filename
+                                import uuid as uuid_mod
+                                # Extract file extension from mimetype
+                                mime_parts = mimetype.split('/')
+                                file_ext = mime_parts[-1].split(';')[0] if len(mime_parts) > 1 else 'bin'
+                                # Normalize common audio formats
+                                if file_ext in ['ogg; codecs=opus', 'ogg;codecs=opus']:
+                                    file_ext = 'ogg'
+                                unique_filename = f"{uuid_mod.uuid4()}.{file_ext}"
+                                
+                                # Determine folder based on media type
+                                if 'image' in mimetype or message_type_to_store in ['image', 'sticker']:
+                                    folder = 'images'
+                                elif 'video' in mimetype or message_type_to_store == 'video':
+                                    folder = 'videos'
+                                elif 'audio' in mimetype or message_type_to_store == 'audio':
+                                    folder = 'audios'
+                                else:
+                                    folder = 'documents'
+                                
+                                storage_path = f"media-messages/{folder}/{unique_filename}"
+                                
+                                # Decode and upload to Supabase Storage
+                                file_content = base64.b64decode(base64_data)
+                                supabase.storage.from_('uploads').upload(
+                                    storage_path,
+                                    file_content,
+                                    file_options={"content-type": mimetype}
+                                )
+                                
+                                # Get permanent public URL
+                                media_url_final = supabase.storage.from_('uploads').get_public_url(storage_path)
+                                detected_mime_type = mimetype
+                                logger.info(f"Media saved to storage: {storage_path} for message {parsed.get('message_id')}")
+                    except Exception as e:
+                        logger.warning(f"Failed to process media for message {parsed.get('message_id')}: {e}")
+                        # Keep original URL as fallback
+
                 msg_data = {
                     'conversation_id': conversation['id'],
                     'content': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or ''),
                     'type': message_type_to_store,
                     'direction': direction,  # 'inbound' for received, 'outbound' for sent
                     'status': 'read' if is_from_me else 'delivered',
-                    'media_url': parsed.get('media_url'),
+                    'media_url': media_url_final,
                     'external_id': parsed.get('message_id'),
                     'metadata': {
                         'remote_jid': parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
                         'instance_name': instance_name,
                         'from_me': is_from_me,
                         'media_kind': parsed.get('media_kind'),
-                        'mime_type': parsed.get('mime_type')
+                        'mime_type': detected_mime_type
                     }
                 }
                 supabase.table('messages').insert(msg_data).execute()
