@@ -86,9 +86,9 @@ async def ensure_auto_messages_schema():
         message TEXT NOT NULL,
         trigger_keyword VARCHAR(255),
         is_active BOOLEAN DEFAULT true,
-        schedule_start VARCHAR(10),
-        schedule_end VARCHAR(10),
-        schedule_days JSONB,
+        schedule_start TIME,
+        schedule_end TIME,
+        schedule_days INTEGER[],
         delay_seconds INTEGER DEFAULT 0,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -165,7 +165,8 @@ async def ensure_auto_messages_schema():
     """
     try:
         supabase.rpc('exec_sql', {'sql': sql}).execute()
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Auto messages schema not ensured (exec_sql unavailable?): {e}")
         return
 
 # ==================== MODELS (defined early for login endpoint) ====================
@@ -309,6 +310,42 @@ security = HTTPBearer(auto_error=False)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def _postgrest_error_code(exc: Exception) -> Optional[str]:
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and code.strip():
+        return code.strip()
+    args = getattr(exc, "args", None)
+    if isinstance(args, tuple) and args:
+        for arg in args:
+            if isinstance(arg, dict) and isinstance(arg.get("code"), str) and arg.get("code").strip():
+                return arg.get("code").strip()
+    s = str(exc)
+    if "PGRST" in s:
+        m = re.search(r"\b(PGRST\d+)\b", s)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _is_missing_table_error(exc: Exception, table: str) -> bool:
+    if _postgrest_error_code(exc) != "PGRST205":
+        return False
+    s = str(exc)
+    t = str(table or "").strip()
+    if not t:
+        return False
+    return t in s or f"public.{t}" in s
+
+
+def _auto_messages_missing_table_http() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail=(
+            "Configuração do Supabase incompleta: a tabela public.auto_messages não existe. "
+            "Execute a migration 004_auto_messages.sql no SQL Editor do Supabase e tente novamente."
+        ),
+    )
 
 # ==================== MODELS ====================
 # Note: LoginRequest and LoginResponse are defined at the top of the file
@@ -3372,7 +3409,10 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 try:
                     auto_messages_result = supabase.table('auto_messages').select('*').eq('tenant_id', tenant_id).eq('is_active', True).execute()
                 except Exception as e:
-                    logger.error(f"Error loading auto messages for tenant {tenant_id}: {e}")
+                    if _is_missing_table_error(e, "auto_messages"):
+                        logger.warning(f"Missing table auto_messages in Supabase (tenant={tenant_id}): {e}")
+                    else:
+                        logger.error(f"Error loading auto messages for tenant {tenant_id}: {e}")
                     auto_messages_result = None
 
                 if auto_messages_result and auto_messages_result.data:
@@ -3623,8 +3663,10 @@ async def get_auto_messages(tenant_id: str, payload: dict = Depends(verify_token
             'createdAt': m['created_at']
         } for m in result.data] if result.data else []
     except Exception as e:
+        if _is_missing_table_error(e, "auto_messages"):
+            raise _auto_messages_missing_table_http()
         logger.error(f"Error getting auto messages: {e}")
-        return []
+        raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/auto-messages")
 async def create_auto_message(tenant_id: str, data: AutoMessageCreate, payload: dict = Depends(verify_token)):
@@ -3660,6 +3702,8 @@ async def create_auto_message(tenant_id: str, data: AutoMessageCreate, payload: 
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "auto_messages"):
+            raise _auto_messages_missing_table_http()
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.put("/auto-messages/{message_id}")
@@ -3686,6 +3730,8 @@ async def update_auto_message(message_id: str, data: AutoMessageCreate, payload:
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "auto_messages"):
+            raise _auto_messages_missing_table_http()
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.delete("/auto-messages/{message_id}")
@@ -3695,6 +3741,8 @@ async def delete_auto_message(message_id: str, payload: dict = Depends(verify_to
         supabase.table('auto_messages').delete().eq('id', message_id).execute()
         return {"success": True}
     except Exception as e:
+        if _is_missing_table_error(e, "auto_messages"):
+            raise _auto_messages_missing_table_http()
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.patch("/auto-messages/{message_id}/toggle")
@@ -3713,6 +3761,8 @@ async def toggle_auto_message(message_id: str, payload: dict = Depends(verify_to
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "auto_messages"):
+            raise _auto_messages_missing_table_http()
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== CHATBOT FLOWS ====================

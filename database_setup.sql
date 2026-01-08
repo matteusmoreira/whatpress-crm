@@ -79,6 +79,29 @@ CREATE TABLE IF NOT EXISTS messages (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS auto_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    trigger_keyword VARCHAR(100),
+    is_active BOOLEAN DEFAULT true,
+    schedule_start TIME,
+    schedule_end TIME,
+    schedule_days INTEGER[],
+    delay_seconds INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS auto_message_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    auto_message_id UUID NOT NULL REFERENCES auto_messages(id) ON DELETE CASCADE,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- =====================================================
 -- INDEXES
 -- =====================================================
@@ -90,6 +113,10 @@ CREATE INDEX IF NOT EXISTS idx_conversations_tenant ON conversations(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_connection ON conversations(connection_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_last_message ON conversations(last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auto_messages_tenant ON auto_messages(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_auto_messages_type ON auto_messages(type);
+CREATE INDEX IF NOT EXISTS idx_auto_messages_keyword ON auto_messages(trigger_keyword);
+CREATE INDEX IF NOT EXISTS idx_auto_message_logs_conversation ON auto_message_logs(conversation_id);
 
 -- =====================================================
 -- ROW LEVEL SECURITY (Disable for now - service role bypasses)
@@ -100,6 +127,8 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auto_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auto_message_logs ENABLE ROW LEVEL SECURITY;
 
 -- Policies for service_role (full access)
 CREATE POLICY "Service role full access tenants" ON tenants FOR ALL USING (true) WITH CHECK (true);
@@ -107,6 +136,8 @@ CREATE POLICY "Service role full access users" ON users FOR ALL USING (true) WIT
 CREATE POLICY "Service role full access connections" ON connections FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access conversations" ON conversations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access messages" ON messages FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access auto_messages" ON auto_messages FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access auto_message_logs" ON auto_message_logs FOR ALL USING (true) WITH CHECK (true);
 
 -- =====================================================
 -- DADOS INICIAIS (SEED)
