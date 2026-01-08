@@ -9,15 +9,25 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any, Tuple
 import uuid
 from datetime import datetime, timedelta
-from supabase_client import supabase
-from evolution_api import evolution_api, EvolutionAPI
-from media_detection import detect_media_kind
-from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
+try:
+    from .supabase_client import supabase
+    from .evolution_api import evolution_api, EvolutionAPI
+    from .media_detection import detect_media_kind
+    from .features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
+except Exception:
+    from supabase_client import supabase
+    from evolution_api import evolution_api, EvolutionAPI
+    from media_detection import detect_media_kind
+    from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
 import jwt
 import json
 import base64
 import asyncio
 import re
+import time
+from collections import deque
+from dataclasses import dataclass
+from typing import Callable
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -146,6 +156,51 @@ async def ensure_auto_messages_schema():
     ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
     CREATE POLICY IF NOT EXISTS "Service role has full access to contacts" ON contacts FOR ALL USING (true);
 
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+        actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        action VARCHAR(120) NOT NULL,
+        entity_type VARCHAR(80),
+        entity_id UUID,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant ON audit_logs(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+
+    ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access audit_logs" ON audit_logs FOR ALL USING (true);
+
+    CREATE TABLE IF NOT EXISTS contact_history (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        action VARCHAR(50) NOT NULL,
+        before JSONB,
+        after JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_contact_history_contact ON contact_history(contact_id);
+    CREATE INDEX IF NOT EXISTS idx_contact_history_tenant ON contact_history(tenant_id);
+
+    ALTER TABLE contact_history ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access contact_history" ON contact_history FOR ALL USING (true);
+
+    DO $$
+    BEGIN
+      IF to_regclass('public.messages') IS NOT NULL THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_conversation_external_id_unique
+          ON messages(conversation_id, external_id)
+          WHERE external_id IS NOT NULL;
+      END IF;
+    END $$;
+
     DO $$
     BEGIN
       IF to_regclass('public.messages') IS NOT NULL THEN
@@ -168,6 +223,7 @@ async def ensure_auto_messages_schema():
     except Exception as e:
         logger.warning(f"Auto messages schema not ensured (exec_sql unavailable?): {e}")
         return
+    _ensure_offline_flush_task_started()
 
 # ==================== MODELS (defined early for login endpoint) ====================
 
@@ -310,6 +366,117 @@ security = HTTPBearer(auto_error=False)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_DB_WRITE_QUEUE_MAX = int(os.getenv("DB_WRITE_QUEUE_MAX", "2000") or "2000")
+_DB_WRITE_QUEUE: "deque[dict]" = deque(maxlen=max(100, _DB_WRITE_QUEUE_MAX))
+_CONTACTS_CACHE_BY_TENANT: Dict[str, dict] = {}
+_CONTACT_CACHE_BY_ID: Dict[str, dict] = {}
+_CONTACT_CACHE_BY_TENANT_PHONE: Dict[str, dict] = {}
+_OFFLINE_FLUSH_TASK_STARTED = False
+
+def _is_transient_db_error(exc: Exception) -> bool:
+    s = str(exc or "").lower()
+    transient_markers = [
+        "timeout",
+        "timed out",
+        "temporarily unavailable",
+        "connection refused",
+        "connection reset",
+        "connection error",
+        "network",
+        "dns",
+        "name or service not known",
+        "failed to establish a new connection",
+        "server disconnected",
+        "502",
+        "503",
+        "504",
+        "bad gateway",
+        "gateway timeout",
+        "service unavailable",
+    ]
+    return any(m in s for m in transient_markers)
+
+def _db_call_with_retry(op_name: str, fn: Callable[[], Any], max_attempts: int = 4) -> Any:
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            if attempt >= max_attempts or not _is_transient_db_error(e):
+                raise
+            sleep_s = min(2.0, 0.15 * (2 ** (attempt - 1)))
+            logger.warning(f"{op_name} falhou (tentativa {attempt}/{max_attempts}): {e}")
+            time.sleep(sleep_s)
+    raise last_exc or Exception(f"{op_name} falhou")
+
+def _queue_db_write(operation: dict) -> None:
+    try:
+        _DB_WRITE_QUEUE.append({
+            **(operation or {}),
+            "queued_at": datetime.utcnow().isoformat()
+        })
+    except Exception:
+        return
+
+async def _flush_db_write_queue_once() -> int:
+    processed = 0
+    while _DB_WRITE_QUEUE:
+        op = _DB_WRITE_QUEUE[0]
+        try:
+            kind = op.get("kind")
+            table = op.get("table")
+            if kind == "insert":
+                _db_call_with_retry(f"flush.insert.{table}", lambda: supabase.table(table).insert(op.get("data") or {}).execute())
+            elif kind == "update":
+                q = supabase.table(table).update(op.get("data") or {})
+                for filt in (op.get("filters") or []):
+                    if isinstance(filt, dict) and filt.get("op") == "eq":
+                        q = q.eq(filt.get("field"), filt.get("value"))
+                _db_call_with_retry(f"flush.update.{table}", lambda: q.execute())
+            elif kind == "webhook_event":
+                instance_name = op.get("instance_name")
+                payload = op.get("payload")
+                if instance_name and isinstance(payload, dict):
+                    await _process_evolution_webhook(instance_name, payload, from_queue=True)
+            _DB_WRITE_QUEUE.popleft()
+            processed += 1
+        except Exception as e:
+            if _is_transient_db_error(e):
+                break
+            _DB_WRITE_QUEUE.popleft()
+            processed += 1
+    return processed
+
+async def _flush_db_write_queue_loop() -> None:
+    while True:
+        try:
+            await _flush_db_write_queue_once()
+        except Exception:
+            pass
+        await asyncio.sleep(2.5)
+
+def _ensure_offline_flush_task_started() -> None:
+    global _OFFLINE_FLUSH_TASK_STARTED
+    if _OFFLINE_FLUSH_TASK_STARTED:
+        return
+    try:
+        asyncio.create_task(_flush_db_write_queue_loop())
+        _OFFLINE_FLUSH_TASK_STARTED = True
+    except Exception:
+        _OFFLINE_FLUSH_TASK_STARTED = True
+
+def _cache_contact_row(contact_row: dict) -> None:
+    if not isinstance(contact_row, dict):
+        return
+    cid = contact_row.get("id")
+    tenant_id = contact_row.get("tenant_id") or contact_row.get("tenantId")
+    phone = contact_row.get("phone")
+    if cid:
+        _CONTACT_CACHE_BY_ID[str(cid)] = contact_row
+    if tenant_id and phone:
+        _CONTACT_CACHE_BY_TENANT_PHONE[f"{tenant_id}:{phone}"] = contact_row
 
 def _postgrest_error_code(exc: Exception) -> Optional[str]:
     code = getattr(exc, "code", None)
@@ -594,14 +761,42 @@ def safe_insert_audit_log(
     metadata: Optional[dict] = None
 ):
     try:
-        supabase.table('audit_logs').insert({
-            'tenant_id': tenant_id,
-            'actor_user_id': actor_user_id,
-            'action': action,
-            'entity_type': entity_type,
-            'entity_id': entity_id,
-            'metadata': metadata or {}
-        }).execute()
+        _db_call_with_retry(
+            "audit_logs.insert",
+            lambda: supabase.table('audit_logs').insert({
+                'tenant_id': tenant_id,
+                'actor_user_id': actor_user_id,
+                'action': action,
+                'entity_type': entity_type,
+                'entity_id': entity_id,
+                'metadata': metadata or {}
+            }).execute()
+        )
+    except Exception:
+        return
+
+def safe_insert_contact_history(
+    tenant_id: Optional[str],
+    contact_id: Optional[str],
+    changed_by: Optional[str],
+    action: str,
+    before: Optional[dict],
+    after: Optional[dict]
+) -> None:
+    if not tenant_id or not contact_id:
+        return
+    try:
+        _db_call_with_retry(
+            "contact_history.insert",
+            lambda: supabase.table('contact_history').insert({
+                'tenant_id': tenant_id,
+                'contact_id': contact_id,
+                'changed_by': changed_by,
+                'action': action,
+                'before': before,
+                'after': after
+            }).execute()
+        )
     except Exception:
         return
 
@@ -2038,10 +2233,27 @@ async def list_contacts(
             search_term = f"%{search}%"
             query = query.or_(f"name.ilike.{search_term},phone.ilike.{search_term},email.ilike.{search_term}")
 
-        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        try:
+            result = _db_call_with_retry(
+                "contacts.list",
+                lambda: query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+            )
+        except Exception as e:
+            if _is_transient_db_error(e):
+                cached = _CONTACTS_CACHE_BY_TENANT.get(str(user_tenant_id))
+                if isinstance(cached, dict) and isinstance(cached.get("data"), list):
+                    return {
+                        'contacts': cached.get("data") or [],
+                        'total': cached.get("total") or len(cached.get("data") or []),
+                        'limit': limit,
+                        'offset': offset,
+                        'cached': True
+                    }
+            raise
 
         contacts = []
         for c in (result.data or []):
+            _cache_contact_row(c)
             contacts.append({
                 'id': c.get('id'),
                 'tenantId': c.get('tenant_id'),
@@ -2058,8 +2270,29 @@ async def list_contacts(
             })
 
         # Get total count
-        count_result = supabase.table('contacts').select('id', count='exact').eq('tenant_id', user_tenant_id).execute()
+        count_result = _db_call_with_retry(
+            "contacts.count",
+            lambda: supabase.table('contacts').select('id', count='exact').eq('tenant_id', user_tenant_id).execute()
+        )
         total = count_result.count if hasattr(count_result, 'count') and count_result.count else len(result.data or [])
+
+        _CONTACTS_CACHE_BY_TENANT[str(user_tenant_id)] = {
+            "data": contacts,
+            "total": total,
+            "cached_at": datetime.utcnow().isoformat(),
+            "search": search or "",
+            "limit": limit,
+            "offset": offset,
+        }
+
+        safe_insert_audit_log(
+            tenant_id=user_tenant_id,
+            actor_user_id=payload.get('user_id'),
+            action='contact.listed',
+            entity_type='contact',
+            entity_id=None,
+            metadata={'search': search or '', 'limit': limit, 'offset': offset}
+        )
 
         return {
             'contacts': contacts,
@@ -2087,6 +2320,8 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
 
         if not name:
             raise HTTPException(status_code=400, detail="Nome é obrigatório")
+        if len(name) < 2 or len(name) > 100:
+            raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
         if not raw_phone:
             raise HTTPException(status_code=400, detail="Telefone é obrigatório")
 
@@ -2095,9 +2330,15 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
             raise HTTPException(status_code=400, detail="Telefone é inválido")
 
         # Check if contact with same phone already exists
-        existing = supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', phone).limit(1).execute()
+        existing = _db_call_with_retry(
+            "contacts.exists",
+            lambda: supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', phone).limit(1).execute()
+        )
         if (not existing.data) and raw_phone != phone:
-            existing = supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', raw_phone).limit(1).execute()
+            existing = _db_call_with_retry(
+                "contacts.exists_raw",
+                lambda: supabase.table('contacts').select('id').eq('tenant_id', user_tenant_id).eq('phone', raw_phone).limit(1).execute()
+            )
         if existing.data:
             raise HTTPException(status_code=400, detail="Já existe um contato com este telefone")
 
@@ -2126,7 +2367,10 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
                 'status': final_status,
                 'first_contact_at': datetime.utcnow().isoformat()
             }
-            insert_result = supabase.table('contacts').insert(insert_data).execute()
+            insert_result = _db_call_with_retry(
+                "contacts.insert",
+                lambda: supabase.table('contacts').insert(insert_data).execute()
+            )
         except Exception:
             insert_result = None
 
@@ -2141,14 +2385,21 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
                     'status': final_status,
                     'first_contact_at': datetime.utcnow().isoformat()
                 }
-                insert_result = supabase.table('contacts').insert(insert_data_alt).execute()
+                insert_result = _db_call_with_retry(
+                    "contacts.insert_alt",
+                    lambda: supabase.table('contacts').insert(insert_data_alt).execute()
+                )
             except Exception as e:
+                if _is_transient_db_error(e):
+                    _queue_db_write({"kind": "insert", "table": "contacts", "data": insert_data})
+                    return {"success": True, "queued": True}
                 raise HTTPException(status_code=400, detail=f"Erro ao criar contato: {str(e)}")
 
         if not insert_result or not insert_result.data:
             raise HTTPException(status_code=400, detail="Erro ao criar contato")
 
         c = insert_result.data[0]
+        _cache_contact_row(c)
         name_value = c.get('name') or c.get('full_name') or name
         
         safe_insert_audit_log(
@@ -2158,6 +2409,14 @@ async def create_contact(data: ContactCreate, payload: dict = Depends(verify_tok
             entity_type='contact',
             entity_id=c.get('id'),
             metadata={'phone': phone}
+        )
+        safe_insert_contact_history(
+            tenant_id=user_tenant_id,
+            contact_id=c.get('id'),
+            changed_by=payload.get('user_id'),
+            action='created',
+            before=None,
+            after={'name': name_value, 'phone': phone}
         )
 
         return {
@@ -2206,13 +2465,28 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
 
         # Try to find contact in the contacts table
         try:
-            existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+            existing = _db_call_with_retry(
+                "contacts.get_by_phone",
+                lambda: supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', normalized_phone).limit(1).execute()
+            )
             if (not existing.data) and raw_phone and raw_phone != normalized_phone:
-                existing = supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', raw_phone).limit(1).execute()
+                existing = _db_call_with_retry(
+                    "contacts.get_by_phone_raw",
+                    lambda: supabase.table('contacts').select('*').eq('tenant_id', tenant_id).eq('phone', raw_phone).limit(1).execute()
+                )
             if existing.data:
                 c = existing.data[0]
+                _cache_contact_row(c)
                 full_name = c.get('full_name') or c.get('name') or normalized_phone
                 # Return with actual schema columns
+                safe_insert_audit_log(
+                    tenant_id=tenant_id,
+                    actor_user_id=payload.get('user_id'),
+                    action='contact.read_by_phone',
+                    entity_type='contact',
+                    entity_id=c.get('id'),
+                    metadata={'phone': normalized_phone}
+                )
                 return {
                     'id': c.get('id'),
                     'tenantId': c.get('tenant_id'),
@@ -2232,6 +2506,27 @@ async def get_contact_by_phone(tenant_id: str, phone: str, payload: dict = Depen
         except Exception as table_error:
             # Table might not exist or have different schema - continue to fallback
             logger.warning(f"Could not query contacts table: {table_error}")
+            if _is_transient_db_error(table_error):
+                cached = _CONTACT_CACHE_BY_TENANT_PHONE.get(f"{tenant_id}:{normalized_phone}") or _CONTACT_CACHE_BY_TENANT_PHONE.get(f"{tenant_id}:{raw_phone}")
+                if isinstance(cached, dict):
+                    full_name = cached.get('full_name') or cached.get('name') or normalized_phone
+                    return {
+                        'id': cached.get('id'),
+                        'tenantId': tenant_id,
+                        'phone': cached.get('phone') or normalized_phone,
+                        'fullName': full_name,
+                        'email': cached.get('email'),
+                        'tags': cached.get('tags') or [],
+                        'customFields': cached.get('custom_fields') or cached.get('customFields') or {},
+                        'socialLinks': cached.get('social_links') or cached.get('socialLinks') or {},
+                        'notesHtml': cached.get('notes_html') or cached.get('notesHtml') or '',
+                        'status': cached.get('status'),
+                        'firstContactAt': cached.get('first_contact_at') or cached.get('firstContactAt'),
+                        'source': cached.get('source'),
+                        'createdAt': cached.get('created_at') or cached.get('createdAt'),
+                        'updatedAt': cached.get('updated_at') or cached.get('updatedAt'),
+                        'cached': True
+                    }
 
         # Fallback: get contact info from conversations table
         try:
@@ -2309,11 +2604,39 @@ async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
         except Exception:
             raise HTTPException(status_code=404, detail="Contato não encontrado")
 
-        result = supabase.table('contacts').select('*').eq('id', contact_id).execute()
+        try:
+            result = _db_call_with_retry(
+                "contacts.get",
+                lambda: supabase.table('contacts').select('*').eq('id', contact_id).execute()
+            )
+        except Exception as e:
+            if _is_transient_db_error(e):
+                cached = _CONTACT_CACHE_BY_ID.get(str(contact_id))
+                if isinstance(cached, dict):
+                    return {
+                        'id': cached.get('id') or contact_id,
+                        'tenantId': cached.get('tenant_id'),
+                        'name': cached.get('name') or cached.get('full_name'),
+                        'phone': cached.get('phone'),
+                        'email': cached.get('email'),
+                        'tags': cached.get('tags') or [],
+                        'customFields': cached.get('custom_fields') or {},
+                        'socialLinks': cached.get('social_links') or {},
+                        'notesHtml': cached.get('notes_html') or '',
+                        'status': cached.get('status'),
+                        'firstContactAt': cached.get('first_contact_at'),
+                        'source': cached.get('source'),
+                        'createdAt': cached.get('created_at'),
+                        'updatedAt': cached.get('updated_at'),
+                        'conversationCount': 0,
+                        'cached': True
+                    }
+            raise
         if not result.data:
             raise HTTPException(status_code=404, detail="Contato não encontrado")
 
         c = result.data[0]
+        _cache_contact_row(c)
         if user_tenant_id and c.get('tenant_id') != user_tenant_id:
             raise HTTPException(status_code=403, detail="Acesso negado")
 
@@ -2327,6 +2650,15 @@ async def get_contact(contact_id: str, payload: dict = Depends(verify_token)):
             conv_count = conv_result.count if hasattr(conv_result, 'count') and conv_result.count else 0
         except Exception:
             pass
+
+        safe_insert_audit_log(
+            tenant_id=c.get('tenant_id'),
+            actor_user_id=payload.get('user_id'),
+            action='contact.read',
+            entity_type='contact',
+            entity_id=contact_id,
+            metadata={}
+        )
 
         return {
             'id': c.get('id'),
@@ -2381,9 +2713,20 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                 name = (data.full_name or '').strip()
                 if not name:
                     raise HTTPException(status_code=400, detail="Nome é obrigatório")
+                if len(name) < 2 or len(name) > 100:
+                    raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
                 supabase.table('conversations').update({
                     'contact_name': name
                 }).eq('id', conversation_id).execute()
+
+                safe_insert_audit_log(
+                    tenant_id=conversation.get('tenant_id'),
+                    actor_user_id=payload.get('user_id'),
+                    action='contact.updated',
+                    entity_type='conversation',
+                    entity_id=conversation_id,
+                    metadata={'fields': ['contact_name']}
+                )
             
             return {
                 'id': contact_id,
@@ -2415,6 +2758,8 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                 desired_name = (data.full_name or '').strip()
                 if not desired_name:
                     raise HTTPException(status_code=400, detail="Nome é obrigatório")
+                if len(desired_name) < 2 or len(desired_name) > 100:
+                    raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
 
                 try:
                     supabase.table('conversations').update({
@@ -2461,7 +2806,11 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
 
             after = None
             try:
-                updated = supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
+                before_snapshot = dict(contact or {})
+                updated = _db_call_with_retry(
+                    "contacts.update",
+                    lambda: supabase.table('contacts').update(update_data).eq('id', contact_id).execute()
+                )
                 if updated.data:
                     after = updated.data[0]
             except Exception:
@@ -2470,7 +2819,11 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
             if after is None:
                 update_data_alt = build_update_payload('full_name')
                 try:
-                    updated_alt = supabase.table('contacts').update(update_data_alt).eq('id', contact_id).execute()
+                    before_snapshot = dict(contact or {})
+                    updated_alt = _db_call_with_retry(
+                        "contacts.update_alt",
+                        lambda: supabase.table('contacts').update(update_data_alt).eq('id', contact_id).execute()
+                    )
                     if updated_alt.data:
                         after = updated_alt.data[0]
                 except Exception:
@@ -2496,6 +2849,7 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                 raise HTTPException(status_code=400, detail="Erro ao atualizar contato")
 
             full_name_value = after.get('full_name') or after.get('name')
+            _cache_contact_row(after)
 
             if desired_name is not None:
                 try:
@@ -2512,6 +2866,14 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                 entity_type='contact',
                 entity_id=contact_id,
                 metadata={'fields': list((update_data or {}).keys())}
+            )
+            safe_insert_contact_history(
+                tenant_id=contact.get('tenant_id'),
+                contact_id=contact_id,
+                changed_by=payload.get('user_id'),
+                action='updated',
+                before=locals().get("before_snapshot"),
+                after=after
             )
 
             return {
@@ -2563,6 +2925,14 @@ async def delete_contact(contact_id: str, payload: dict = Depends(verify_token))
     if contact.get('tenant_id') != user_tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
+    before_snapshot = None
+    try:
+        row = supabase.table('contacts').select('*').eq('id', contact_id).limit(1).execute()
+        if row.data:
+            before_snapshot = row.data[0]
+    except Exception:
+        before_snapshot = None
+
     supabase.table('contacts').delete().eq('id', contact_id).execute()
 
     safe_insert_audit_log(
@@ -2572,6 +2942,14 @@ async def delete_contact(contact_id: str, payload: dict = Depends(verify_token))
         entity_type='contact',
         entity_id=contact_id,
         metadata={}
+    )
+    safe_insert_contact_history(
+        tenant_id=user_tenant_id,
+        contact_id=contact_id,
+        changed_by=payload.get('user_id'),
+        action='deleted',
+        before=before_snapshot,
+        after=None
     )
 
     return {"success": True}
@@ -3078,17 +3456,18 @@ async def remove_message_reaction(message_id: str, reaction_id: str, payload: di
 
 @api_router.post("/webhooks/evolution/{instance_name}")
 async def evolution_webhook(instance_name: str, payload: dict):
-    """Receive webhooks from Evolution API"""
+    return await _process_evolution_webhook(instance_name, payload, from_queue=False)
+
+
+async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
     logger.info(f"Webhook received for {instance_name}: {payload.get('event')}")
-    
+
     try:
         parsed = evolution_api.parse_webhook_message(payload)
-        
-        # Process ALL messages (including fromMe - messages sent from the phone)
+
         if parsed['event'] == 'message':
             is_from_me = parsed.get('from_me', False)
-            
-            # Ignorar mensagens de grupos (grupos têm @g.us no JID)
+
             raw_jid = parsed.get('remote_jid_raw') or payload.get('data', {}).get('key', {}).get('remoteJid', '')
             if '@g.us' in raw_jid:
                 logger.info(f"Ignoring group message from {raw_jid}")
@@ -3096,10 +3475,20 @@ async def evolution_webhook(instance_name: str, payload: dict):
             if '@broadcast' in raw_jid:
                 logger.info(f"Ignoring broadcast message from {raw_jid}")
                 return {"success": True, "ignored": "broadcast_message"}
-            
-            # Find connection by instance name
-            conn = supabase.table('connections').select('*, tenants(*)').eq('instance_name', instance_name).execute()
-            
+
+            try:
+                conn = _db_call_with_retry(
+                    "connections.get_by_instance",
+                    lambda: supabase.table('connections').select('*, tenants(*)').eq('instance_name', instance_name).execute()
+                )
+            except Exception as e:
+                if _is_transient_db_error(e):
+                    if not from_queue:
+                        _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
+                        return {"success": True, "queued": True}
+                    raise
+                raise
+
             if conn.data:
                 connection = conn.data[0]
                 tenant_id = connection['tenant_id']
@@ -3180,9 +3569,23 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 
                 # Find or create conversation
                 is_new_conversation = False
-                conv = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('connection_id', connection['id']).eq('contact_phone', phone).execute()
-                if (not conv.data) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
-                    conv = supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('connection_id', connection['id']).eq('contact_phone', str(raw_phone).strip()).execute()
+                try:
+                    conv = _db_call_with_retry(
+                        "conversations.get_by_phone",
+                        lambda: supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('connection_id', connection['id']).eq('contact_phone', phone).execute()
+                    )
+                    if (not conv.data) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
+                        conv = _db_call_with_retry(
+                            "conversations.get_by_phone_raw",
+                            lambda: supabase.table('conversations').select('*').eq('tenant_id', tenant_id).eq('connection_id', connection['id']).eq('contact_phone', str(raw_phone).strip()).execute()
+                        )
+                except Exception as e:
+                    if _is_transient_db_error(e):
+                        if not from_queue:
+                            _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
+                            return {"success": True, "queued": True}
+                        raise
+                    raise
                 
                 if conv.data:
                     conversation = conv.data[0]
@@ -3196,7 +3599,21 @@ async def evolution_webhook(instance_name: str, payload: dict):
                     if not is_from_me:
                         update_data['unread_count'] = conversation['unread_count'] + 1
                     
-                    supabase.table('conversations').update(update_data).eq('id', conversation['id']).execute()
+                    try:
+                        _db_call_with_retry(
+                            "conversations.update_last_message",
+                            lambda: supabase.table('conversations').update(update_data).eq('id', conversation['id']).execute()
+                        )
+                    except Exception as e:
+                        if _is_transient_db_error(e):
+                            _queue_db_write({
+                                "kind": "update",
+                                "table": "conversations",
+                                "data": update_data,
+                                "filters": [{"op": "eq", "field": "id", "value": conversation['id']}],
+                            })
+                        else:
+                            raise
                 else:
                     # Create new conversation
                     avatar_url = None
@@ -3215,42 +3632,131 @@ async def evolution_webhook(instance_name: str, payload: dict):
                         'unread_count': 0 if is_from_me else 1,  # Don't count as unread if from_me
                         'last_message_preview': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
                     }
-                    conv_result = supabase.table('conversations').insert(conv_data).execute()
-                    conversation = conv_result.data[0]
-                    is_new_conversation = True
+                    try:
+                        conv_result = _db_call_with_retry(
+                            "conversations.insert",
+                            lambda: supabase.table('conversations').insert(conv_data).execute()
+                        )
+                        conversation = conv_result.data[0]
+                        is_new_conversation = True
+                    except Exception as e:
+                        if _is_transient_db_error(e):
+                            if not from_queue:
+                                _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
+                                return {"success": True, "queued": True}
+                            raise
+                        raise
 
                 if not is_from_me:
                     try:
-                        existing_contact = supabase.table('contacts').select('id, first_contact_at, status').eq('tenant_id', tenant_id).eq('phone', phone).limit(1).execute()
-                        if (not existing_contact.data) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
-                            existing_contact = supabase.table('contacts').select('id, first_contact_at, status').eq('tenant_id', tenant_id).eq('phone', str(raw_phone).strip()).limit(1).execute()
+                        cached_contact = _CONTACT_CACHE_BY_TENANT_PHONE.get(f"{tenant_id}:{phone}")
+                        existing_contact_rows: List[dict] = []
+                        if isinstance(cached_contact, dict) and cached_contact.get('phone'):
+                            existing_contact_rows = [cached_contact]
+                        else:
+                            existing_contact = _db_call_with_retry(
+                                "contacts.auto.exists",
+                                lambda: supabase.table('contacts').select('id, first_contact_at, status, custom_fields').eq('tenant_id', tenant_id).eq('phone', phone).limit(1).execute()
+                            )
+                            existing_contact_rows = existing_contact.data or []
+                            if (not existing_contact_rows) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
+                                existing_contact = _db_call_with_retry(
+                                    "contacts.auto.exists_raw",
+                                    lambda: supabase.table('contacts').select('id, first_contact_at, status, custom_fields').eq('tenant_id', tenant_id).eq('phone', str(raw_phone).strip()).limit(1).execute()
+                                )
+                                existing_contact_rows = existing_contact.data or []
 
-                        if existing_contact.data:
-                            row = existing_contact.data[0]
+                        if existing_contact_rows:
+                            row = existing_contact_rows[0]
                             if not row.get('first_contact_at'):
-                                supabase.table('contacts').update({'first_contact_at': first_contact_at_iso, 'updated_at': datetime.utcnow().isoformat()}).eq('id', row.get('id')).execute()
+                                touch_data = {'first_contact_at': first_contact_at_iso, 'updated_at': datetime.utcnow().isoformat()}
+                                try:
+                                    _db_call_with_retry(
+                                        "contacts.auto.touch_first_contact",
+                                        lambda: supabase.table('contacts').update(touch_data).eq('id', row.get('id')).execute()
+                                    )
+                                except Exception as e:
+                                    if _is_transient_db_error(e):
+                                        _queue_db_write({
+                                            "kind": "update",
+                                            "table": "contacts",
+                                            "data": touch_data,
+                                            "filters": [{"op": "eq", "field": "id", "value": row.get('id')}],
+                                        })
+                                    else:
+                                        raise
+                            try:
+                                current_cf = row.get('custom_fields') or {}
+                                if isinstance(current_cf, dict) and current_cf.get('lifecycleStatus') != 'Novo contato':
+                                    current_cf = {**current_cf, 'lifecycleStatus': 'Novo contato'}
+                                    lifecycle_data = {'custom_fields': current_cf, 'updated_at': datetime.utcnow().isoformat()}
+                                    try:
+                                        _db_call_with_retry(
+                                            "contacts.auto.ensure_lifecycle",
+                                            lambda: supabase.table('contacts').update(lifecycle_data).eq('id', row.get('id')).execute()
+                                        )
+                                    except Exception as e:
+                                        if _is_transient_db_error(e):
+                                            _queue_db_write({
+                                                "kind": "update",
+                                                "table": "contacts",
+                                                "data": lifecycle_data,
+                                                "filters": [{"op": "eq", "field": "id", "value": row.get('id')}],
+                                            })
+                                        else:
+                                            raise
+                            except Exception:
+                                pass
                         else:
                             push_name = (parsed.get('push_name') or '').strip() or None
                             try:
-                                supabase.table('contacts').insert({
+                                insert_data = {
                                     'tenant_id': tenant_id,
                                     'name': push_name,
                                     'phone': phone,
                                     'source': 'whatsapp',
                                     'status': 'pending',
-                                    'first_contact_at': first_contact_at_iso
-                                }).execute()
+                                    'first_contact_at': first_contact_at_iso,
+                                    'custom_fields': {'lifecycleStatus': 'Novo contato'}
+                                }
+                                _db_call_with_retry(
+                                    "contacts.auto.insert",
+                                    lambda: supabase.table('contacts').insert(insert_data).execute()
+                                )
+                                _cache_contact_row({**insert_data})
                             except Exception:
-                                supabase.table('contacts').insert({
+                                insert_data_alt = {
                                     'tenant_id': tenant_id,
                                     'full_name': push_name,
                                     'phone': phone,
                                     'source': 'whatsapp',
                                     'status': 'pending',
-                                    'first_contact_at': first_contact_at_iso
-                                }).execute()
+                                    'first_contact_at': first_contact_at_iso,
+                                    'custom_fields': {'lifecycleStatus': 'Novo contato'}
+                                }
+                                try:
+                                    _db_call_with_retry(
+                                        "contacts.auto.insert_alt",
+                                        lambda: supabase.table('contacts').insert(insert_data_alt).execute()
+                                    )
+                                    _cache_contact_row({**insert_data_alt})
+                                except Exception as e:
+                                    if _is_transient_db_error(e):
+                                        _queue_db_write({"kind": "insert", "table": "contacts", "data": insert_data_alt})
+                                    else:
+                                        raise
+                            safe_insert_audit_log(
+                                tenant_id=tenant_id,
+                                actor_user_id=None,
+                                action='contact.auto_created',
+                                entity_type='contact',
+                                entity_id=None,
+                                metadata={'phone': phone, 'source': 'whatsapp'}
+                            )
                     except Exception as e:
                         logger.warning(f"Auto-create contact failed for {tenant_id} phone={phone}: {e}")
+                        if _is_transient_db_error(e):
+                            pass
                 
                 # Save message with correct direction
                 parsed_type_raw = parsed.get('type') or 'text'
@@ -3397,14 +3903,37 @@ async def evolution_webhook(instance_name: str, payload: dict):
                         'mime_type': detected_mime_type
                     }
                 }
-                supabase.table('messages').insert(msg_data).execute()
+                try:
+                    _db_call_with_retry("messages.insert", lambda: supabase.table('messages').insert(msg_data).execute())
+                except Exception as e:
+                    if _is_transient_db_error(e):
+                        _queue_db_write({"kind": "insert", "table": "messages", "data": msg_data})
+                    else:
+                        raise
                 
                 # Update tenant message count
-                tenant = supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
+                tenant = _db_call_with_retry(
+                    "tenants.get_message_count",
+                    lambda: supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
+                )
                 if tenant.data:
-                    supabase.table('tenants').update({
-                        'messages_this_month': tenant.data[0]['messages_this_month'] + 1
-                    }).eq('id', tenant_id).execute()
+                    try:
+                        _db_call_with_retry(
+                            "tenants.bump_message_count",
+                            lambda: supabase.table('tenants').update({
+                                'messages_this_month': tenant.data[0]['messages_this_month'] + 1
+                            }).eq('id', tenant_id).execute()
+                        )
+                    except Exception as e:
+                        if _is_transient_db_error(e):
+                            _queue_db_write({
+                                "kind": "update",
+                                "table": "tenants",
+                                "data": {'messages_this_month': tenant.data[0]['messages_this_month'] + 1},
+                                "filters": [{"op": "eq", "field": "id", "value": tenant_id}]
+                            })
+                        else:
+                            raise
 
                 try:
                     auto_messages_result = supabase.table('auto_messages').select('*').eq('tenant_id', tenant_id).eq('is_active', True).execute()

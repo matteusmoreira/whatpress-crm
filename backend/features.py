@@ -1,7 +1,10 @@
 """Quick Replies and Templates for WhatsApp CRM"""
 
 from typing import List, Dict
-from supabase_client import supabase
+try:
+    from .supabase_client import supabase
+except Exception:
+    from supabase_client import supabase
 from datetime import datetime
 
 # Default quick replies
