@@ -5142,10 +5142,41 @@ async def proxy_whatsapp_media(
     This is needed because WhatsApp media URLs are temporary and require authentication.
     """
     try:
+        evo_message_id = message_id
+        resolved_message = None
+        try:
+            resolved_message = supabase.table('messages').select('id, conversation_id, external_id').eq('id', message_id).limit(1).execute()
+        except Exception:
+            resolved_message = None
+
+        row = None
+        if resolved_message and getattr(resolved_message, "data", None):
+            row = resolved_message.data[0]
+        else:
+            try:
+                resolved_message = supabase.table('messages').select('id, conversation_id, external_id').eq('external_id', message_id).limit(1).execute()
+            except Exception:
+                resolved_message = None
+            if resolved_message and getattr(resolved_message, "data", None):
+                row = resolved_message.data[0]
+
+        if row:
+            user_tenant_id = get_user_tenant_id(payload)
+            if user_tenant_id:
+                conv = supabase.table('conversations').select('tenant_id').eq('id', row.get('conversation_id')).limit(1).execute()
+                if not conv.data:
+                    raise HTTPException(status_code=404, detail="Conversa não encontrada")
+                if conv.data[0].get('tenant_id') != user_tenant_id:
+                    raise HTTPException(status_code=403, detail="Acesso negado")
+
+            external_id = (row.get('external_id') or '').strip() if isinstance(row.get('external_id'), str) else (row.get('external_id') or '')
+            if external_id:
+                evo_message_id = external_id
+
         # Call Evolution API to get base64 media
         result = await evolution_api.get_base64_from_media_message(
             instance_name=instance_name,
-            message_id=message_id,
+            message_id=evo_message_id,
             remote_jid=remote_jid,
             from_me=from_me
         )
