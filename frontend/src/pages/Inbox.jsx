@@ -1058,14 +1058,14 @@ const Inbox = () => {
         state.fetchMessages(selectedConversation.id, { silent: true, tail: true, limit: 50 });
         return;
       }
-      state.fetchMessages(selectedConversation.id, { silent: true, after: lastTs, append: true, limit: 200 });
+      state.fetchMessages(selectedConversation.id, { silent: true, after: lastTs, append: true, limit: 50 });
     };
 
     pollConversations();
     pollMessages();
 
     const conversationsInterval = setInterval(pollConversations, realtimeConnected ? 15000 : 5000);
-    const messagesInterval = setInterval(pollMessages, realtimeConnected ? 7000 : 2000);
+    const messagesInterval = setInterval(pollMessages, realtimeConnected ? 8000 : 3000);
 
     return () => {
       clearInterval(conversationsInterval);
@@ -1076,7 +1076,7 @@ const Inbox = () => {
   // Auto-scroll to bottom
   useEffect(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
     }
   }, [messages]);
 
@@ -1205,7 +1205,7 @@ const Inbox = () => {
     setShowFileUpload(false);
     // Messages will be updated via realtime or we can fetch manually
     if (selectedConversation?.id) {
-      useAppStore.getState().fetchMessages(selectedConversation.id);
+      useAppStore.getState().fetchMessages(selectedConversation.id, { tail: true, limit: 50 });
     }
   };
 

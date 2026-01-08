@@ -176,15 +176,25 @@ export const useAppStore = create((set, get) => ({
     set({ selectedConversation: resolved, messagesLoading: true });
     if (resolved) {
       try {
-        await ConversationsAPI.markAsRead(resolved.id);
-        const messages = await MessagesAPI.list(resolved.id, { limit: 50, tail: true });
-        set(state => ({
-          messages,
-          messagesLoading: false,
-          conversations: state.conversations.map(c =>
-            c.id === resolved.id ? { ...c, unreadCount: 0 } : c
-          )
-        }));
+        const conversationId = resolved.id;
+        const [messagesResult] = await Promise.allSettled([
+          MessagesAPI.list(conversationId, { limit: 50, tail: true }),
+          ConversationsAPI.markAsRead(conversationId)
+        ]);
+
+        const messages = messagesResult?.status === 'fulfilled' ? (messagesResult.value || []) : [];
+        set(state => {
+          if (state.selectedConversation?.id !== conversationId) {
+            return { messagesLoading: false };
+          }
+          return {
+            messages,
+            messagesLoading: false,
+            conversations: (state.conversations || []).map(c =>
+              c.id === conversationId ? { ...c, unreadCount: 0 } : c
+            )
+          };
+        });
       } catch (error) {
         console.error('Error loading messages:', error);
         set({ messagesLoading: false });

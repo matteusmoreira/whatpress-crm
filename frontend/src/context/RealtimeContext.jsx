@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { subscribeToMessages, subscribeToConversations, subscribeToConnectionStatus } from '../lib/supabase';
+import { setRealtimeAuth, subscribeToMessages, subscribeToConversations, subscribeToConnectionStatus } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { toast } from '../components/ui/glass-toaster';
@@ -7,6 +7,7 @@ import { toast } from '../components/ui/glass-toaster';
 const RealtimeContext = createContext();
 
 const NOTIFICATION_PREFS_KEY = 'whatsapp-crm-notification-prefs-v1';
+const BEEP_SRC = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19';
 
 const loadNotificationPrefs = () => {
   if (typeof window === 'undefined') return { browserNotifications: false, sound: true };
@@ -42,22 +43,147 @@ const normalizeMessageType = (type) => {
 };
 
 export const RealtimeProvider = ({ children }) => {
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, token, isAuthenticated } = useAuthStore();
   const {
     selectedConversation,
   } = useAppStore();
 
   const [isConnected, setIsConnected] = useState(false);
   const statusesRef = useRef({ conversations: 'CLOSED', connections: 'CLOSED' });
+  const audioRef = useRef(null);
+  const audioUnlockedRef = useRef(false);
+  const lastAlertKeyRef = useRef('');
 
   const tenantId = user?.tenantId;
 
+  const ensureAudio = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    if (audioRef.current) return audioRef.current;
+    try {
+      audioRef.current = new Audio(BEEP_SRC);
+      audioRef.current.volume = 0.3;
+      return audioRef.current;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  const playSound = useCallback(() => {
+    const audio = ensureAudio();
+    if (!audio) return;
+    try {
+      audio.currentTime = 0;
+    } catch (e) { }
+    Promise.resolve(audio.play()).catch(() => { });
+  }, [ensureAudio]);
+
+  const showBrowserNotification = useCallback((title, body) => {
+    if (typeof window === 'undefined') return;
+    if (!('Notification' in window)) return;
+    if (window.Notification.permission !== 'granted') return;
+    try {
+      const n = new window.Notification(title, { body });
+      n.onclick = () => {
+        try {
+          window.focus();
+        } catch (e) { }
+      };
+    } catch (e) { }
+  }, []);
+
+  const maybeAlert = useCallback((conversation, body, scopeKey) => {
+    if (!conversation?.id) return;
+    const prefs = loadNotificationPrefs();
+    const key = `${scopeKey || 'conv'}|${conversation.id}|${conversation.lastMessageAt || ''}|${conversation.lastMessagePreview || ''}|${String(body || '')}`;
+    if (lastAlertKeyRef.current === key) return;
+    lastAlertKeyRef.current = key;
+
+    const title = conversation?.contactName ? `Mensagem de ${conversation.contactName}` : 'Nova mensagem';
+    const messageBody = body ? String(body) : (conversation?.lastMessagePreview ? String(conversation.lastMessagePreview) : '[Mensagem]');
+
+    if (prefs.sound) playSound();
+    if (prefs.browserNotifications) showBrowserNotification(title, messageBody);
+  }, [playSound, showBrowserNotification]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const unlock = () => {
+      if (audioUnlockedRef.current) return;
+      const audio = ensureAudio();
+      if (!audio) return;
+      const prevVolume = audio.volume;
+      audio.volume = 0;
+      Promise.resolve(audio.play())
+        .then(() => {
+          try {
+            audio.pause();
+            audio.currentTime = 0;
+          } catch (e) { }
+          audio.volume = prevVolume;
+          audioUnlockedRef.current = true;
+        })
+        .catch(() => {
+          audio.volume = prevVolume;
+        });
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [ensureAudio]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!tenantId) return;
+    const unsub = useAppStore.subscribe((state, prevState) => {
+      if (!prevState) return;
+      const isHidden = typeof document !== 'undefined' ? !!document.hidden : false;
+      const hasFocus = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? !!document.hasFocus() : true;
+      const selectedId = state.selectedConversation?.id || null;
+
+      const prevMessages = prevState.messages || [];
+      const nextMessages = state.messages || [];
+      if (selectedId && nextMessages.length > prevMessages.length) {
+        const last = nextMessages[nextMessages.length - 1];
+        if (last?.direction === 'inbound' && (isHidden || !hasFocus)) {
+          const conv = (state.conversations || []).find(c => c.id === selectedId) || state.selectedConversation;
+          const normalizedType = normalizeMessageType(last?.type);
+          const fallback =
+            normalizedType === 'audio' ? '[Áudio]' :
+              normalizedType === 'image' ? '[Imagem]' :
+                normalizedType === 'video' ? '[Vídeo]' :
+                  normalizedType === 'document' ? '[Documento]' :
+                    normalizedType === 'sticker' ? '[Figurinha]' :
+                      '[Mensagem]';
+          const raw = typeof last?.content === 'string' ? last.content : '';
+          const body = raw.trim() ? raw : fallback;
+          maybeAlert(conv, body, 'msg');
+        }
+      }
+
+      const prevById = new Map((prevState.conversations || []).map(c => [c.id, c]));
+      for (const conv of state.conversations || []) {
+        if (!conv?.id) continue;
+        const prevConv = prevById.get(conv.id);
+        const wasUnread = prevConv?.unreadCount || 0;
+        const nowUnread = conv?.unreadCount || 0;
+        const isSelected = selectedId === conv.id;
+        const shouldAlert = (isHidden || !hasFocus || !isSelected);
+        if (shouldAlert && nowUnread > wasUnread) {
+          const body = conv?.lastMessagePreview ? String(conv.lastMessagePreview) : '[Mensagem]';
+          maybeAlert(conv, body, 'unread');
+        }
+      }
+    });
+    return () => {
+      unsub?.();
+    };
+  }, [isAuthenticated, tenantId, maybeAlert]);
+
   // Handle new message from realtime
   const handleNewMessage = useCallback((message) => {
-    const prefs = loadNotificationPrefs();
-    const isHidden = typeof document !== 'undefined' ? !!document.hidden : false;
-    const hasFocus = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? !!document.hasFocus() : true;
-
     const normalizedType = normalizeMessageType(message.type);
     const fallback =
       normalizedType === 'audio' ? '[Áudio]' :
@@ -124,37 +250,6 @@ export const RealtimeProvider = ({ children }) => {
 
       return { messages: nextMessages, conversations: nextConversations };
     });
-
-    if (message.direction === 'inbound') {
-      const state = useAppStore.getState();
-      const isOpenConversation = state.selectedConversation?.id === message.conversationId;
-      const shouldAlert = isHidden || !hasFocus || !isOpenConversation;
-
-      if (prefs.sound && shouldAlert) {
-        try {
-          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19');
-          audio.volume = 0.3;
-          audio.play().catch(() => { });
-        } catch (e) { }
-      }
-
-      if (prefs.browserNotifications && shouldAlert && typeof window !== 'undefined' && 'Notification' in window) {
-        try {
-          if (window.Notification.permission === 'granted') {
-            const conv =
-              (useAppStore.getState().conversations || []).find(c => c.id === message.conversationId) || null;
-            const title = conv?.contactName ? `Mensagem de ${conv.contactName}` : 'Nova mensagem';
-            const body = normalizedContent || '[Mensagem]';
-            const n = new window.Notification(title, { body });
-            n.onclick = () => {
-              try {
-                window.focus();
-              } catch (e) { }
-            };
-          }
-        } catch (e) { }
-      }
-    }
   }, []);
 
   // Handle conversation updates from realtime
@@ -171,38 +266,7 @@ export const RealtimeProvider = ({ children }) => {
         description: `${conversation.contactName} iniciou uma conversa`
       });
     } else if (event === 'UPDATE' && conversation) {
-      const prefs = loadNotificationPrefs();
-      const isHidden = typeof document !== 'undefined' ? !!document.hidden : false;
-      const hasFocus = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? !!document.hasFocus() : true;
       const storeState = useAppStore.getState();
-      const prev = (storeState.conversations || []).find(c => c.id === conversation.id) || null;
-      const wasUnread = prev?.unreadCount || 0;
-      const nowUnread = conversation?.unreadCount || 0;
-      const isSelected = storeState.selectedConversation?.id === conversation.id;
-      const shouldAlert = (isHidden || !hasFocus || !isSelected) && nowUnread > wasUnread;
-
-      if (shouldAlert && prefs.sound) {
-        try {
-          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp+dnpmXk5CNiYaEgX9+fX19fn+Bg4WIioyOkJOVl5mbnZ+goaKjo6OjoqGgnpyamJaUkpCOjIqIhoWDgoF/fn19fX5/gIKEhomLjY+RlJaYmp2foKGio6OjoqKhoJ6cmpmXlZOSkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19fn+AgoSGiYuNj5GUlpibnZ+goaKjo6OioqGfnpyamZeVk5GQjoyKiIaFg4KAf359fX1+f4CChIaJi42PkZSWmJudoKChoqOjo6KioZ+enJqZl5WTkZCOjIqIhoWDgoB/fn19fX5/gIKEhomLjY+RlJaYm52foKGio6OjoqKhn56cmpqXlZORkI6MioiGhYOCgH9+fX19');
-          audio.volume = 0.3;
-          audio.play().catch(() => { });
-        } catch (e) { }
-      }
-
-      if (shouldAlert && prefs.browserNotifications && typeof window !== 'undefined' && 'Notification' in window) {
-        try {
-          if (window.Notification.permission === 'granted') {
-            const title = conversation?.contactName ? `Mensagem de ${conversation.contactName}` : 'Nova mensagem';
-            const body = conversation?.lastMessagePreview ? String(conversation.lastMessagePreview) : '[Mensagem]';
-            const n = new window.Notification(title, { body });
-            n.onclick = () => {
-              try {
-                window.focus();
-              } catch (e) { }
-            };
-          }
-        } catch (e) { }
-      }
 
       // Updated conversation
       if (storeState.selectedConversation?.id === conversation.id) {
@@ -216,7 +280,7 @@ export const RealtimeProvider = ({ children }) => {
           const convTs = Date.parse(conversation.lastMessageAt || '') || 0;
           const msgTs = Date.parse(lastTs || '') || 0;
           if (convTs > msgTs) {
-            storeState.fetchMessages(conversation.id, { silent: true, after: lastTs, append: true, limit: 200 });
+            storeState.fetchMessages(conversation.id, { silent: true, after: lastTs, append: true, limit: 50 });
           }
         }
       }
@@ -295,6 +359,10 @@ export const RealtimeProvider = ({ children }) => {
         statusesRef.current = { conversations: 'CLOSED', connections: 'CLOSED' };
         setIsConnected(false);
 
+        if (token) {
+          await setRealtimeAuth(token);
+        }
+
         unsubConversations = subscribeToConversations(tenantId, handleConversationUpdate, (status) => {
           updateStatus('conversations', status);
         });
@@ -316,7 +384,7 @@ export const RealtimeProvider = ({ children }) => {
       statusesRef.current = { conversations: 'CLOSED', connections: 'CLOSED' };
       setIsConnected(false);
     };
-  }, [isAuthenticated, tenantId, handleConversationUpdate, handleConnectionUpdate]);
+  }, [isAuthenticated, tenantId, token, handleConversationUpdate, handleConnectionUpdate]);
 
   // Subscribe to messages for selected conversation
   useEffect(() => {
