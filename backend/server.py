@@ -3442,6 +3442,78 @@ async def evolution_webhook(instance_name: str, payload: dict):
                                 return None
 
                         now_minutes = local_now.hour * 60 + local_now.minute
+
+                        def normalize_schedule_days(value: Any) -> List[int]:
+                            if value is None:
+                                return []
+                            if isinstance(value, (list, tuple)):
+                                out: List[int] = []
+                                for item in value:
+                                    try:
+                                        out.append(int(item))
+                                    except Exception:
+                                        continue
+                                return out
+                            if isinstance(value, str):
+                                s = value.strip()
+                                if not s:
+                                    return []
+                                if s.startswith("{") and s.endswith("}"):
+                                    inner = s[1:-1].strip()
+                                    if not inner:
+                                        return []
+                                    out: List[int] = []
+                                    for part in inner.split(","):
+                                        part = part.strip()
+                                        if not part:
+                                            continue
+                                        try:
+                                            out.append(int(part))
+                                        except Exception:
+                                            continue
+                                    return out
+                                if s.startswith("[") and s.endswith("]"):
+                                    try:
+                                        parsed_days = json.loads(s)
+                                    except Exception:
+                                        parsed_days = None
+                                    return normalize_schedule_days(parsed_days)
+                                out: List[int] = []
+                                for part in re.split(r"[,\s]+", s):
+                                    part = part.strip()
+                                    if not part:
+                                        continue
+                                    try:
+                                        out.append(int(part))
+                                    except Exception:
+                                        continue
+                                return out
+                            return []
+
+                        def minutes_to_hm(value: int) -> Tuple[int, int]:
+                            h = value // 60
+                            m = value % 60
+                            return h, m
+
+                        def away_window_bounds_utc(auto_msg: Dict[str, Any]) -> Tuple[datetime, datetime]:
+                            start_min = parse_time_to_minutes(auto_msg.get("schedule_start"))
+                            end_min = parse_time_to_minutes(auto_msg.get("schedule_end"))
+                            if start_min is None or end_min is None:
+                                day_start_local = datetime(local_now.year, local_now.month, local_now.day)
+                                day_end_local = day_start_local + timedelta(days=1)
+                                return day_start_local - local_offset, day_end_local - local_offset
+
+                            spans_midnight = start_min > end_min
+                            start_date = local_now.date()
+                            if spans_midnight and now_minutes <= end_min:
+                                start_date = (local_now - timedelta(days=1)).date()
+
+                            sh, sm = minutes_to_hm(start_min)
+                            eh, em = minutes_to_hm(end_min)
+                            start_local = datetime(start_date.year, start_date.month, start_date.day, sh, sm)
+                            end_date = start_date + timedelta(days=1) if spans_midnight else start_date
+                            end_local = datetime(end_date.year, end_date.month, end_date.day, eh, em)
+                            return start_local - local_offset, end_local - local_offset
                         connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
                         connection_status = (connection.get('status') if isinstance(connection, dict) else None)
                         is_evolution = str(connection_provider or '').lower() == 'evolution'
@@ -3453,10 +3525,8 @@ async def evolution_webhook(instance_name: str, payload: dict):
                                 log_query = supabase.table('auto_message_logs').select('id').eq('auto_message_id', auto_msg['id']).eq('conversation_id', conversation['id'])
 
                                 if msg_type_inner == 'away':
-                                    day_start_local = datetime(local_now.year, local_now.month, local_now.day)
-                                    day_start_utc = day_start_local - local_offset
-                                    day_end_utc = day_start_utc + timedelta(days=1)
-                                    log_query = log_query.gte('sent_at', day_start_utc.isoformat()).lt('sent_at', day_end_utc.isoformat())
+                                    window_start_utc, window_end_utc = away_window_bounds_utc(auto_msg)
+                                    log_query = log_query.gte('sent_at', window_start_utc.isoformat()).lt('sent_at', window_end_utc.isoformat())
 
                                 log_exists = log_query.limit(1).execute()
                                 if log_exists.data:
@@ -3521,11 +3591,20 @@ async def evolution_webhook(instance_name: str, payload: dict):
                                 if not is_new_conversation:
                                     continue
                             elif msg_type == 'away':
-                                days = auto_msg.get('schedule_days') or []
-                                if days and day_index not in days:
-                                    continue
                                 start_min = parse_time_to_minutes(auto_msg.get('schedule_start'))
                                 end_min = parse_time_to_minutes(auto_msg.get('schedule_end'))
+                                spans_midnight = (
+                                    start_min is not None
+                                    and end_min is not None
+                                    and start_min > end_min
+                                )
+                                effective_day_index = day_index
+                                if spans_midnight and end_min is not None and now_minutes <= end_min:
+                                    effective_day_index = (day_index - 1) % 7
+
+                                days = normalize_schedule_days(auto_msg.get('schedule_days'))
+                                if days and effective_day_index not in days:
+                                    continue
                                 active = False
                                 if start_min is None or end_min is None:
                                     active = True
