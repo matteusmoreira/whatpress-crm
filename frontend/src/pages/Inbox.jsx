@@ -44,7 +44,7 @@ import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '../components/ui/glass-toaster';
-import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../components/ui/tooltip';
 import FileUpload from '../components/FileUpload';
 import QuickRepliesPanel from '../components/QuickRepliesPanel';
@@ -80,6 +80,28 @@ const isWhatsappMediaUrl = (url) => {
     return true;
   } catch {
     return false;
+  }
+};
+
+const isApiMediaProxyUrl = (url) => {
+  const s = typeof url === 'string' ? url : '';
+  if (!s) return false;
+  if (s.startsWith('data:')) return false;
+  return s.includes('/api/media/proxy') || s.includes('/media/proxy?');
+};
+
+const parseProxyParamsFromUrl = (url) => {
+  try {
+    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    const messageId = u.searchParams.get('message_id') || '';
+    const remoteJid = u.searchParams.get('remote_jid') || '';
+    const instanceName = u.searchParams.get('instance_name') || '';
+    const rawFromMe = u.searchParams.get('from_me');
+    const fromMe = rawFromMe === 'true' || rawFromMe === '1';
+    if (!messageId || !remoteJid || !instanceName) return null;
+    return { messageId, remoteJid, instanceName, fromMe };
+  } catch {
+    return null;
   }
 };
 
@@ -680,7 +702,7 @@ const WhatsAppMediaDisplay = ({
               {effectiveUrl ? 'Clique para abrir' : loadError ? 'Falha ao carregar' : loading ? 'Carregando…' : 'Clique para carregar'}
             </p>
           </div>
-          {effectiveUrl && (
+          {effectiveUrl && !isApiMediaProxyUrl(effectiveUrl) && (
             <a
               href={effectiveUrl}
               download
@@ -1523,20 +1545,31 @@ const Inbox = () => {
         setViewerLoading(false);
         return;
       }
-      if (!isWhatsappMediaUrl(url)) {
+      const shouldProxy = isWhatsappMediaUrl(url) || isApiMediaProxyUrl(url);
+      if (!shouldProxy) {
         setViewerResolvedUrl(url);
         setViewerLoading(false);
         return;
       }
-      const proxyInfo = mediaViewer?.proxyInfo;
-      const canProxy = Boolean(
-        proxyInfo &&
-        typeof proxyInfo === 'object' &&
-        proxyInfo.messageId &&
-        proxyInfo.remoteJid &&
-        proxyInfo.instanceName
-      );
-      if (!canProxy) {
+      const proxyInfo = (() => {
+        const pi = mediaViewer?.proxyInfo;
+        const canUse =
+          pi &&
+          typeof pi === 'object' &&
+          pi.messageId &&
+          pi.remoteJid &&
+          pi.instanceName;
+        if (canUse) {
+          return {
+            messageId: pi.messageId,
+            remoteJid: pi.remoteJid,
+            instanceName: pi.instanceName,
+            fromMe: Boolean(pi.fromMe)
+          };
+        }
+        return parseProxyParamsFromUrl(url);
+      })();
+      if (!proxyInfo) {
         setViewerResolvedUrl(url);
         setViewerLoading(false);
         return;
@@ -1561,6 +1594,7 @@ const Inbox = () => {
       } catch {
         setViewerLoading(false);
         setViewerLoadError(true);
+        toast.error('Não foi possível abrir esta mídia');
       }
     };
     run();
@@ -2489,6 +2523,12 @@ const Inbox = () => {
 
       <Dialog open={mediaViewer.open} onOpenChange={(open) => setMediaViewer(prev => ({ ...prev, open }))}>
         <DialogContent className="max-w-5xl bg-black/80 border border-white/10 p-0">
+          <DialogTitle className="sr-only">
+            {currentViewerItem?.title || mediaViewer.title || 'Mídia'}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Visualizador de mídia
+          </DialogDescription>
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate">
@@ -2716,6 +2756,10 @@ const Inbox = () => {
 
       <Dialog open={showPurgeAllDialog} onOpenChange={(open) => !purgingAll && setShowPurgeAllDialog(open)}>
         <DialogContent className="max-w-md bg-black/70 border border-white/10">
+          <DialogTitle className="sr-only">Excluir todas as conversas</DialogTitle>
+          <DialogDescription className="sr-only">
+            Confirmação para excluir todas as conversas do tenant
+          </DialogDescription>
           <div className="p-6">
             <h2 className="text-lg font-bold text-white mb-2">Excluir todas as conversas</h2>
             <p className="text-white/70 text-sm">
@@ -2746,6 +2790,10 @@ const Inbox = () => {
       {/* Contact View Modal */}
       <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
         <DialogContent className="max-w-md bg-white/10 backdrop-blur-xl border border-white/20">
+          <DialogTitle className="sr-only">Informações do contato</DialogTitle>
+          <DialogDescription className="sr-only">
+            Detalhes do contato selecionado
+          </DialogDescription>
           <div className="p-6">
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
               <Users className="w-5 h-5 text-emerald-400" />
