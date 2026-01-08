@@ -636,18 +636,83 @@ const WhatsAppMediaDisplay = ({
   useEffect(() => {
     if (!isWhatsAppUrl) return;
     if (!canProxy) return;
-    if (type !== 'audio' && type !== 'video') return;
+    if (type !== 'audio' && type !== 'video' && type !== 'image' && type !== 'sticker' && type !== 'document') return;
     fetchProxy();
   }, [isWhatsAppUrl, canProxy, type, fetchProxy]);
 
-  if ((type === 'image' || type === 'sticker') && mediaUrl) {
-    const label = type === 'sticker' ? 'Figurinha' : 'Imagem';
-    const title = type === 'sticker' ? (content || 'Figurinha') : (content || 'Imagem');
+  useEffect(() => {
+    if (isWhatsAppUrl) return;
+    if (!canProxy) return;
+    if (mediaUrl) return;
+    if (type !== 'audio' && type !== 'video' && type !== 'image' && type !== 'sticker' && type !== 'document') return;
+    fetchProxy();
+  }, [isWhatsAppUrl, canProxy, mediaUrl, type, fetchProxy]);
+
+  if (type === 'document' && (mediaUrl || canProxy)) {
+    const title = (content || '').trim() || (meta?.file_name ?? meta?.fileName ?? meta?.name ?? '').trim() || 'Documento';
+    const canOpen = Boolean(effectiveUrl);
     return (
       <div className="relative">
         <button
           type="button"
-          onClick={() => onImageClick?.({ open: true, url: mediaUrl, title, messageId, kind: type, proxyInfo })}
+          onClick={() => {
+            if (!canOpen && canProxy && !proxyTried) {
+              fetchProxy();
+              return;
+            }
+            if (!effectiveUrl) return;
+            onImageClick?.({ open: true, url: effectiveUrl, title, messageId, kind: 'document', proxyInfo });
+          }}
+          className={cn(
+            'flex items-center gap-3 p-3 rounded-xl border w-full text-left focus:outline-none focus:ring-2 focus:ring-white/30',
+            direction === 'outbound'
+              ? 'bg-white/10 border-white/20 hover:bg-white/15'
+              : 'bg-black/20 border-white/10 hover:bg-black/30'
+          )}
+          aria-label="Visualizar documento"
+        >
+          <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+            <FileText className="w-5 h-5 opacity-80" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{title}</p>
+            <p className="text-xs opacity-70 truncate">
+              {effectiveUrl ? 'Clique para abrir' : loadError ? 'Falha ao carregar' : loading ? 'Carregando…' : 'Clique para carregar'}
+            </p>
+          </div>
+          {effectiveUrl && (
+            <a
+              href={effectiveUrl}
+              download
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-emerald-200 hover:text-emerald-100 underline-offset-2 hover:underline text-xs"
+            >
+              Baixar
+            </a>
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  if ((type === 'image' || type === 'sticker') && (mediaUrl || canProxy)) {
+    const label = type === 'sticker' ? 'Figurinha' : 'Imagem';
+    const title = type === 'sticker' ? (content || 'Figurinha') : (content || 'Imagem');
+    const canOpen = Boolean(effectiveUrl);
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => {
+            if (!canOpen && canProxy && !proxyTried) {
+              fetchProxy();
+              return;
+            }
+            if (!effectiveUrl) return;
+            onImageClick?.({ open: true, url: effectiveUrl, title, messageId, kind: type, proxyInfo });
+          }}
           className={cn(
             'flex items-center gap-3 p-3 rounded-xl border w-full text-left focus:outline-none focus:ring-2 focus:ring-white/30',
             direction === 'outbound'
@@ -661,7 +726,9 @@ const WhatsAppMediaDisplay = ({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{label}</p>
-            <p className="text-xs opacity-70 truncate">Clique para visualizar</p>
+            <p className="text-xs opacity-70 truncate">
+              {effectiveUrl ? 'Clique para visualizar' : loadError ? 'Falha ao carregar' : loading ? 'Carregando…' : 'Clique para carregar'}
+            </p>
           </div>
         </button>
       </div>
@@ -2076,7 +2143,8 @@ const Inbox = () => {
                           const primaryUrl = hasOnlyUrl ? urls[0] : '';
                           const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
 
-                          const shouldRenderMedia = Boolean(effectiveMediaUrl) && ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
+                          const mediaRenderableKind = ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
+                          const shouldRenderMedia = mediaRenderableKind && (Boolean(effectiveMediaUrl) || Boolean(proxyInfo));
 
                           const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) :
                             (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
@@ -2138,7 +2206,7 @@ const Inbox = () => {
                                     </div>
                                   </div>
                                 )}
-                                {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio' || renderType === 'sticker') && (
+                                {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio' || renderType === 'sticker' || renderType === 'document') && (
                                   <WhatsAppMediaDisplay
                                     type={renderType}
                                     mediaUrl={effectiveMediaUrl}
@@ -2149,24 +2217,6 @@ const Inbox = () => {
                                     proxyInfo={proxyInfo}
                                     meta={meta}
                                   />
-                                )}
-                                {shouldRenderMedia && renderType === 'document' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setMediaViewer({ open: true, url: effectiveMediaUrl, title: displayContent || 'Documento', messageId: msg.id || null, kind: 'document', proxyInfo })}
-                                    className={cn(
-                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
-                                      msg.direction === 'outbound'
-                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
-                                    )}
-                                  >
-                                    <FileText className="w-5 h-5 opacity-80" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">{displayContent || 'Documento'}</p>
-                                      <p className="text-xs opacity-70 truncate">{shortenUrl(effectiveMediaUrl)}</p>
-                                    </div>
-                                  </button>
                                 )}
                                 {/* WhatsApp media URL in text message - render inline */}
                                 {normalizedType === 'text' && hasOnlyUrl && isWhatsappMedia && (
