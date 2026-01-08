@@ -647,30 +647,93 @@ class EvolutionAPI:
                     rx = message_content.get('reactionMessage') or {}
                     if isinstance(rx, dict):
                         text = rx.get('text')
-                elif 'imageMessage' in message_content:
+                def find_media_node(content: dict) -> Tuple[Optional[str], Optional[dict]]:
+                    """
+                    Helper to find media node and type recursively/intelligently.
+                    Returns (msg_type, node_dict) or (None, None).
+                    """
+                    if not isinstance(content, dict):
+                        return None, None
+                    
+                    # 1. Check direct keys first (standard path)
+                    if 'imageMessage' in content: return 'image', content['imageMessage']
+                    if 'videoMessage' in content: return 'video', content['videoMessage']
+                    if 'audioMessage' in content: return 'audio', content['audioMessage']
+                    if 'stickerMessage' in content: return 'sticker', content['stickerMessage']
+                    if 'documentMessage' in content: return 'document', content['documentMessage']
+                    if 'documentWithCaptionMessage' in content:
+                        return 'document', content['documentWithCaptionMessage'].get('message', {}).get('documentMessage', {})
+                    if 'ptvMessage' in content: return 'video', content['ptvMessage'] # Video note
+
+                    # 2. Check for simplified structure (flat keys)
+                    if 'mimetype' in content and 'url' in content:
+                        mime = str(content['mimetype']).lower()
+                        if 'image' in mime: return 'image', content
+                        if 'video' in mime: return 'video', content
+                        if 'audio' in mime: return 'audio', content
+                        if 'application' in mime or 'text' in mime: return 'document', content
+                        if 'sticker' in mime or 'webp' in mime: return 'sticker', content
+
+                    # 3. Recursive search for nested media keys (last resort)
+                    # Limit depth to avoid infinite loops or performance issues
+                    stack = [(content, 0)]
+                    while stack:
+                        curr, depth = stack.pop()
+                        if depth > 4: continue
+                        if not isinstance(curr, dict): continue
+
+                        if 'imageMessage' in curr: return 'image', curr['imageMessage']
+                        if 'videoMessage' in curr: return 'video', curr['videoMessage']
+                        if 'audioMessage' in curr: return 'audio', curr['audioMessage']
+                        if 'stickerMessage' in curr: return 'sticker', curr['stickerMessage']
+                        if 'documentMessage' in curr: return 'document', curr['documentMessage']
+                        if 'ptvMessage' in curr: return 'video', curr['ptvMessage']
+
+                        for k, v in curr.items():
+                            if isinstance(v, dict):
+                                stack.append((v, depth + 1))
+                    
+                    return None, None
+
+                # Detect media type using robust finder
+                found_type, found_node = find_media_node(message_content)
+
+                if found_type == 'image':
                     msg_type = 'image'
-                    img = message_content.get('imageMessage') or {}
+                    img = found_node or {}
                     text = img.get('caption', '')
                     media_url = img.get('url')
                     mime_type = img.get('mimetype') or img.get('mimeType')
                     if isinstance(mime_type, str) and 'webp' in mime_type.lower():
                         media_kind = 'sticker'
                         msg_type = 'sticker'
-                elif 'videoMessage' in message_content:
+                elif found_type == 'video':
                     msg_type = 'video'
-                    vid = message_content.get('videoMessage') or {}
+                    vid = found_node or {}
                     text = vid.get('caption', '')
                     media_url = vid.get('url')
                     mime_type = vid.get('mimetype') or vid.get('mimeType')
                     media_kind = 'video'
-                elif 'audioMessage' in message_content:
+                    # Check for video notes (ptv)
+                    if vid.get('ptv'):
+                        media_kind = 'video_note' 
+                elif found_type == 'audio':
                     msg_type = 'audio'
-                    aud = message_content.get('audioMessage') or {}
+                    aud = found_node or {}
                     media_url = aud.get('url')
                     mime_type = aud.get('mimetype') or aud.get('mimeType')
                     media_kind = 'audio'
-                elif 'documentMessage' in message_content:
-                    doc = message_content.get('documentMessage') or {}
+                    if aud.get('ptt'):
+                        media_kind = 'voice'
+                elif found_type == 'sticker':
+                    msg_type = 'sticker'
+                    st = found_node or {}
+                    media_kind = 'sticker'
+                    text = '[Figurinha]'
+                    media_url = st.get('url')
+                    mime_type = st.get('mimetype') or st.get('mimeType')
+                elif found_type == 'document':
+                    doc = found_node or {}
                     mime_type = doc.get('mimetype') or doc.get('mimeType')
                     candidate_mime = str(mime_type or '').lower()
                     if candidate_mime.startswith('audio/') or 'opus' in candidate_mime or 'ogg' in candidate_mime:
@@ -680,15 +743,10 @@ class EvolutionAPI:
                     else:
                         msg_type = 'document'
                         media_kind = 'document'
-                        text = doc.get('fileName', 'document')
+                        text = doc.get('fileName') or doc.get('caption') or 'document'
                         media_url = doc.get('url')
-                elif 'stickerMessage' in message_content:
-                    st = message_content.get('stickerMessage') or {}
-                    msg_type = 'sticker'
-                    media_kind = 'sticker'
-                    text = '[Figurinha]'
-                    media_url = st.get('url')
-                    mime_type = st.get('mimetype') or st.get('mimeType')
+                
+                # Check for other non-media types if media was not found
                 elif 'locationMessage' in message_content:
                     text = '[Localização]'
                 elif 'contactMessage' in message_content:
