@@ -3,7 +3,7 @@
 import httpx
 import logging
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import base64
 
 logger = logging.getLogger(__name__)
