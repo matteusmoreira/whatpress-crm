@@ -673,6 +673,7 @@ const WhatsAppMediaDisplay = ({
   if (type === 'document' && (mediaUrl || canProxy)) {
     const title = (content || '').trim() || (meta?.file_name ?? meta?.fileName ?? meta?.name ?? '').trim() || 'Documento';
     const canOpen = Boolean(effectiveUrl);
+    const downloadName = title;
     return (
       <div className="relative">
         <button
@@ -702,13 +703,50 @@ const WhatsAppMediaDisplay = ({
               {effectiveUrl ? 'Clique para abrir' : loadError ? 'Falha ao carregar' : loading ? 'Carregando…' : 'Clique para carregar'}
             </p>
           </div>
-          {effectiveUrl && !isApiMediaProxyUrl(effectiveUrl) && (
+          {effectiveUrl && !isApiMediaProxyUrl(effectiveUrl) && !isWhatsappMediaUrl(effectiveUrl) && (
             <a
               href={effectiveUrl}
               download
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
+              className="text-emerald-200 hover:text-emerald-100 underline-offset-2 hover:underline text-xs"
+            >
+              Baixar
+            </a>
+          )}
+          {(!effectiveUrl || isApiMediaProxyUrl(effectiveUrl) || isWhatsappMediaUrl(effectiveUrl)) && canProxy && (
+            <a
+              href={effectiveUrl || '#'}
+              download
+              target="_blank"
+              rel="noreferrer"
+              onClick={async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                try {
+                  const result = await MediaAPI.proxy({
+                    messageId: proxyInfo.messageId,
+                    remoteJid: proxyInfo.remoteJid,
+                    instanceName: proxyInfo.instanceName,
+                    fromMe: Boolean(proxyInfo.fromMe)
+                  });
+                  const dataUrl = result?.dataUrl;
+                  const resolvedUrl = typeof dataUrl === 'string' ? dataUrl : '';
+                  if (resolvedUrl && resolvedUrl.startsWith('data:')) {
+                    const a = document.createElement('a');
+                    a.href = resolvedUrl;
+                    a.download = downloadName;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    return;
+                  }
+                  toast.error('Não foi possível baixar este documento');
+                } catch {
+                  toast.error('Não foi possível baixar este documento');
+                }
+              }}
               className="text-emerald-200 hover:text-emerald-100 underline-offset-2 hover:underline text-xs"
             >
               Baixar
@@ -1513,6 +1551,79 @@ const Inbox = () => {
   const [viewerResolvedUrl, setViewerResolvedUrl] = useState('');
   const [viewerResolvedMimeType, setViewerResolvedMimeType] = useState('');
 
+  const sanitizeDownloadName = useCallback((name) => {
+    const raw = String(name || '').trim() || 'arquivo';
+    const withoutReserved = raw.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return withoutReserved || 'arquivo';
+  }, []);
+
+  const triggerClientDownload = useCallback((href, filename) => {
+    if (typeof document === 'undefined') return;
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = sanitizeDownloadName(filename);
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }, [sanitizeDownloadName]);
+
+  const handleViewerDownload = useCallback(async (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    const url = viewerResolvedUrl || currentViewerItem?.url || '';
+    const filename = currentViewerItem?.title || mediaViewer?.title || 'arquivo';
+    if (!url) return;
+
+    if (url.startsWith('data:')) {
+      triggerClientDownload(url, filename);
+      return;
+    }
+
+    const shouldProxy = isWhatsappMediaUrl(url) || isApiMediaProxyUrl(url);
+    if (!shouldProxy) {
+      triggerClientDownload(url, filename);
+      return;
+    }
+
+    const proxyInfo = (() => {
+      const pi = mediaViewer?.proxyInfo;
+      const canUse =
+        pi &&
+        typeof pi === 'object' &&
+        pi.messageId &&
+        pi.remoteJid &&
+        pi.instanceName;
+      if (canUse) {
+        return {
+          messageId: pi.messageId,
+          remoteJid: pi.remoteJid,
+          instanceName: pi.instanceName,
+          fromMe: Boolean(pi.fromMe)
+        };
+      }
+      return parseProxyParamsFromUrl(url);
+    })();
+
+    if (!proxyInfo) {
+      triggerClientDownload(url, filename);
+      return;
+    }
+
+    try {
+      const result = await MediaAPI.proxy(proxyInfo);
+      const dataUrl = result?.dataUrl;
+      if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+        triggerClientDownload(dataUrl, filename);
+        return;
+      }
+      toast.error('Não foi possível baixar esta mídia');
+    } catch {
+      toast.error('Não foi possível baixar esta mídia');
+    }
+  }, [viewerResolvedUrl, currentViewerItem, mediaViewer, triggerClientDownload]);
+
   useEffect(() => {
     if (!mediaViewer?.open) return;
     setViewerZoom(1);
@@ -1679,11 +1790,11 @@ const Inbox = () => {
                 <Trash2 className="w-4 h-4" />
               </button>
               <GlassBadge
-                variant={realtimeConnected ? 'success' : 'danger'}
+                variant={realtimeConnected ? 'success' : 'warning'}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs"
               >
                 {realtimeConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                {realtimeConnected ? 'Ao vivo' : 'Offline'}
+                {realtimeConnected ? 'Ao vivo' : 'Atualizando'}
               </GlassBadge>
             </div>
           </div>
@@ -2619,6 +2730,7 @@ const Inbox = () => {
                   download
                   target="_blank"
                   rel="noreferrer"
+                  onClick={handleViewerDownload}
                   className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100 text-sm"
                 >
                   Baixar
@@ -2706,6 +2818,7 @@ const Inbox = () => {
                           download
                           target="_blank"
                           rel="noreferrer"
+                          onClick={handleViewerDownload}
                           className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100 text-sm"
                         >
                           Baixar
