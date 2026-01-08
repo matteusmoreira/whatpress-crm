@@ -654,6 +654,20 @@ class EvolutionAPI:
                     """
                     if not isinstance(content, dict):
                         return None, None
+
+                    def infer_media_type_from_mime(mime_value: Any) -> Optional[str]:
+                        mt = str(mime_value or "").strip().lower()
+                        if not mt:
+                            return None
+                        if "sticker" in mt or "webp" in mt:
+                            return "sticker"
+                        if "image" in mt:
+                            return "image"
+                        if "video" in mt:
+                            return "video"
+                        if "audio" in mt or "opus" in mt or "ogg" in mt:
+                            return "audio"
+                        return "document"
                     
                     # 1. Check direct keys first (standard path)
                     if 'imageMessage' in content: return 'image', content['imageMessage']
@@ -666,13 +680,27 @@ class EvolutionAPI:
                     if 'ptvMessage' in content: return 'video', content['ptvMessage'] # Video note
 
                     # 2. Check for simplified structure (flat keys)
-                    if 'mimetype' in content and 'url' in content:
-                        mime = str(content['mimetype']).lower()
-                        if 'image' in mime: return 'image', content
-                        if 'video' in mime: return 'video', content
-                        if 'audio' in mime: return 'audio', content
-                        if 'application' in mime or 'text' in mime: return 'document', content
-                        if 'sticker' in mime or 'webp' in mime: return 'sticker', content
+                    mime_value = content.get('mimetype') or content.get('mimeType')
+                    if mime_value is not None:
+                        media_indicators = {
+                            'url',
+                            'directPath',
+                            'mediaKey',
+                            'fileEncSha256',
+                            'fileSha256',
+                            'thumbnailDirectPath',
+                            'jpegThumbnail',
+                            'contextInfo',
+                            'messageContextInfo',
+                            'fileLength',
+                            'seconds',
+                            'ptt',
+                        }
+                        has_indicator = any(k in content for k in media_indicators)
+                        if has_indicator:
+                            inferred = infer_media_type_from_mime(mime_value)
+                            if inferred:
+                                return inferred, content
 
                     # 3. Recursive search for nested media keys (last resort)
                     # Limit depth to avoid infinite loops or performance issues
@@ -688,6 +716,24 @@ class EvolutionAPI:
                         if 'stickerMessage' in curr: return 'sticker', curr['stickerMessage']
                         if 'documentMessage' in curr: return 'document', curr['documentMessage']
                         if 'ptvMessage' in curr: return 'video', curr['ptvMessage']
+                        mime_value = curr.get('mimetype') or curr.get('mimeType')
+                        if mime_value is not None:
+                            inferred = infer_media_type_from_mime(mime_value)
+                            if inferred:
+                                media_indicators = {
+                                    'url',
+                                    'directPath',
+                                    'mediaKey',
+                                    'fileEncSha256',
+                                    'fileSha256',
+                                    'thumbnailDirectPath',
+                                    'jpegThumbnail',
+                                    'fileLength',
+                                    'seconds',
+                                    'ptt',
+                                }
+                                if any(k in curr for k in media_indicators):
+                                    return inferred, curr
 
                         for k, v in curr.items():
                             if isinstance(v, dict):
@@ -774,7 +820,27 @@ class EvolutionAPI:
                         'push_name',
                         'status',
                         'device',
-                        'messageTimestamp'
+                        'messageTimestamp',
+                        'fileLength',
+                        'file_length',
+                        'seconds',
+                        'duration',
+                        'height',
+                        'width',
+                        'mediaKey',
+                        'mediaKeyTimestamp',
+                        'directPath',
+                        'thumbnailDirectPath',
+                        'jpegThumbnail',
+                        'fileSha256',
+                        'fileEncSha256',
+                        'url',
+                        'mimetype',
+                        'mimeType',
+                        'contextInfo',
+                        'messageContextInfo',
+                        'waveform',
+                        'streamingSidecar',
                     }
                     text = extract_text_fallback(message_content, ignore_keys=ignored_keys)
                 if msg_type == 'text' and not (text or '').strip():

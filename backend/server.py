@@ -6,7 +6,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import uuid
 from datetime import datetime, timedelta
 from supabase_client import supabase
@@ -3228,7 +3228,69 @@ async def evolution_webhook(instance_name: str, payload: dict):
                 # Process media: convert temporary WhatsApp URLs to permanent Supabase Storage URLs
                 media_url_final = parsed.get('media_url')
                 detected_mime_type = parsed.get('mime_type')
-                
+
+                def infer_media_kind_from_payload(obj: Any) -> Tuple[Optional[str], Optional[str]]:
+                    stack: List[Any] = [obj]
+                    key_map = {
+                        'imageMessage': 'image',
+                        'videoMessage': 'video',
+                        'audioMessage': 'audio',
+                        'stickerMessage': 'sticker',
+                        'documentMessage': 'document',
+                    }
+                    indicators = {
+                        'url',
+                        'directPath',
+                        'mediaKey',
+                        'fileEncSha256',
+                        'fileSha256',
+                        'thumbnailDirectPath',
+                        'jpegThumbnail',
+                        'fileLength',
+                        'seconds',
+                        'ptt',
+                    }
+                    while stack:
+                        cur = stack.pop()
+                        if isinstance(cur, dict):
+                            for k, hinted in key_map.items():
+                                if k in cur and isinstance(cur.get(k), dict):
+                                    node = cur.get(k) or {}
+                                    mime = node.get('mimetype') or node.get('mimeType') or cur.get('mimetype') or cur.get('mimeType')
+                                    detected = detect_media_kind(declared_mime_type=mime, hinted_kind=hinted)
+                                    if detected.kind != 'unknown':
+                                        return detected.kind, detected.mime_type
+                            mime = cur.get('mimetype') or cur.get('mimeType')
+                            if mime and any(ind in cur for ind in indicators):
+                                detected = detect_media_kind(declared_mime_type=mime)
+                                if detected.kind != 'unknown':
+                                    return detected.kind, detected.mime_type
+                            for v in cur.values():
+                                if isinstance(v, (dict, list)):
+                                    stack.append(v)
+                        elif isinstance(cur, list):
+                            for v in cur:
+                                if isinstance(v, (dict, list)):
+                                    stack.append(v)
+                    return None, None
+
+                if message_type_to_store == 'text':
+                    inferred_kind, inferred_mime = infer_media_kind_from_payload(payload)
+                    if inferred_kind in allowed_message_types and inferred_kind != 'text':
+                        message_type_to_store = inferred_kind
+                        if inferred_mime and not detected_mime_type:
+                            detected_mime_type = inferred_mime
+                        parsed_content = str(parsed.get('content') or '').strip()
+                        if (not parsed_content) or parsed_content.isdigit() or parsed_content.lower() in {'[mensagem]', '[message]'}:
+                            parsed['content'] = (
+                                '[Imagem]' if inferred_kind == 'image'
+                                else '[Vídeo]' if inferred_kind == 'video'
+                                else '[Áudio]' if inferred_kind == 'audio'
+                                else '[Documento]' if inferred_kind == 'document'
+                                else '[Figurinha]' if inferred_kind == 'sticker'
+                                else parsed.get('content')
+                            )
+
                 if message_type_to_store in ['image', 'video', 'audio', 'document', 'sticker'] and parsed.get('message_id'):
                     try:
                         # Fetch base64 media from Evolution API
@@ -3294,7 +3356,7 @@ async def evolution_webhook(instance_name: str, payload: dict):
                         'remote_jid': parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
                         'instance_name': instance_name,
                         'from_me': is_from_me,
-                        'media_kind': parsed.get('media_kind'),
+                        'media_kind': parsed.get('media_kind') or message_type_to_store,
                         'mime_type': detected_mime_type
                     }
                 }
