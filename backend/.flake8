@@ -3,6 +3,7 @@ per-file-ignores =
     __init__.py:W391
     setup_supabase.py:E501,W293,F841,F401,E302
     backend_test.py:E501
+    test_server_webhook_queue.py:E501
     server.py:E501,W293,E302,E303,E117,F811,F841,F401,E722,W291,E127,E741,E305
     evolution_api.py:E501,W293,E302,W291,F541,E306,E701,E261
     features.py:E501,W293,E722

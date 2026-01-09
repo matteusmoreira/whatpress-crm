@@ -2658,6 +2658,87 @@ async def purge_conversations(tenant_id: Optional[str] = None, payload: dict = D
     conv_ids_result = supabase.table('conversations').select('id').eq('tenant_id', effective_tenant_id).execute()
     conversation_ids = [row.get('id') for row in (conv_ids_result.data or []) if row.get('id')]
 
+    def ensure_contacts_for_conversation_ids(tenant_value: str, conv_ids: List[str]) -> None:
+        if not tenant_value:
+            return
+        chunk_size_inner = 200
+        for j in range(0, len(conv_ids or []), chunk_size_inner):
+            id_chunk = [c for c in (conv_ids[j:j + chunk_size_inner] or []) if c]
+            if not id_chunk:
+                continue
+            try:
+                rows = (
+                    supabase.table('conversations')
+                    .select('contact_phone, contact_name, created_at, last_message_at')
+                    .in_('id', id_chunk)
+                    .execute()
+                )
+            except Exception:
+                continue
+            conv_rows = rows.data or []
+            phone_to_row: Dict[str, dict] = {}
+            phones: List[str] = []
+            for r in conv_rows:
+                phone = (r.get('contact_phone') or '').strip()
+                if not phone:
+                    continue
+                if phone not in phone_to_row:
+                    phone_to_row[phone] = r
+                    phones.append(phone)
+            if not phones:
+                continue
+            existing_phones: set = set()
+            try:
+                existing = (
+                    supabase.table('contacts')
+                    .select('phone')
+                    .eq('tenant_id', tenant_value)
+                    .in_('phone', phones)
+                    .execute()
+                )
+                for er in (existing.data or []):
+                    p = (er.get('phone') or '').strip()
+                    if p:
+                        existing_phones.add(p)
+            except Exception:
+                continue
+            missing = [p for p in phones if p not in existing_phones]
+            if not missing:
+                continue
+            first_contact_fallback = datetime.utcnow().isoformat()
+            payload_rows = []
+            for p in missing:
+                r = phone_to_row.get(p) or {}
+                name = (r.get('contact_name') or '').strip() or None
+                first_contact_at = r.get('created_at') or r.get('last_message_at') or first_contact_fallback
+                payload_rows.append({
+                    'tenant_id': tenant_value,
+                    'name': name,
+                    'phone': p,
+                    'source': 'conversation',
+                    'status': 'pending',
+                    'first_contact_at': first_contact_at,
+                    'updated_at': datetime.utcnow().isoformat(),
+                })
+            try:
+                supabase.table('contacts').insert(payload_rows).execute()
+                for pr in payload_rows:
+                    _cache_contact_row(pr)
+            except Exception:
+                payload_rows_alt = []
+                for pr in payload_rows:
+                    pr_alt = dict(pr)
+                    pr_alt['full_name'] = pr_alt.pop('name', None)
+                    payload_rows_alt.append(pr_alt)
+                try:
+                    supabase.table('contacts').insert(payload_rows_alt).execute()
+                    for pr in payload_rows_alt:
+                        _cache_contact_row(pr)
+                except Exception:
+                    pass
+
+    ensure_contacts_for_conversation_ids(str(effective_tenant_id), conversation_ids)
+
     chunk_size = 200
     for i in range(0, len(conversation_ids), chunk_size):
         chunk = conversation_ids[i:i + chunk_size]
@@ -2693,6 +2774,64 @@ async def purge_conversations(tenant_id: Optional[str] = None, payload: dict = D
 @api_router.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, payload: dict = Depends(verify_token)):
     _require_conversation_access(conversation_id, payload)
+
+    try:
+        conv = (
+            supabase.table('conversations')
+            .select('id, tenant_id, contact_phone, contact_name, created_at, last_message_at')
+            .eq('id', conversation_id)
+            .limit(1)
+            .execute()
+        )
+        conversation = conv.data[0] if conv.data else None
+        if conversation and conversation.get('tenant_id') and (conversation.get('contact_phone') or '').strip():
+            tenant_value = str(conversation.get('tenant_id'))
+            raw_phone = (conversation.get('contact_phone') or '').strip()
+            normalized_phone = normalize_phone_number(raw_phone)
+            candidate_phones = [raw_phone]
+            if normalized_phone and normalized_phone != raw_phone:
+                candidate_phones.append(normalized_phone)
+            found = None
+            for phone_value in candidate_phones:
+                try:
+                    existing = (
+                        supabase.table('contacts')
+                        .select('id')
+                        .eq('tenant_id', tenant_value)
+                        .eq('phone', phone_value)
+                        .limit(1)
+                        .execute()
+                    )
+                    if existing.data:
+                        found = existing.data[0]
+                        break
+                except Exception:
+                    continue
+            if not found:
+                name = (conversation.get('contact_name') or '').strip() or None
+                first_contact_at = conversation.get('created_at') or conversation.get('last_message_at') or datetime.utcnow().isoformat()
+                insert_data = {
+                    'tenant_id': tenant_value,
+                    'name': name,
+                    'phone': raw_phone,
+                    'source': 'conversation',
+                    'status': 'pending',
+                    'first_contact_at': first_contact_at,
+                    'updated_at': datetime.utcnow().isoformat(),
+                }
+                try:
+                    supabase.table('contacts').insert(insert_data).execute()
+                    _cache_contact_row(insert_data)
+                except Exception:
+                    insert_data_alt = dict(insert_data)
+                    insert_data_alt['full_name'] = insert_data_alt.pop('name', None)
+                    try:
+                        supabase.table('contacts').insert(insert_data_alt).execute()
+                        _cache_contact_row(insert_data_alt)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
     supabase.table('messages').delete().eq('conversation_id', conversation_id).execute()
     supabase.table('conversations').delete().eq('id', conversation_id).execute()
