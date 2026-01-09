@@ -38,6 +38,11 @@ app = FastAPI(title="WhatsApp CRM API")
 # Configure CORS immediately - Fix for Railway deployment
 # allow_origins=["*"] fails with allow_credentials=True in some browsers/proxies
 def resolve_cors_allow_origins() -> List[str]:
+    required = [
+        "https://whatpress-crm.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
     raw = (os.getenv("CORS_ALLOW_ORIGINS") or "").strip()
     if raw:
         if raw.startswith("["):
@@ -47,9 +52,13 @@ def resolve_cors_allow_origins() -> List[str]:
                     origins: List[str] = []
                     for o in data:
                         if isinstance(o, str) and o.strip():
-                            origins.append(o.strip())
+                            origins.append(o.strip().rstrip("/"))
                     if origins:
-                        return origins
+                        merged = []
+                        for origin in origins + required:
+                            if origin and origin not in merged:
+                                merged.append(origin)
+                        return merged
             except Exception:
                 pass
         parsed = []
@@ -58,12 +67,12 @@ def resolve_cors_allow_origins() -> List[str]:
             if origin:
                 parsed.append(origin)
         if parsed:
-            return parsed
-    return [
-        "https://whatpress-crm.vercel.app",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+            merged = []
+            for origin in parsed + required:
+                if origin and origin not in merged:
+                    merged.append(origin)
+            return merged
+    return required
 
 
 CORS_ALLOW_ORIGINS = resolve_cors_allow_origins()
