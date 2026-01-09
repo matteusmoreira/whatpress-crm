@@ -14,7 +14,9 @@ import {
     RefreshCw,
     Trash2,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    List,
+    LayoutGrid
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
@@ -76,6 +78,7 @@ const Contacts = () => {
     const [formStatus, setFormStatus] = useState('pending');
     const [saving, setSaving] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
+    const [viewMode, setViewMode] = useState('list');
 
     // Load contacts
     const loadContacts = useCallback(async (search = '', pageOffset = 0) => {
@@ -296,13 +299,45 @@ const Contacts = () => {
                         {total} contato{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
                     </p>
                 </div>
-                <GlassButton
-                    onClick={handleCreateContact}
-                    className="flex items-center gap-2"
-                >
-                    <Plus className="w-4 h-4" />
-                    Novo Contato
-                </GlassButton>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-xl bg-white/5 p-1">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('list')}
+                            aria-pressed={viewMode === 'list'}
+                            className={cn(
+                                'p-2 rounded-lg transition-colors',
+                                viewMode === 'list'
+                                    ? 'bg-white/10 text-white'
+                                    : 'text-white/60 hover:bg-white/10 hover:text-white'
+                            )}
+                            title="Lista"
+                        >
+                            <List className="w-4 h-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('grid')}
+                            aria-pressed={viewMode === 'grid'}
+                            className={cn(
+                                'p-2 rounded-lg transition-colors',
+                                viewMode === 'grid'
+                                    ? 'bg-white/10 text-white'
+                                    : 'text-white/60 hover:bg-white/10 hover:text-white'
+                            )}
+                            title="Grade"
+                        >
+                            <LayoutGrid className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <GlassButton
+                        onClick={handleCreateContact}
+                        className="flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Novo Contato
+                    </GlassButton>
+                </div>
             </div>
 
             {/* Search */}
@@ -330,48 +365,99 @@ const Contacts = () => {
                         <p className="text-sm mt-1">Clique em "Novo Contato" para adicionar</p>
                     </div>
                 ) : (
-                    <div className="grid gap-3">
+                    <div
+                        className={cn(
+                            'grid',
+                            viewMode === 'grid'
+                                ? 'gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+                                : 'gap-3 grid-cols-1'
+                        )}
+                    >
                         {contacts.map((contact) => (
                             <GlassCard
                                 key={contact.id}
-                                className="p-4 hover:bg-white/5 transition-colors cursor-pointer"
+                                className={cn(
+                                    'p-4 hover:bg-white/5 transition-colors cursor-pointer',
+                                    viewMode === 'grid' ? 'h-full' : ''
+                                )}
                                 onClick={() => handleEditContact(contact)}
                             >
-                                <div className="flex items-center gap-4">
-                                    <ContactAvatar name={contact.name} />
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="font-semibold text-white truncate">
-                                                {contact.name || 'Sem nome'}
-                                            </h3>
-                                            {contact.status && (
-                                                <GlassBadge
-                                                    variant={formatContactStatus(contact.status).variant}
-                                                    className="px-2 py-0.5 text-xs"
+                                {viewMode === 'grid' ? (
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <ContactAvatar name={contact.name} className="w-11 h-11" />
+                                                <div className="min-w-0">
+                                                    <h3 className="font-semibold text-white truncate">
+                                                        {contact.name || 'Sem nome'}
+                                                    </h3>
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                        {contact.status && (
+                                                            <GlassBadge
+                                                                variant={formatContactStatus(contact.status).variant}
+                                                                className="px-2 py-0.5 text-xs"
+                                                            >
+                                                                {formatContactStatus(contact.status).label}
+                                                            </GlassBadge>
+                                                        )}
+                                                        {contact.source && (
+                                                            <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-white/60">
+                                                                {contact.source}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleViewInInbox(contact);
+                                                    }}
+                                                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                                                    title="Ver conversas"
                                                 >
-                                                    {formatContactStatus(contact.status).label}
-                                                </GlassBadge>
-                                            )}
-                                            {contact.source && (
-                                                <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-white/60">
-                                                    {contact.source}
-                                                </span>
-                                            )}
+                                                    <MessageSquare className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleEditContact(contact);
+                                                    }}
+                                                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                                                    title="Editar contato"
+                                                >
+                                                    <Edit2 className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteContact(contact);
+                                                    }}
+                                                    disabled={deletingId === String(contact.id)}
+                                                    className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    title="Excluir contato"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-3 mt-1 text-sm text-white/60">
-                                            <span className="flex items-center gap-1">
-                                                <Phone className="w-3.5 h-3.5" />
-                                                {contact.phone}
-                                            </span>
+
+                                        <div className="mt-4 text-sm text-white/60 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <Phone className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="truncate">{contact.phone}</span>
+                                            </div>
                                             {contact.email && (
-                                                <span className="flex items-center gap-1">
-                                                    <Mail className="w-3.5 h-3.5" />
-                                                    {contact.email}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <Mail className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="truncate">{contact.email}</span>
+                                                </div>
                                             )}
                                         </div>
+
                                         {contact.tags && contact.tags.length > 0 && (
-                                            <div className="flex items-center gap-1 mt-2 flex-wrap">
+                                            <div className="flex items-center gap-1 mt-4 flex-wrap">
                                                 {contact.tags.slice(0, 3).map((tag, i) => (
                                                     <GlassBadge
                                                         key={i}
@@ -388,46 +474,108 @@ const Contacts = () => {
                                                 )}
                                             </div>
                                         )}
+
                                         {(contact.firstContactAt || contact.createdAt) && (
-                                            <p className="text-xs text-white/40 mt-2">
+                                            <p className="text-xs text-white/40 mt-4">
                                                 1º contato {formatDate(contact.firstContactAt || contact.createdAt)}
                                             </p>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleViewInInbox(contact);
-                                            }}
-                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                                            title="Ver conversas"
-                                        >
-                                            <MessageSquare className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleEditContact(contact);
-                                            }}
-                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                                            title="Editar contato"
-                                        >
-                                            <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteContact(contact);
-                                            }}
-                                            disabled={deletingId === String(contact.id)}
-                                            className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                            title="Excluir contato"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                ) : (
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                            <ContactAvatar name={contact.name} />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <h3 className="font-semibold text-white truncate">
+                                                        {contact.name || 'Sem nome'}
+                                                    </h3>
+                                                    {contact.status && (
+                                                        <GlassBadge
+                                                            variant={formatContactStatus(contact.status).variant}
+                                                            className="px-2 py-0.5 text-xs"
+                                                        >
+                                                            {formatContactStatus(contact.status).label}
+                                                        </GlassBadge>
+                                                    )}
+                                                    {contact.source && (
+                                                        <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-white/60">
+                                                            {contact.source}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mt-1 text-sm text-white/60">
+                                                    <span className="flex items-center gap-1 min-w-0">
+                                                        <Phone className="w-3.5 h-3.5 shrink-0" />
+                                                        <span className="truncate">{contact.phone}</span>
+                                                    </span>
+                                                    {contact.email && (
+                                                        <span className="flex items-center gap-1 min-w-0">
+                                                            <Mail className="w-3.5 h-3.5 shrink-0" />
+                                                            <span className="truncate">{contact.email}</span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {contact.tags && contact.tags.length > 0 && (
+                                                    <div className="flex items-center gap-1 mt-2 flex-wrap">
+                                                        {contact.tags.slice(0, 3).map((tag, i) => (
+                                                            <GlassBadge
+                                                                key={i}
+                                                                variant="success"
+                                                                className="px-2 py-0.5 text-xs"
+                                                            >
+                                                                {tag}
+                                                            </GlassBadge>
+                                                        ))}
+                                                        {contact.tags.length > 3 && (
+                                                            <span className="text-xs text-white/40">
+                                                                +{contact.tags.length - 3}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {(contact.firstContactAt || contact.createdAt) && (
+                                                    <p className="text-xs text-white/40 mt-2">
+                                                        1º contato {formatDate(contact.firstContactAt || contact.createdAt)}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleViewInInbox(contact);
+                                                }}
+                                                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                                                title="Ver conversas"
+                                            >
+                                                <MessageSquare className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleEditContact(contact);
+                                                }}
+                                                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                                                title="Editar contato"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeleteContact(contact);
+                                                }}
+                                                disabled={deletingId === String(contact.id)}
+                                                className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                title="Excluir contato"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </GlassCard>
                         ))}
                     </div>

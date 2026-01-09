@@ -2442,7 +2442,7 @@ async def list_contacts(
                 try:
                     conv_q = (
                         supabase.table("conversations")
-                        .select("contact_phone, contact_name, contact_avatar, last_message_at")
+                        .select("id, contact_phone, contact_name, contact_avatar, last_message_at")
                         .eq("tenant_id", effective_tenant_id)
                         .order("last_message_at", desc=True)
                         .range(0, 999)
@@ -2472,7 +2472,7 @@ async def list_contacts(
                             continue
                     seen.add(phone)
                     derived.append({
-                        'id': f"conv-contact:{phone}",
+                        'id': f"conv-{row.get('id')}",
                         'tenantId': effective_tenant_id,
                         'name': name,
                         'phone': phone,
@@ -2519,7 +2519,7 @@ async def list_contacts(
             try:
                 conv_q = (
                     supabase.table("conversations")
-                    .select("contact_phone, contact_name, contact_avatar, last_message_at")
+                    .select("id, contact_phone, contact_name, contact_avatar, last_message_at")
                     .eq("tenant_id", effective_tenant_id)
                     .order("last_message_at", desc=True)
                     .range(0, 999)
@@ -2542,7 +2542,7 @@ async def list_contacts(
                             continue
                     seen.add(phone)
                     derived.append({
-                        'id': f"conv-contact:{phone}",
+                        'id': f"conv-{row.get('id')}",
                         'tenantId': effective_tenant_id,
                         'name': name,
                         'phone': phone,
@@ -3027,9 +3027,21 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                     raise HTTPException(status_code=400, detail="Nome é obrigatório")
                 if len(name) < 2 or len(name) > 100:
                     raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
-                supabase.table('conversations').update({
-                    'contact_name': name
-                }).eq('id', conversation_id).execute()
+                try:
+                    tenant_value = conversation.get('tenant_id')
+                    phone_value = conversation.get('contact_phone')
+                    if tenant_value and phone_value:
+                        supabase.table('conversations').update({
+                            'contact_name': name
+                        }).eq('tenant_id', tenant_value).eq('contact_phone', phone_value).execute()
+                    else:
+                        supabase.table('conversations').update({
+                            'contact_name': name
+                        }).eq('id', conversation_id).execute()
+                except Exception:
+                    supabase.table('conversations').update({
+                        'contact_name': name
+                    }).eq('id', conversation_id).execute()
 
                 safe_insert_audit_log(
                     tenant_id=conversation.get('tenant_id'),
