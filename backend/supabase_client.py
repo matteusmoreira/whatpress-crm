@@ -8,11 +8,12 @@ import json
 logger = logging.getLogger(__name__)
 
 _SUPABASE_NOT_CONFIGURED_ERROR = (
-    "Supabase não configurado (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)."
+    "Supabase não configurado (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY "
+    "ou SUPABASE_SERVICE_KEY)."
 )
 _SUPABASE_NOT_CONFIGURED_WARNING = (
     "Supabase não configurado: defina SUPABASE_URL e "
-    "SUPABASE_SERVICE_ROLE_KEY."
+    "SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_SERVICE_KEY)."
 )
 
 
@@ -47,6 +48,13 @@ def _is_service_role_key(key: Optional[str]) -> bool:
     return role == "service_role"
 
 
+def _jwt_role(key: Optional[str]) -> str:
+    if not key:
+        return ""
+    payload = _decode_jwt_payload_unverified(key)
+    return str(payload.get("role") or "").strip().lower()
+
+
 SUPABASE_URL = _get_first_env("SUPABASE_URL", "REACT_APP_SUPABASE_URL") or ""
 _candidate_service_key = _get_first_env(
     "SUPABASE_SERVICE_ROLE_KEY",
@@ -68,11 +76,30 @@ ALLOW_ANON_BACKEND = (
     in {"1", "true", "yes", "y"}
 )
 
-_resolved_key = (
-    SUPABASE_SERVICE_ROLE_KEY
-    or (SUPABASE_ANON_KEY if ALLOW_ANON_BACKEND else "")
-    or ""
+SUPABASE_KEY_ROLE = (
+    _jwt_role(_candidate_service_key)
+    or _jwt_role(SUPABASE_ANON_KEY)
 )
+
+if SUPABASE_SERVICE_ROLE_KEY:
+    _resolved_key = SUPABASE_SERVICE_ROLE_KEY
+elif SUPABASE_ANON_KEY and ALLOW_ANON_BACKEND:
+    _resolved_key = SUPABASE_ANON_KEY
+elif _candidate_service_key:
+    _resolved_key = _candidate_service_key
+    role = _jwt_role(_candidate_service_key)
+    if role and role != "service_role":
+        logger.warning(
+            f"Supabase key role={role}; recomendado usar "
+            "service_role no backend."
+        )
+    elif not role:
+        logger.warning(
+            "Supabase key role não detectado; verifique se é "
+            "service_role no backend."
+        )
+else:
+    _resolved_key = ""
 
 
 class _SupabaseNotConfigured:

@@ -10,12 +10,24 @@ from typing import List, Optional, Dict, Any, Tuple
 import uuid
 from datetime import datetime, timedelta
 try:
-    from .supabase_client import supabase
+    from .supabase_client import (
+        supabase,
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        SUPABASE_SERVICE_ROLE_KEY,
+        SUPABASE_KEY_ROLE,
+    )
     from .evolution_api import evolution_api, EvolutionAPI
     from .media_detection import detect_media_kind
     from .features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
 except Exception:
-    from supabase_client import supabase
+    from supabase_client import (
+        supabase,
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        SUPABASE_SERVICE_ROLE_KEY,
+        SUPABASE_KEY_ROLE,
+    )
     from evolution_api import evolution_api, EvolutionAPI
     from media_detection import detect_media_kind
     from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
@@ -92,7 +104,34 @@ app.add_middleware(
 # Healthcheck endpoint (required for Railway)
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "whatpress-crm"}
+    async def _check_db():
+        def _ping():
+            return supabase.table("users").select("id").limit(1).execute()
+        try:
+            await asyncio.to_thread(_ping)
+            return {"ok": True}
+        except Exception as e:
+            if _is_supabase_not_configured_error(e):
+                return {"ok": False, "error": "supabase_not_configured"}
+            if _is_missing_table_or_schema_error(e, "users"):
+                return {"ok": False, "error": "missing_users_table"}
+            if _is_transient_db_error(e):
+                return {"ok": False, "error": "db_unavailable"}
+            return {"ok": False, "error": "db_error"}
+
+    db = await _check_db()
+    config = {
+        "supabase_url_configured": bool(SUPABASE_URL),
+        "supabase_service_role_key_configured": bool(SUPABASE_SERVICE_ROLE_KEY),
+        "supabase_anon_key_configured": bool(SUPABASE_ANON_KEY),
+        "supabase_key_role": SUPABASE_KEY_ROLE or None,
+    }
+    return {
+        "status": "healthy",
+        "service": "whatpress-crm",
+        "database": db,
+        "config": config,
+    }
 
 @app.get("/")
 async def root():
@@ -263,7 +302,14 @@ class LoginResponse(BaseModel):
     token: str
 
 # JWT Secret (needed for login)
-JWT_SECRET = "whatsapp-crm-secret-key-2025"
+JWT_SECRET = (
+    os.getenv("JWT_SECRET")
+    or os.getenv("APP_JWT_SECRET")
+    or "whatsapp-crm-secret-key-2025"
+).strip()
+
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
 
 def create_token(user_id: str, email: str, role: str, tenant_id: Optional[str] = None):
     payload = {
@@ -359,22 +405,30 @@ async def login_options():
 @app.post("/api/auth/login", response_model=LoginResponse)
 async def direct_login(request: LoginRequest):
     """Direct Login path to avoid Router/Prefix issues"""
-    logger.info(f"Login attempt for: {request.email}")
+    email = _normalize_email(request.email)
+    password = str(request.password or "").strip()
+    logger.info(f"Login attempt for: {email}")
 
     def _query_user():
         return (
             supabase.table("users")
             .select("*")
-            .eq("email", request.email)
-            .eq("password_hash", request.password)
+            .eq("email", email)
+            .eq("password_hash", password)
             .execute()
         )
 
     try:
         result = await asyncio.to_thread(_query_user)
-    except Exception:
-        logger.exception("Login failed (database unavailable)")
-        raise HTTPException(status_code=503, detail="Serviço de autenticação indisponível")
+    except Exception as e:
+        logger.exception("Login failed (database error)")
+        if _is_supabase_not_configured_error(e):
+            raise HTTPException(status_code=500, detail="Supabase não configurado no backend.")
+        if _is_missing_table_or_schema_error(e, "users"):
+            raise HTTPException(status_code=503, detail="Banco de dados sem tabela de usuários.")
+        if _is_transient_db_error(e):
+            raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
+        raise HTTPException(status_code=503, detail="Serviço de autenticação indisponível.")
 
     data = getattr(result, "data", None)
     if not data:
@@ -975,9 +1029,13 @@ async def get_current_user(payload: dict = Depends(verify_token)):
     try:
         result = supabase.table('users').select('*').eq('id', payload['user_id']).execute()
     except Exception as e:
+        if _is_supabase_not_configured_error(e):
+            raise HTTPException(status_code=500, detail="Supabase não configurado no backend.")
         if _is_missing_table_or_schema_error(e, "users"):
             raise HTTPException(status_code=503, detail="Banco de dados sem tabela de usuários.")
-        raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
+        if _is_transient_db_error(e):
+            raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
+        raise HTTPException(status_code=500, detail="Erro ao carregar usuário.")
     
     if not result.data:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
