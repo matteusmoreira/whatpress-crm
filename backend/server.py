@@ -744,6 +744,7 @@ class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
+    avatar: Optional[str] = None
     bio: Optional[str] = None
     job_title: Optional[str] = Field(default=None, alias="jobTitle")
     department: Optional[str] = None
@@ -888,6 +889,26 @@ def get_user_tenant_id(payload: dict) -> str:
     if user.data:
         return user.data[0]['tenant_id']
     return None
+
+
+def _require_conversation_access(conversation_id: str, payload: dict) -> dict:
+    conv = supabase.table('conversations').select('id, tenant_id, assigned_to').eq('id', conversation_id).execute()
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+
+    row = conv.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    if user_tenant_id and row.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    role = payload.get('role')
+    if role == 'agent':
+        assigned_to = row.get('assigned_to')
+        user_id = payload.get('user_id')
+        if assigned_to and assigned_to != user_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
+
+    return row
 
 def safe_insert_audit_log(
     tenant_id: Optional[str],
@@ -1075,6 +1096,9 @@ async def update_current_user_profile(data: UserProfileUpdate, payload: dict = D
     if data.phone is not None:
         phone = (data.phone or '').strip()
         update_data['phone'] = phone or None
+    if data.avatar is not None:
+        avatar = (data.avatar or '').strip()
+        update_data['avatar'] = avatar or None
     if data.bio is not None:
         bio = (data.bio or '').strip()
         update_data['bio'] = bio or None
@@ -1236,7 +1260,9 @@ async def create_tenant(tenant: TenantCreate, payload: dict = Depends(verify_tok
 async def get_tenant(tenant_id: str, payload: dict = Depends(verify_token)):
     """Get a single tenant by ID"""
     if payload['role'] != 'superadmin':
-        raise HTTPException(status_code=403, detail="Acesso negado")
+        user_tenant_id = get_user_tenant_id(payload)
+        if not user_tenant_id or str(user_tenant_id) != str(tenant_id):
+            raise HTTPException(status_code=403, detail="Acesso negado")
     
     result = supabase.table('tenants').select('*, plans(*)').eq('id', tenant_id).execute()
     
@@ -1262,7 +1288,11 @@ async def get_tenant(tenant_id: str, payload: dict = Depends(verify_token)):
 async def update_tenant(tenant_id: str, tenant: TenantUpdate, payload: dict = Depends(verify_token)):
     """Update a tenant"""
     if payload['role'] != 'superadmin':
-        raise HTTPException(status_code=403, detail="Acesso negado")
+        if payload.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Acesso negado")
+        user_tenant_id = get_user_tenant_id(payload)
+        if not user_tenant_id or str(user_tenant_id) != str(tenant_id):
+            raise HTTPException(status_code=403, detail="Acesso negado")
     
     data = {k: v for k, v in tenant.dict().items() if v is not None}
     data['updated_at'] = datetime.utcnow().isoformat()
@@ -1602,6 +1632,12 @@ async def delete_user(user_id: str, payload: dict = Depends(verify_token)):
 @api_router.get("/connections")
 async def list_connections(tenant_id: str, payload: dict = Depends(verify_token)):
     """List connections for a tenant"""
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin':
+        if not user_tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant não identificado")
+        if tenant_id != user_tenant_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
     result = supabase.table('connections').select('*').eq('tenant_id', tenant_id).execute()
     
     connections = []
@@ -1623,6 +1659,14 @@ async def list_connections(tenant_id: str, payload: dict = Depends(verify_token)
 @api_router.post("/connections")
 async def create_connection(connection: ConnectionCreate, payload: dict = Depends(verify_token)):
     """Create a new connection"""
+    if payload.get('role') not in ['admin', 'superadmin']:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin':
+        if not user_tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant não identificado")
+        if connection.tenant_id != user_tenant_id:
+            raise HTTPException(status_code=403, detail="Acesso negado")
     data = {
         'tenant_id': connection.tenant_id,
         'provider': connection.provider,
@@ -1657,11 +1701,16 @@ async def create_connection(connection: ConnectionCreate, payload: dict = Depend
 @api_router.post("/connections/{connection_id}/test")
 async def test_connection(connection_id: str, request: Request, payload: dict = Depends(verify_token)):
     """Test a connection"""
+    if payload.get('role') not in ['admin', 'superadmin']:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     if not conn.data:
         raise HTTPException(status_code=404, detail="Conexão não encontrada")
     
     connection = conn.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     
     if connection['provider'] == 'evolution':
         try:
@@ -1721,11 +1770,16 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
 @api_router.get("/connections/{connection_id}/qrcode")
 async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
     """Get QR code for Evolution API connection"""
+    if payload.get('role') not in ['admin', 'superadmin']:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     if not conn.data:
         raise HTTPException(status_code=404, detail="Conexão não encontrada")
     
     connection = conn.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     
     if connection['provider'] != 'evolution':
         raise HTTPException(status_code=400, detail="QR Code disponível apenas para Evolution API")
@@ -1743,11 +1797,16 @@ async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
 @api_router.post("/connections/{connection_id}/sync")
 async def sync_connection_status(connection_id: str, request: Request, payload: dict = Depends(verify_token)):
     """Sincronizar status da conexão com a Evolution API"""
+    if payload.get('role') not in ['admin', 'superadmin']:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     if not conn.data:
         raise HTTPException(status_code=404, detail="Conexão não encontrada")
     
     connection = conn.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     
     if connection['provider'] != 'evolution':
         raise HTTPException(status_code=400, detail="Sincronização disponível apenas para Evolution API")
@@ -1805,6 +1864,14 @@ async def sync_connection_status(connection_id: str, request: Request, payload: 
 @api_router.patch("/connections/{connection_id}/status")
 async def update_connection_status(connection_id: str, status_update: ConnectionStatusUpdate, payload: dict = Depends(verify_token)):
     """Update connection status"""
+    if payload.get('role') not in ['admin', 'superadmin']:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    conn = supabase.table('connections').select('id, tenant_id').eq('id', connection_id).execute()
+    if not conn.data:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada")
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and conn.data[0].get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     data = {'status': status_update.status}
     if status_update.status == 'disconnected':
         data['webhook_url'] = ''
@@ -1830,12 +1897,17 @@ async def update_connection_status(connection_id: str, status_update: Connection
 @api_router.delete("/connections/{connection_id}")
 async def delete_connection(connection_id: str, payload: dict = Depends(verify_token)):
     """Delete a connection and its instance from Evolution API"""
+    if payload.get('role') not in ['admin', 'superadmin']:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
     
     if not conn.data:
         raise HTTPException(status_code=404, detail="Conexão não encontrada")
     
     connection = conn.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
     tenant_id = connection['tenant_id']
     
     # Deletar instância na Evolution API se for provider evolution
@@ -1887,6 +1959,10 @@ async def list_conversations(
             raise HTTPException(status_code=403, detail="Tenant não identificado")
 
         query = supabase.table('conversations').select('*').eq('tenant_id', effective_tenant_id)
+        if payload.get('role') == 'agent':
+            user_id = payload.get('user_id')
+            if user_id:
+                query = query.or_(f"assigned_to.is.null,assigned_to.eq.{user_id}")
 
         if status and status != 'all':
             query = query.eq('status', status)
@@ -2008,6 +2084,7 @@ async def list_conversations(
 @api_router.patch("/conversations/{conversation_id}/status")
 async def update_conversation_status(conversation_id: str, status_update: ConversationStatusUpdate, payload: dict = Depends(verify_token)):
     """Update conversation status"""
+    _require_conversation_access(conversation_id, payload)
     result = supabase.table('conversations').update({'status': status_update.status}).eq('id', conversation_id).execute()
     
     if not result.data:
@@ -2140,6 +2217,7 @@ async def initiate_conversation(data: InitiateConversation, payload: dict = Depe
 @api_router.post("/conversations/{conversation_id}/read")
 async def mark_conversation_read(conversation_id: str, payload: dict = Depends(verify_token)):
     """Mark conversation as read"""
+    _require_conversation_access(conversation_id, payload)
     result = supabase.table('conversations').update({'unread_count': 0}).eq('id', conversation_id).execute()
     
     if not result.data:
@@ -2150,12 +2228,14 @@ async def mark_conversation_read(conversation_id: str, payload: dict = Depends(v
 @api_router.post("/conversations/{conversation_id}/assign")
 async def assign_conversation(conversation_id: str, data: AssignAgent, payload: dict = Depends(verify_token)):
     """Assign conversation to agent"""
+    _require_conversation_access(conversation_id, payload)
     result = await AgentService.assign_conversation(conversation_id, data.agent_id)
     return {"success": True, "assignedTo": data.agent_id}
 
 @api_router.post("/conversations/{conversation_id}/unassign")
 async def unassign_conversation(conversation_id: str, payload: dict = Depends(verify_token)):
     """Unassign conversation"""
+    _require_conversation_access(conversation_id, payload)
     await AgentService.unassign_conversation(conversation_id)
     return {"success": True}
 
@@ -2163,6 +2243,7 @@ async def unassign_conversation(conversation_id: str, payload: dict = Depends(ve
 async def transfer_conversation(conversation_id: str, data: ConversationTransferCreate, payload: dict = Depends(verify_token)):
     user_tenant_id = get_user_tenant_id(payload)
 
+    _require_conversation_access(conversation_id, payload)
     conv = supabase.table('conversations').select('*').eq('id', conversation_id).execute()
     if not conv.data:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")
@@ -2241,6 +2322,7 @@ async def accept_conversation_transfer(conversation_id: str, payload: dict = Dep
     user_id = payload.get('user_id')
     user_tenant_id = get_user_tenant_id(payload)
 
+    _require_conversation_access(conversation_id, payload)
     conv = supabase.table('conversations').select('*').eq('id', conversation_id).execute()
     if not conv.data:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")
@@ -2271,6 +2353,7 @@ async def accept_conversation_transfer(conversation_id: str, payload: dict = Dep
 async def add_label(conversation_id: str, label_id: str, payload: dict = Depends(verify_token)):
     """Add label to conversation"""
     try:
+        _require_conversation_access(conversation_id, payload)
         result = await LabelsService.add_label_to_conversation(conversation_id, label_id)
         if not result:
             raise HTTPException(status_code=404, detail="Conversa não encontrada")
@@ -2285,6 +2368,7 @@ async def add_label(conversation_id: str, label_id: str, payload: dict = Depends
 async def remove_label(conversation_id: str, label_id: str, payload: dict = Depends(verify_token)):
     """Remove label from conversation"""
     try:
+        _require_conversation_access(conversation_id, payload)
         result = await LabelsService.remove_label_from_conversation(conversation_id, label_id)
         if not result:
             raise HTTPException(status_code=404, detail="Conversa não encontrada")
@@ -2352,13 +2436,7 @@ async def purge_conversations(tenant_id: Optional[str] = None, payload: dict = D
 
 @api_router.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, payload: dict = Depends(verify_token)):
-    user_tenant_id = get_user_tenant_id(payload)
-
-    conv = supabase.table('conversations').select('id, tenant_id').eq('id', conversation_id).execute()
-    if not conv.data:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada")
-    if user_tenant_id and conv.data[0].get('tenant_id') != user_tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
+    _require_conversation_access(conversation_id, payload)
 
     supabase.table('messages').delete().eq('conversation_id', conversation_id).execute()
     supabase.table('conversations').delete().eq('id', conversation_id).execute()
@@ -2366,13 +2444,7 @@ async def delete_conversation(conversation_id: str, payload: dict = Depends(veri
 
 @api_router.delete("/conversations/{conversation_id}/messages")
 async def clear_conversation_messages(conversation_id: str, payload: dict = Depends(verify_token)):
-    user_tenant_id = get_user_tenant_id(payload)
-
-    conv = supabase.table('conversations').select('id, tenant_id').eq('id', conversation_id).execute()
-    if not conv.data:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada")
-    if user_tenant_id and conv.data[0].get('tenant_id') != user_tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
+    _require_conversation_access(conversation_id, payload)
 
     supabase.table('messages').delete().eq('conversation_id', conversation_id).execute()
     supabase.table('conversations').update({
@@ -3319,6 +3391,7 @@ async def list_messages(
     payload: dict = Depends(verify_token)
 ):
     """List messages for a conversation"""
+    _require_conversation_access(conversation_id, payload)
 
     def normalize_message_content(content: Any, msg_type: str) -> str:
         if content is None:
@@ -3488,18 +3561,11 @@ async def list_messages(
 
 @api_router.delete("/messages/{message_id}")
 async def delete_message(message_id: str, payload: dict = Depends(verify_token)):
-    user_tenant_id = get_user_tenant_id(payload)
-
     msg = supabase.table('messages').select('id, conversation_id').eq('id', message_id).execute()
     if not msg.data:
         raise HTTPException(status_code=404, detail="Mensagem não encontrada")
     conversation_id = msg.data[0]['conversation_id']
-
-    conv = supabase.table('conversations').select('id, tenant_id').eq('id', conversation_id).execute()
-    if not conv.data:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada")
-    if user_tenant_id and conv.data[0].get('tenant_id') != user_tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
+    _require_conversation_access(conversation_id, payload)
 
     supabase.table('messages').delete().eq('id', message_id).execute()
 
@@ -3583,6 +3649,7 @@ async def delete_message(message_id: str, payload: dict = Depends(verify_token))
 @api_router.post("/messages")
 async def send_message(message: MessageCreate, background_tasks: BackgroundTasks, payload: dict = Depends(verify_token)):
     """Send a new message"""
+    _require_conversation_access(message.conversation_id, payload)
     # Get conversation details
     conv = supabase.table('conversations').select('*, connections(*)').eq('id', message.conversation_id).execute()
     if not conv.data:
@@ -3730,6 +3797,10 @@ async def send_typing_indicator(instance_name: str, phone: str, payload: dict = 
 async def get_message_reactions(message_id: str, payload: dict = Depends(verify_token)):
     """Get reactions for a message"""
     try:
+        msg = supabase.table('messages').select('conversation_id').eq('id', message_id).execute()
+        if not msg.data:
+            raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+        _require_conversation_access(msg.data[0].get('conversation_id'), payload)
         result = supabase.table('message_reactions').select('*, users(name, avatar)').eq('message_id', message_id).execute()
         return [{
             'id': r['id'],
@@ -3746,6 +3817,10 @@ async def get_message_reactions(message_id: str, payload: dict = Depends(verify_
 async def add_message_reaction(message_id: str, emoji: str, payload: dict = Depends(verify_token)):
     """Add a reaction to a message"""
     try:
+        msg = supabase.table('messages').select('conversation_id').eq('id', message_id).execute()
+        if not msg.data:
+            raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+        _require_conversation_access(msg.data[0].get('conversation_id'), payload)
         user_id = payload.get('user_id')
         
         # Check if user already reacted with this emoji
@@ -3771,6 +3846,10 @@ async def add_message_reaction(message_id: str, emoji: str, payload: dict = Depe
 async def remove_message_reaction(message_id: str, reaction_id: str, payload: dict = Depends(verify_token)):
     """Remove a reaction from a message"""
     try:
+        msg = supabase.table('messages').select('conversation_id').eq('id', message_id).execute()
+        if not msg.data:
+            raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+        _require_conversation_access(msg.data[0].get('conversation_id'), payload)
         supabase.table('message_reactions').delete().eq('id', reaction_id).execute()
         return {"success": True}
     except Exception as e:

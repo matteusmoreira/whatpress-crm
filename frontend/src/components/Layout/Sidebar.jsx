@@ -41,6 +41,7 @@ const Sidebar = () => {
   };
 
   const isSuperAdmin = user?.role === 'superadmin';
+  const canManageConnections = user?.role === 'admin';
 
   const navItems = isSuperAdmin
     ? [
@@ -57,7 +58,7 @@ const Sidebar = () => {
       { to: '/app/chatbot', icon: Bot, label: 'Chatbot' },
       { to: '/app/templates', icon: FileText, label: 'Templates' },
       { to: '/app/kb', icon: BookOpen, label: 'Base de Conhecimento' },
-      { to: '/app/settings/connections', icon: Plug, label: 'Conexões' },
+      ...(canManageConnections ? [{ to: '/app/settings/connections', icon: Plug, label: 'Conexões' }] : []),
       { to: '/app/settings', icon: Settings, label: 'Configurações' },
     ];
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Mail,
@@ -10,14 +10,13 @@ import {
   Bell,
   Moon,
   Sun,
-  Globe,
   Key,
   Loader2
 } from 'lucide-react';
 import { GlassBadge, GlassCard, GlassInput, GlassButton } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../context/ThemeContext';
-import { TenantsAPI } from '../lib/api';
+import { TenantsAPI, UploadAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
 
@@ -26,6 +25,9 @@ const Profile = () => {
   const { theme, toggleTheme } = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const avatarInputRef = useRef(null);
+  const [initialCompany, setInitialCompany] = useState('');
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -52,7 +54,9 @@ const Profile = () => {
       if (user?.tenantId) {
         try {
           const tenant = await TenantsAPI.getById(user.tenantId);
-          setFormData(prev => ({ ...prev, company: tenant.name || tenant.companyName || '' }));
+          const nextCompany = tenant.name || tenant.companyName || '';
+          setFormData(prev => ({ ...prev, company: nextCompany }));
+          setInitialCompany(nextCompany);
         } catch (error) {
           console.error('Error loading tenant:', error);
         }
@@ -97,6 +101,18 @@ const Profile = () => {
         signatureIncludeDepartment: Boolean(formData.signatureIncludeDepartment)
       });
 
+      if (user?.role === 'admin' && user?.tenantId) {
+        const nextCompany = (formData.company || '').trim();
+        if (nextCompany && nextCompany !== (initialCompany || '').trim()) {
+          try {
+            await TenantsAPI.update(user.tenantId, { name: nextCompany });
+            setInitialCompany(nextCompany);
+          } catch (error) {
+            toast.error(error.response?.data?.detail || 'Erro ao salvar empresa');
+          }
+        }
+      }
+
       setFormData(prev => ({
         ...prev,
         name: updatedUser?.name || prev.name,
@@ -122,9 +138,36 @@ const Profile = () => {
   };
 
   const handleAvatarChange = () => {
-    toast.info('Funcionalidade em breve', {
-      description: 'Upload de avatar será implementado na próxima versão.'
-    });
+    if (isAvatarUploading) return;
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!String(file.type || '').startsWith('image/')) {
+      toast.error('Selecione uma imagem válida');
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error('Arquivo muito grande', { description: 'Máximo permitido: 10MB' });
+      return;
+    }
+
+    setIsAvatarUploading(true);
+    try {
+      const uploadResult = await UploadAPI.uploadFile(file, user?.id || 'avatar');
+      await updateCurrentUser({ avatar: uploadResult.url });
+      toast.success('Avatar atualizado com sucesso!');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao atualizar avatar');
+    } finally {
+      setIsAvatarUploading(false);
+    }
   };
 
   const handlePasswordChange = () => {
@@ -147,6 +190,13 @@ const Profile = () => {
           <div className="text-center">
             {/* Avatar */}
             <div className="relative inline-block mb-4">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFileSelected}
+                className="hidden"
+              />
               <img
                 src={user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
                 alt={user?.name}
@@ -154,9 +204,10 @@ const Profile = () => {
               />
               <button
                 onClick={handleAvatarChange}
+                disabled={isAvatarUploading}
                 className="absolute bottom-0 right-0 p-2 rounded-full bg-emerald-500 text-white shadow-lg hover:bg-emerald-600 transition-all hover:scale-110 active:scale-95"
               >
-                <Camera className="w-4 h-4" />
+                {isAvatarUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </button>
             </div>
 
@@ -244,7 +295,8 @@ const Profile = () => {
               {isEditing ? (
                 <GlassInput
                   value={formData.company}
-                  disabled
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  disabled={isSaving || user?.role !== 'admin'}
                 />
               ) : (
                 <p className="text-white py-3">{formData.company}</p>
@@ -429,22 +481,6 @@ const Profile = () => {
                   )}
                 />
               </button>
-            </div>
-
-            {/* Language */}
-            <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-              <div className="flex items-center gap-3">
-                <Globe className="w-5 h-5 text-blue-400" />
-                <div>
-                  <p className="text-white font-medium">Idioma</p>
-                  <p className="text-white/50 text-sm">Português (Brasil)</p>
-                </div>
-              </div>
-              <select className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none">
-                <option value="pt-BR">Português (BR)</option>
-                <option value="en">English</option>
-                <option value="es">Español</option>
-              </select>
             </div>
 
             {/* Change Password */}

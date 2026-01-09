@@ -8,16 +8,12 @@ import {
     AlertCircle,
     Activity,
     ArrowUp,
-    ArrowDown,
-    RefreshCw,
-    Download,
-    FileText
+    ArrowDown
 } from 'lucide-react';
-import { GlassCard, GlassButton } from '../components/GlassCard';
+import { GlassCard } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../context/ThemeContext';
-import { AnalyticsAPI, ReportsAPI } from '../lib/api';
-import { toast } from '../components/ui/glass-toaster';
+import { AnalyticsAPI } from '../lib/api';
 import { cn } from '../lib/utils';
 
 // Simple Bar Chart Component
@@ -209,7 +205,6 @@ const Dashboard = () => {
     const [messagesByDay, setMessagesByDay] = useState([]);
     const [agentPerformance, setAgentPerformance] = useState([]);
     const [conversationsByStatus, setConversationsByStatus] = useState([]);
-    const [refreshing, setRefreshing] = useState(false);
 
     const tenantId = user?.tenantId || 'tenant-1';
 
@@ -244,15 +239,6 @@ const Dashboard = () => {
         const interval = setInterval(loadData, 60000);
         return () => clearInterval(interval);
     }, [loadData]);
-
-    const handleRefresh = async () => {
-        setRefreshing(true);
-        setStatsLoading(true);
-        setChartsLoading(true);
-        setAgentsLoading(true);
-        await loadData();
-        setRefreshing(false);
-    };
 
     // Skeleton Components
     const StatSkeleton = () => (
@@ -309,53 +295,6 @@ const Dashboard = () => {
                 <div>
                     <h1 className="text-2xl font-bold text-white">Dashboard</h1>
                     <p className="text-white/50">Visão geral do seu WhatsApp CRM</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {/* Export Buttons */}
-                    <div className="relative group">
-                        <GlassButton variant="secondary">
-                            <Download className="w-4 h-4 mr-2" />
-                            Exportar
-                        </GlassButton>
-                        <div className="absolute right-0 top-full mt-2 w-48 backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                            <div className="p-2">
-                                <button
-                                    onClick={async () => {
-                                        try {
-                                            const url = ReportsAPI.getConversationsCsvUrl(tenantId);
-                                            await ReportsAPI.downloadCsv(url, `conversas_${new Date().toISOString().split('T')[0]}.csv`);
-                                            toast.success('Relatório exportado!');
-                                        } catch (e) {
-                                            toast.error('Erro ao exportar');
-                                        }
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
-                                >
-                                    <FileText className="w-4 h-4" />
-                                    Conversas (CSV)
-                                </button>
-                                <button
-                                    onClick={async () => {
-                                        try {
-                                            const url = ReportsAPI.getAgentsCsvUrl(tenantId);
-                                            await ReportsAPI.downloadCsv(url, `agentes_${new Date().toISOString().split('T')[0]}.csv`);
-                                            toast.success('Relatório exportado!');
-                                        } catch (e) {
-                                            toast.error('Erro ao exportar');
-                                        }
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/10 text-white text-sm"
-                                >
-                                    <Users className="w-4 h-4" />
-                                    Agentes (CSV)
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <GlassButton onClick={handleRefresh} disabled={refreshing}>
-                        <RefreshCw className={cn('w-4 h-4 mr-2', refreshing && 'animate-spin')} />
-                        Atualizar
-                    </GlassButton>
                 </div>
             </div>
 

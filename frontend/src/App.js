@@ -118,7 +118,14 @@ function App() {
                   <Route path="chatbot" element={<Chatbot />} />
                   <Route path="templates" element={<Templates />} />
                   <Route path="kb" element={<KnowledgeBase />} />
-                  <Route path="settings/connections" element={<Connections />} />
+                  <Route
+                    path="settings/connections"
+                    element={
+                      <ProtectedRoute allowedRoles={['admin']}>
+                        <Connections />
+                      </ProtectedRoute>
+                    }
+                  />
                   <Route path="settings/profile" element={<Profile />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="profile" element={<Profile />} />

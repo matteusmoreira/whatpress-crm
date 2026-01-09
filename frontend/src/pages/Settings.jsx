@@ -107,6 +107,7 @@ const Settings = () => {
   const { user } = useAuthStore();
   const { brandName, setBrandName } = useAppStore();
   const [brandNameInput, setBrandNameInput] = useState(brandName || 'WhatsApp CRM');
+  const canManageConnections = user?.role === 'admin';
 
   const initialPrefs = useMemo(() => loadNotificationPrefs(), []);
   const [browserNotifications, setBrowserNotifications] = useState(initialPrefs.browserNotifications);
@@ -141,12 +142,14 @@ const Settings = () => {
           description: 'Gerencie suas informações pessoais',
           to: '/app/settings/profile'
         },
-        {
-          icon: Plug,
-          title: 'Conexões WhatsApp',
-          description: 'Configure seus provedores de mensagens',
-          to: '/app/settings/connections'
-        },
+        ...(canManageConnections
+          ? [{
+            icon: Plug,
+            title: 'Conexões WhatsApp',
+            description: 'Configure seus provedores de mensagens',
+            to: '/app/settings/connections'
+          }]
+          : []),
         {
           icon: Bell,
           title: 'Notificações',

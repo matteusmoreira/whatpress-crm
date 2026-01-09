@@ -20,6 +20,10 @@ class _Query:
         self._ops.append(("eq", field, value))
         return self
 
+    def or_(self, expr):
+        self._ops.append(("or_", expr))
+        return self
+
     def limit(self, n):
         self._ops.append(("limit", n))
         return self
@@ -260,3 +264,152 @@ def test_login_db_error_returns_cors_headers(monkeypatch):
     )
     assert preflight.status_code == 200
     assert preflight.headers.get("access-control-allow-origin") == origin
+
+
+def test_agent_cannot_access_admin_assigned_conversation(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    def table_handler(name, ops):
+        if name == "conversations":
+            conversation_id = None
+            for op in ops:
+                if op[0] == "eq" and op[1] == "id":
+                    conversation_id = op[2]
+                    break
+            if conversation_id == "conv_admin":
+                return _Result(
+                    data=[
+                        {
+                            "id": "conv_admin",
+                            "tenant_id": "tenant1",
+                            "assigned_to": "admin1",
+                        }
+                    ]
+                )
+            if conversation_id == "conv_unassigned":
+                return _Result(
+                    data=[
+                        {
+                            "id": "conv_unassigned",
+                            "tenant_id": "tenant1",
+                            "assigned_to": None,
+                        }
+                    ]
+                )
+            return _Result(data=[])
+
+        if name == "messages":
+            return _Result(data=[])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+
+    denied = client.get("/api/messages", params={"conversation_id": "conv_admin"})
+    assert denied.status_code == 403
+
+    allowed = client.get("/api/messages", params={"conversation_id": "conv_unassigned"})
+    assert allowed.status_code == 200
+
+
+def test_agent_conversations_list_uses_assignment_filter(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    saw_assignment_or = {"value": False}
+
+    def table_handler(name, ops):
+        if name == "conversations":
+            for op in ops:
+                if op[0] == "or_" and isinstance(op[1], str):
+                    if "assigned_to.is.null" in op[1] and "assigned_to.eq.agent1" in op[1]:
+                        saw_assignment_or["value"] = True
+            return _Result(
+                data=[
+                    {
+                        "id": "conv_unassigned",
+                        "tenant_id": "tenant1",
+                        "connection_id": "conn1",
+                        "contact_phone": "5511999999999",
+                        "contact_name": "Contato",
+                        "contact_avatar": None,
+                        "status": "open",
+                        "assigned_to": None,
+                        "last_message_at": None,
+                        "unread_count": 0,
+                        "last_message_preview": "",
+                        "created_at": None,
+                    }
+                ]
+            )
+
+        if name == "connections":
+            return _Result(data=[])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+    resp = client.get("/api/conversations", params={"tenant_id": "tenant1"})
+    assert resp.status_code == 200
+    assert saw_assignment_or["value"] is True
+
+
+def test_agent_cannot_create_connection(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    def table_handler(_name, _ops):
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+    resp = client.post(
+        "/api/connections",
+        json={
+            "tenant_id": "tenant1",
+            "provider": "evolution",
+            "instance_name": "inst",
+            "phone_number": "",
+        },
+    )
+    assert resp.status_code == 403
+
+
+def test_agent_cannot_list_connections_from_other_tenant(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    def table_handler(_name, _ops):
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+    resp = client.get("/api/connections", params={"tenant_id": "tenant2"})
+    assert resp.status_code == 403
