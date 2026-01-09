@@ -439,6 +439,87 @@ code {
   background: linear-gradient(135deg, rgb(248 250 252) 0%, rgb(241 245 249) 100%);
 }
 
+.light .wa-conversations-panel {
+  background-color: #ffffff;
+}
+
+.light .wa-conversations-header {
+  background-color: #f0f2f5;
+  border-bottom-color: #d1d7db;
+}
+
+.light .wa-conversation-item {
+  border-bottom-color: #e9edef;
+}
+
+.light .wa-conversation-item:hover {
+  background-color: #f5f6f6;
+}
+
+.light .wa-conversation-item.wa-active {
+  background-color: #e9edef;
+}
+
+.light .wa-chat-area {
+  background-color: #efeae2;
+  background-image:
+    radial-gradient(circle at 18px 16px, rgba(11, 20, 26, 0.04) 0 1px, transparent 1px),
+    radial-gradient(circle at 64px 40px, rgba(11, 20, 26, 0.03) 0 1px, transparent 1px),
+    radial-gradient(circle at 92px 88px, rgba(11, 20, 26, 0.03) 0 1px, transparent 1px);
+  background-size: 120px 120px;
+}
+
+.light .wa-chat-header,
+.light .wa-chat-composer {
+  background-color: #f0f2f5;
+  border-color: #d1d7db;
+}
+
+.light .wa-bubble {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.light .wa-bubble-in {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+
+.light .wa-bubble-out {
+  background-color: #d9fdd3 !important;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+
+.light .wa-origin-badge,
+.light .wa-type-badge {
+  background-color: transparent !important;
+  border-color: #d1d7db !important;
+  color: #667781 !important;
+}
+
+.light .wa-chat-composer .wa-icon-button {
+  border-radius: 9999px;
+}
+
+.light .wa-message-input {
+  border-color: #d1d7db !important;
+}
+
+.light .wa-send-button {
+  background-color: #00a884 !important;
+  border-color: #00a884 !important;
+  color: #ffffff !important;
+  border-radius: 9999px !important;
+}
+
+.light .wa-icon-inline {
+  color: #54656f;
+}
+
+.light .wa-icon-inline:hover {
+  color: #111b21;
+}
+
 /* Light: Inputs and selects */
 .light select {
   @apply bg-white border-slate-300 text-slate-800;

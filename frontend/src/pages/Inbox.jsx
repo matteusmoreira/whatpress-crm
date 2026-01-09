@@ -1764,16 +1764,16 @@ const Inbox = () => {
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col lg:flex-row">
+    <div className="h-full min-h-0 flex flex-col lg:flex-row wa-inbox">
       {/* Conversations List */}
       <div
         className={cn(
-          'w-full lg:w-96 min-h-0 border-r border-white/10 bg-black/20 flex flex-col',
+          'w-full lg:w-96 min-h-0 border-r border-white/10 bg-black/20 flex flex-col wa-conversations-panel',
           selectedConversation ? 'hidden lg:flex' : 'flex'
         )}
       >
         {/* Header */}
-        <div className="p-4 border-b border-white/10">
+        <div className="p-4 border-b border-white/10 wa-conversations-header">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-white">Conversas</h1>
             <div className="flex items-center gap-2">
@@ -1886,9 +1886,14 @@ const Inbox = () => {
                 key={conv.id}
                 onClick={() => setSelectedConversation(conv)}
                 className={cn(
-                  'p-4 border-b border-white/5 cursor-pointer transition-all',
+                  'p-4 border-b border-white/5 cursor-pointer transition-all wa-conversation-item',
                   'hover:bg-white/5',
-                  selectedConversation?.id === conv.id && 'bg-emerald-500/20 border-l-4 border-l-emerald-500'
+                  selectedConversation?.id === conv.id
+                    ? cn(
+                      'wa-active',
+                      isDark ? 'bg-emerald-500/20 border-l-4 border-l-emerald-500' : 'bg-slate-200'
+                    )
+                    : null
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -1957,14 +1962,14 @@ const Inbox = () => {
         {/* Chat Area */}
         <div
           className={cn(
-            'flex-1 min-h-0 bg-gradient-to-br from-emerald-950/50 to-teal-950/50',
+            'flex-1 min-h-0 bg-gradient-to-br from-emerald-950/50 to-teal-950/50 wa-chat-area',
             selectedConversation ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
           )}
         >
           {selectedConversation ? (
             <>
               {/* Chat Header */}
-              <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20">
+              <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20 wa-chat-header">
                 <div className="flex items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <button
@@ -2007,7 +2012,9 @@ const Inbox = () => {
                           </button>
                         </div>
                       ) : (
-                        <h2 className="text-white font-medium">{selectedConversation.contactName}</h2>
+                        <h2 className={cn('text-white font-medium', !isDark && 'text-[15px] font-semibold')}>
+                          {selectedConversation.contactName}
+                        </h2>
                       )}
                       <button
                         onClick={handleContactNameClick}
@@ -2175,7 +2182,12 @@ const Inbox = () => {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+              <div
+                className={cn(
+                  'flex-1 min-h-0 overflow-y-auto wa-chat-messages',
+                  isDark ? 'p-4 space-y-4' : 'p-5 space-y-2'
+                )}
+              >
                 {messagesLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -2331,17 +2343,21 @@ const Inbox = () => {
 
                               <div
                                 className={cn(
-                                  'max-w-[70%] rounded-2xl px-4 py-3',
+                                  'max-w-[72%] wa-bubble',
                                   msg.direction === 'outbound'
-                                    ? 'bg-emerald-500 text-white rounded-br-md'
-                                    : 'bg-white/10 backdrop-blur-sm text-white rounded-bl-md'
+                                    ? (isDark
+                                      ? 'bg-emerald-500 text-white rounded-2xl rounded-br-md px-4 py-3'
+                                      : 'wa-bubble-out text-slate-900 rounded-lg rounded-br-sm px-3 py-2')
+                                    : (isDark
+                                      ? 'bg-white/10 backdrop-blur-sm text-white rounded-2xl rounded-bl-md px-4 py-3'
+                                      : 'wa-bubble-in text-slate-900 rounded-lg rounded-bl-sm px-3 py-2')
                                 )}
                               >
                                 {typeBadgeInfo && (
                                   <div className="flex items-center gap-2 mb-2">
                                     <div
                                       className={cn(
-                                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide',
+                                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-type-badge',
                                         typeBadgeInfo.badgeClass
                                       )}
                                     >
@@ -2414,10 +2430,10 @@ const Inbox = () => {
                                   )}
                                 >
                                   <Tooltip>
-                                    <TooltipTrigger asChild>
+                                  <TooltipTrigger asChild>
                                       <div
                                         className={cn(
-                                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide',
+                                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-origin-badge',
                                           originInfo.badgeClass
                                         )}
                                       >
@@ -2519,7 +2535,7 @@ const Inbox = () => {
               )}
 
               {/* Input */}
-              <div className="p-4 border-t border-white/10 backdrop-blur-sm bg-black/20 relative">
+              <div className="p-4 border-t border-white/10 backdrop-blur-sm bg-black/20 relative wa-chat-composer">
                 {/* Quick Replies Panel */}
                 {showQuickReplies && (
                   <QuickRepliesPanel
@@ -2535,7 +2551,7 @@ const Inbox = () => {
                       type="button"
                       onClick={() => setShowFileUpload(!showFileUpload)}
                       className={cn(
-                        'p-2 rounded-lg transition-colors',
+                        'p-2 rounded-lg transition-colors wa-icon-button',
                         showFileUpload
                           ? 'bg-emerald-500 text-white'
                           : 'hover:bg-white/10 text-white/60 hover:text-white'
@@ -2547,7 +2563,7 @@ const Inbox = () => {
                       type="button"
                       onClick={() => setShowQuickReplies(!showQuickReplies)}
                       className={cn(
-                        'p-2 rounded-lg transition-colors',
+                        'p-2 rounded-lg transition-colors wa-icon-button',
                         showQuickReplies
                           ? 'bg-emerald-500 text-white'
                           : 'hover:bg-white/10 text-white/60 hover:text-white'
@@ -2562,7 +2578,7 @@ const Inbox = () => {
                           type="button"
                           onClick={() => setUseSignature(!useSignature)}
                           className={cn(
-                            'p-2 rounded-lg transition-colors',
+                            'p-2 rounded-lg transition-colors wa-icon-button',
                             useSignature
                               ? 'bg-emerald-500 text-white'
                               : 'hover:bg-white/10 text-white/60 hover:text-white'
@@ -2585,14 +2601,14 @@ const Inbox = () => {
                         placeholder="Digite sua mensagem..."
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        className="pr-12"
+                        className={cn('pr-12 wa-message-input', !isDark && 'rounded-full')}
                       />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
                         <button
                           type="button"
                           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                           className={cn(
-                            "text-white/40 hover:text-white/60 transition-colors",
+                            "text-white/40 hover:text-white/60 transition-colors wa-icon-inline",
                             showEmojiPicker && "text-emerald-400"
                           )}
                         >
@@ -2607,7 +2623,7 @@ const Inbox = () => {
                         )}
                       </div>
                     </div>
-                    <GlassButton type="submit" className="px-4 py-3" disabled={!newMessage.trim()}>
+                    <GlassButton type="submit" className="px-4 py-3 wa-send-button" disabled={!newMessage.trim()}>
                       <Send className="w-5 h-5" />
                     </GlassButton>
                   </div>
