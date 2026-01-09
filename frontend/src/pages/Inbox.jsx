@@ -787,18 +787,61 @@ const WhatsAppMediaDisplay = ({
     const label = type === 'sticker' ? 'Figurinha' : 'Imagem';
     const title = type === 'sticker' ? (content || 'Figurinha') : (content || 'Imagem');
     const canOpen = Boolean(effectiveUrl);
+    const handleOpen = () => {
+      if (!canOpen && canProxy && !proxyTried) {
+        fetchProxy();
+        return;
+      }
+      if (!effectiveUrl) return;
+      onImageClick?.({ open: true, url: effectiveUrl, title, messageId, kind: type, proxyInfo });
+    };
+
+    if (effectiveUrl && !loadError) {
+      const isSticker = type === 'sticker';
+      return (
+        <div className="relative">
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
+              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleOpen}
+            className="block rounded-xl overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/30"
+            aria-label={`Visualizar ${label.toLowerCase()}`}
+          >
+            <img
+              key={effectiveUrl}
+              src={effectiveUrl}
+              alt={title}
+              className={cn(
+                'rounded-xl bg-black/20 object-contain',
+                isSticker ? 'max-w-[220px] max-h-56' : 'max-w-sm max-h-72 w-full'
+              )}
+              onLoad={() => {
+                setLoading(false);
+                setLoadError(false);
+              }}
+              onError={() => {
+                if ((isWhatsAppUrl || !mediaUrl) && canProxy && !proxyTried) {
+                  fetchProxy();
+                  return;
+                }
+                setLoading(false);
+                setLoadError(true);
+              }}
+            />
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="relative">
         <button
           type="button"
-          onClick={() => {
-            if (!canOpen && canProxy && !proxyTried) {
-              fetchProxy();
-              return;
-            }
-            if (!effectiveUrl) return;
-            onImageClick?.({ open: true, url: effectiveUrl, title, messageId, kind: type, proxyInfo });
-          }}
+          onClick={handleOpen}
           className={cn(
             'flex items-center gap-3 p-3 rounded-xl border w-full text-left focus:outline-none focus:ring-2 focus:ring-white/30',
             direction === 'outbound'

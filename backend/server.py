@@ -2966,6 +2966,22 @@ async def list_contacts(
                     'notConfigured': True
                 }
             if _is_missing_table_or_schema_error(e, "contacts"):
+                cached = _CONTACTS_CACHE_BY_TENANT.get(str(effective_tenant_id))
+                if (
+                    isinstance(cached, dict)
+                    and isinstance(cached.get("data"), list)
+                    and str(cached.get("search") or "") == (search or "")
+                    and int(cached.get("limit") or limit) == int(limit)
+                    and int(cached.get("offset") or offset) == int(offset)
+                ):
+                    return {
+                        'contacts': cached.get("data") or [],
+                        'total': cached.get("total") or len(cached.get("data") or []),
+                        'limit': limit,
+                        'offset': offset,
+                        'cached': True,
+                        'fallback': True
+                    }
                 try:
                     conv_q = (
                         supabase.table("conversations")
@@ -3015,6 +3031,14 @@ async def list_contacts(
 
                 total_derived = len(derived)
                 paged = derived[offset: offset + limit]
+                _CONTACTS_CACHE_BY_TENANT[str(effective_tenant_id)] = {
+                    "data": paged,
+                    "total": total_derived,
+                    "cached_at": datetime.utcnow().isoformat(),
+                    "search": search or "",
+                    "limit": limit,
+                    "offset": offset,
+                }
                 return {
                     'contacts': paged,
                     'total': total_derived,
@@ -3044,6 +3068,22 @@ async def list_contacts(
 
         if not contacts:
             try:
+                cached = _CONTACTS_CACHE_BY_TENANT.get(str(effective_tenant_id))
+                if (
+                    isinstance(cached, dict)
+                    and isinstance(cached.get("data"), list)
+                    and str(cached.get("search") or "") == (search or "")
+                    and int(cached.get("limit") or limit) == int(limit)
+                    and int(cached.get("offset") or offset) == int(offset)
+                ):
+                    return {
+                        'contacts': cached.get("data") or [],
+                        'total': cached.get("total") or len(cached.get("data") or []),
+                        'limit': limit,
+                        'offset': offset,
+                        'cached': True,
+                        'fallback': True
+                    }
                 conv_q = (
                     supabase.table("conversations")
                     .select("id, contact_phone, contact_name, contact_avatar, last_message_at")
@@ -3084,6 +3124,14 @@ async def list_contacts(
                     })
                 total_derived = len(derived)
                 paged = derived[offset: offset + limit]
+                _CONTACTS_CACHE_BY_TENANT[str(effective_tenant_id)] = {
+                    "data": paged,
+                    "total": total_derived,
+                    "cached_at": datetime.utcnow().isoformat(),
+                    "search": search or "",
+                    "limit": limit,
+                    "offset": offset,
+                }
                 return {
                     'contacts': paged,
                     'total': total_derived,
