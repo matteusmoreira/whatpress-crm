@@ -359,30 +359,45 @@ async def login_options():
 @app.post("/api/auth/login", response_model=LoginResponse)
 async def direct_login(request: LoginRequest):
     """Direct Login path to avoid Router/Prefix issues"""
-    print(f"Login attempt for: {request.email}")
-    result = supabase.table('users').select('*').eq('email', request.email).eq('password_hash', request.password).execute()
-    
-    if not result.data:
+    logger.info(f"Login attempt for: {request.email}")
+
+    def _query_user():
+        return (
+            supabase.table("users")
+            .select("*")
+            .eq("email", request.email)
+            .eq("password_hash", request.password)
+            .execute()
+        )
+
+    try:
+        result = await asyncio.to_thread(_query_user)
+    except Exception:
+        logger.exception("Login failed (database unavailable)")
+        raise HTTPException(status_code=503, detail="Serviço de autenticação indisponível")
+
+    data = getattr(result, "data", None)
+    if not data:
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
-    
-    user = result.data[0]
-    token = create_token(user['id'], user['email'], user['role'], user.get('tenant_id'))
-    
+
+    user = data[0]
+    token = create_token(user["id"], user["email"], user["role"], user.get("tenant_id"))
+
     user_response = {
-        'id': user['id'],
-        'email': user['email'],
-        'name': user['name'],
-        'role': user['role'],
-        'tenantId': user['tenant_id'],
-        'avatar': user['avatar'],
-        'jobTitle': user.get('job_title'),
-        'department': user.get('department'),
-        'signatureEnabled': user.get('signature_enabled', True),
-        'signatureIncludeTitle': user.get('signature_include_title', False),
-        'signatureIncludeDepartment': user.get('signature_include_department', False),
-        'createdAt': user['created_at']
+        "id": user["id"],
+        "email": user["email"],
+        "name": user["name"],
+        "role": user["role"],
+        "tenantId": user.get("tenant_id"),
+        "avatar": user.get("avatar"),
+        "jobTitle": user.get("job_title"),
+        "department": user.get("department"),
+        "signatureEnabled": user.get("signature_enabled", True),
+        "signatureIncludeTitle": user.get("signature_include_title", False),
+        "signatureIncludeDepartment": user.get("signature_include_department", False),
+        "createdAt": user.get("created_at"),
     }
-    
+
     return {"user": user_response, "token": token}
 
 # Create a router with the /api prefix, ensuring trailing slash handling

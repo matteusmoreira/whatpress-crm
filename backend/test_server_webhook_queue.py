@@ -217,3 +217,46 @@ def test_transient_db_error_detection():
 
     assert server._is_transient_db_error(Exception("502 Bad Gateway")) is True
     assert server._is_transient_db_error(Exception("PGRST205")) is False
+
+
+def test_login_db_error_returns_cors_headers(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    class _ExplodingQuery:
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            raise Exception("db down")
+
+    class _SupabaseExploding:
+        def table(self, _name):
+            return _ExplodingQuery()
+
+    monkeypatch.setattr(server, "supabase", _SupabaseExploding())
+
+    client = TestClient(server.app)
+    origin = "https://whatpress-crm.vercel.app"
+
+    resp = client.post(
+        "/api/auth/login",
+        headers={"Origin": origin},
+        json={"email": "x@y.com", "password": "bad"},
+    )
+    assert resp.status_code == 503
+    assert resp.headers.get("access-control-allow-origin") == origin
+
+    preflight = client.options(
+        "/api/auth/login",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,authorization",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers.get("access-control-allow-origin") == origin
