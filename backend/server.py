@@ -40,7 +40,25 @@ app = FastAPI(title="WhatsApp CRM API")
 def resolve_cors_allow_origins() -> List[str]:
     raw = (os.getenv("CORS_ALLOW_ORIGINS") or "").strip()
     if raw:
-        return [o.strip() for o in raw.split(",") if o.strip()]
+        if raw.startswith("["):
+            try:
+                data = json.loads(raw)
+                if isinstance(data, list):
+                    origins: List[str] = []
+                    for o in data:
+                        if isinstance(o, str) and o.strip():
+                            origins.append(o.strip())
+                    if origins:
+                        return origins
+            except Exception:
+                pass
+        parsed = []
+        for o in raw.split(","):
+            origin = (o or "").strip().strip("'\"`").rstrip("/")
+            if origin:
+                parsed.append(origin)
+        if parsed:
+            return parsed
     return [
         "https://whatpress-crm.vercel.app",
         "http://localhost:3000",
@@ -58,8 +76,8 @@ app.add_middleware(
     allow_origins=CORS_ALLOW_ORIGINS,
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Healthcheck endpoint (required for Railway)

@@ -19,6 +19,7 @@ _SUPABASE_NOT_CONFIGURED_WARNING = (
 def _get_first_env(*names: str) -> Optional[str]:
     for name in names:
         value = (os.getenv(name) or "").strip()
+        value = value.strip("'\"`").strip()
         if value:
             return value
     return None
