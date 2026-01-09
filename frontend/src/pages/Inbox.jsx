@@ -2185,7 +2185,7 @@ const Inbox = () => {
               <div
                 className={cn(
                   'flex-1 min-h-0 overflow-y-auto wa-chat-messages',
-                  isDark ? 'p-4 space-y-4' : 'p-5 space-y-2'
+                  isDark ? 'p-4 space-y-4' : 'p-4 space-y-0'
                 )}
               >
                 {messagesLoading ? (
@@ -2194,8 +2194,21 @@ const Inbox = () => {
                   </div>
                 ) : (
                   <>
-                    {messages.map((msg) => (
-                      <div key={msg.id}>
+                    {messages.map((msg, index) => {
+                      const prev = index > 0 ? messages[index - 1] : null;
+                      const sameDirection = Boolean(prev && prev.direction === msg.direction);
+                      const prevTs = prev ? (Date.parse(prev.timestamp) || new Date(prev.timestamp).getTime() || 0) : 0;
+                      const curTs = Date.parse(msg.timestamp) || new Date(msg.timestamp).getTime() || 0;
+                      const gapMs = prevTs && curTs ? Math.abs(curTs - prevTs) : Number.POSITIVE_INFINITY;
+                      const grouped = sameDirection && gapMs <= 5 * 60 * 1000;
+                      const wrapClassName = cn(
+                        'wa-message-wrap',
+                        msg.direction === 'outbound' ? 'wa-out' : 'wa-in',
+                        grouped ? 'wa-group-continue' : 'wa-group-start'
+                      );
+
+                      return (
+                      <div key={msg.id} className={wrapClassName}>
                         {(() => {
                           const rawContent = typeof msg.content === 'string'
                             ? msg.content
@@ -2318,7 +2331,7 @@ const Inbox = () => {
                           return (
                             <div
                               className={cn(
-                                'flex group',
+                                'flex group wa-message-row',
                                 msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
                               )}
                             >
@@ -2430,7 +2443,7 @@ const Inbox = () => {
                                   )}
                                 >
                                   <Tooltip>
-                                  <TooltipTrigger asChild>
+                                    <TooltipTrigger asChild>
                                       <div
                                         className={cn(
                                           'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-origin-badge',
@@ -2481,7 +2494,8 @@ const Inbox = () => {
                           );
                         })()}
                       </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </>
                 )}
