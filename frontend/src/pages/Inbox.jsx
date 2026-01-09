@@ -308,6 +308,8 @@ const extractQualityVariants = (meta, fallbackUrl) => {
 };
 
 const InlineAudioPlayer = ({ src, title, meta }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const audioRef = useRef(null);
   const [readySrc, setReadySrc] = useState('');
   const [pendingPlay, setPendingPlay] = useState(false);
@@ -435,6 +437,8 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
   const progressMax = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const progressNow = Number.isFinite(currentTime) && currentTime > 0 ? Math.min(currentTime, progressMax) : 0;
   const progressRatio = progressMax > 0 ? progressNow / progressMax : 0;
+  const progressPercent = `${Math.max(0, Math.min(1, progressRatio)) * 100}%`;
+  const volumePercent = `${Math.max(0, Math.min(1, volume)) * 100}%`;
 
   const rawSize = meta ? (meta.file_size ?? meta.fileSize ?? meta.size ?? meta.bytes ?? null) : null;
   const sizeNumber = typeof rawSize === 'number' ? rawSize : rawSize ? Number(rawSize) : 0;
@@ -449,15 +453,22 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
   const mimeDisplay = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime ?? '') : '';
 
   return (
-    <div className="w-full min-w-[260px] rounded-xl border border-white/10 bg-black/20 p-3">
+    <div
+      className={cn(
+        'wa-inline-audio w-full min-w-[260px] rounded-xl border p-3',
+        isDark ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-white/80'
+      )}
+    >
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={togglePlay}
           disabled={!src || loadError}
           className={cn(
-            'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border',
-            loadError ? 'bg-red-500/10 border-red-400/30 text-red-200' : 'bg-emerald-500/15 border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/25'
+            'wa-audio-play w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border',
+            loadError
+              ? (isDark ? 'bg-red-500/10 border-red-400/30 text-red-200' : 'bg-red-50 border-red-200 text-red-700')
+              : (isDark ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/25' : 'bg-white border-slate-200 text-emerald-700 hover:bg-slate-50 shadow-sm')
           )}
           aria-label={isPlaying ? 'Pausar áudio' : 'Reproduzir áudio'}
         >
@@ -467,7 +478,7 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium truncate">{title || 'Áudio'}</p>
-            <p className="text-xs text-white/60 tabular-nums">
+            <p className={cn('text-xs tabular-nums', isDark ? 'text-white/60' : 'text-slate-500')}>
               {formatMediaTime(progressNow)} / {formatMediaTime(progressMax)}
             </p>
           </div>
@@ -481,7 +492,8 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
               value={progressNow}
               onChange={(e) => seekTo(e.target.value)}
               disabled={!readySrc || loadError || !progressMax}
-              className="flex-1"
+              className="wa-audio-range flex-1"
+              style={{ '--wa-range-value': progressPercent }}
               aria-label="Progresso do áudio"
             />
             <input
@@ -492,19 +504,25 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
               value={volume}
               onChange={(e) => setPlayerVolume(e.target.value)}
               disabled={loadError}
-              className="w-24"
+              className="wa-audio-range w-28 sm:w-24"
+              style={{ '--wa-range-value': volumePercent }}
               aria-label="Volume do áudio"
             />
           </div>
         </div>
       </div>
 
-      <div className="mt-3 relative h-10 rounded-lg bg-black/40 overflow-hidden">
+      <div
+        className={cn(
+          'mt-3 relative h-10 rounded-lg overflow-hidden',
+          isDark ? 'bg-black/40' : 'bg-slate-200'
+        )}
+      >
         <div className="absolute inset-0 flex items-end gap-[2px] px-2">
           {INLINE_WAVEFORM_BARS.map((h, index) => (
             <div
               key={index}
-              className="flex-1 bg-white/20 rounded-full"
+              className={cn('flex-1 rounded-full', isDark ? 'bg-white/20' : 'bg-slate-400/40')}
               style={{ height: `${h * 100}%` }}
             />
           ))}
@@ -519,7 +537,7 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
                 key={index}
                 className={cn(
                   'flex-1 rounded-full',
-                  loadError ? 'bg-red-400/70' : 'bg-emerald-400/80'
+                  loadError ? (isDark ? 'bg-red-400/70' : 'bg-red-500/70') : (isDark ? 'bg-emerald-400/80' : 'bg-[#00a884]')
                 )}
                 style={{ height: `${h * 100}%` }}
               />
@@ -528,7 +546,7 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
         </div>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-white/60">
+      <div className={cn('mt-2 flex items-center justify-between gap-3 text-[11px]', isDark ? 'text-white/60' : 'text-slate-500')}>
         <span className="truncate">
           {progressMax ? `Duração: ${formatMediaTime(progressMax)}` : 'Duração desconhecida'}
         </span>
@@ -548,7 +566,10 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
             download
             target="_blank"
             rel="noreferrer"
-            className="text-emerald-200 hover:text-emerald-100 underline-offset-2 hover:underline"
+            className={cn(
+              'underline-offset-2 hover:underline',
+              isDark ? 'text-emerald-200 hover:text-emerald-100' : 'text-emerald-700 hover:text-emerald-800'
+            )}
           >
             Baixar áudio
           </a>
@@ -556,17 +577,22 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
       </div>
 
       {isLoading && !loadError && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-white/60">
-          <div className="w-4 h-4 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+        <div className={cn('mt-2 flex items-center gap-2 text-xs', isDark ? 'text-white/60' : 'text-slate-500')}>
+          <div className={cn('w-4 h-4 border-2 rounded-full animate-spin', isDark ? 'border-white/20 border-t-white/60' : 'border-slate-300 border-t-slate-500')} />
           Carregando…
         </div>
       )}
 
       {loadError && (
-        <div className="mt-2 flex items-center justify-between gap-3 text-xs text-red-200">
+        <div className={cn('mt-2 flex items-center justify-between gap-3 text-xs', isDark ? 'text-red-200' : 'text-red-700')}>
           <span className="truncate">Não foi possível reproduzir este áudio.</span>
           {src && (
-            <a href={src} target="_blank" rel="noreferrer" className="text-white/80 hover:text-white underline">
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              className={cn('underline', isDark ? 'text-white/80 hover:text-white' : 'text-slate-700 hover:text-slate-900')}
+            >
               Abrir
             </a>
           )}
@@ -2984,6 +3010,35 @@ const Inbox = () => {
                     </div>
                   )}
 
+                  {/* Status */}
+                  {contactData.status && (
+                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                        <Circle
+                          className={cn(
+                            "w-4 h-4",
+                            String(contactData.status).trim().toLowerCase() === 'verified'
+                              ? 'text-emerald-400'
+                              : String(contactData.status).trim().toLowerCase() === 'unverified'
+                                ? 'text-amber-400'
+                                : 'text-amber-400'
+                          )}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-white/50 text-xs">Status</p>
+                        <p className="text-white">
+                          {(() => {
+                            const s = String(contactData.status || '').trim().toLowerCase();
+                            if (s === 'verified') return 'Verificado';
+                            if (s === 'unverified') return 'Não verificado';
+                            return 'Pendente';
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Tags */}
                   {contactData.tags && contactData.tags.length > 0 && (
                     <div className="p-3 bg-white/5 rounded-lg">
@@ -3027,6 +3082,11 @@ const Inbox = () => {
                   )}
 
                   {/* Created At */}
+                  {contactData.firstContactAt && (
+                    <div className="text-center text-white/40 text-xs mt-4">
+                      1º contato em {new Date(contactData.firstContactAt).toLocaleDateString('pt-BR')}
+                    </div>
+                  )}
                   {contactData.createdAt && (
                     <div className="text-center text-white/40 text-xs mt-4">
                       Criado em {new Date(contactData.createdAt).toLocaleDateString('pt-BR')}

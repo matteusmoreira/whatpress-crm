@@ -3546,28 +3546,31 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
             conversation = conv.data[0]
             if user_tenant_id and conversation.get('tenant_id') != user_tenant_id:
                 raise HTTPException(status_code=403, detail="Acesso negado")
+
+            tenant_value = conversation.get('tenant_id')
+            phone_value = (conversation.get('contact_phone') or '').strip()
+            normalized_phone = normalize_phone_number(phone_value) or phone_value
+            desired_name: Optional[str] = None
             
             # Update conversation contact name
             if data.full_name is not None:
-                name = (data.full_name or '').strip()
-                if not name:
+                desired_name = (data.full_name or '').strip()
+                if not desired_name:
                     raise HTTPException(status_code=400, detail="Nome é obrigatório")
-                if len(name) < 2 or len(name) > 100:
+                if len(desired_name) < 2 or len(desired_name) > 100:
                     raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
                 try:
-                    tenant_value = conversation.get('tenant_id')
-                    phone_value = conversation.get('contact_phone')
                     if tenant_value and phone_value:
                         supabase.table('conversations').update({
-                            'contact_name': name
+                            'contact_name': desired_name
                         }).eq('tenant_id', tenant_value).eq('contact_phone', phone_value).execute()
                     else:
                         supabase.table('conversations').update({
-                            'contact_name': name
+                            'contact_name': desired_name
                         }).eq('id', conversation_id).execute()
                 except Exception:
                     supabase.table('conversations').update({
-                        'contact_name': name
+                        'contact_name': desired_name
                     }).eq('id', conversation_id).execute()
 
                 safe_insert_audit_log(
@@ -3578,12 +3581,156 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
                     entity_id=conversation_id,
                     metadata={'fields': ['contact_name']}
                 )
-            
+
+            created_or_updated_contact = None
+            should_upsert_contact = any([
+                data.email is not None,
+                data.tags is not None,
+                data.custom_fields is not None,
+                data.social_links is not None,
+                data.notes_html is not None,
+                data.status is not None,
+            ])
+
+            if should_upsert_contact and tenant_value and normalized_phone:
+                try:
+                    existing_contact = None
+                    try:
+                        existing = _db_call_with_retry(
+                            "contacts.upsert_by_conv.get",
+                            lambda: supabase.table('contacts').select('*').eq('tenant_id', tenant_value).eq('phone', normalized_phone).limit(1).execute()
+                        )
+                        if (not existing.data) and phone_value and phone_value != normalized_phone:
+                            existing = _db_call_with_retry(
+                                "contacts.upsert_by_conv.get_raw",
+                                lambda: supabase.table('contacts').select('*').eq('tenant_id', tenant_value).eq('phone', phone_value).limit(1).execute()
+                            )
+                        if existing.data:
+                            existing_contact = existing.data[0]
+                    except Exception:
+                        existing_contact = None
+
+                    if existing_contact and existing_contact.get('id'):
+                        update_data: Dict[str, Any] = {}
+                        if desired_name is not None:
+                            update_data['name'] = desired_name
+                        if data.email is not None:
+                            update_data['email'] = (data.email or '').strip() or None
+                        if data.tags is not None:
+                            update_data['tags'] = data.tags or []
+                        if data.custom_fields is not None:
+                            update_data['custom_fields'] = data.custom_fields or {}
+                        if data.social_links is not None:
+                            update_data['social_links'] = data.social_links or {}
+                        if data.notes_html is not None:
+                            update_data['notes_html'] = data.notes_html or ''
+                        if data.status is not None:
+                            raw_status = str(data.status or '').strip().lower()
+                            normalized_status = {
+                                'pendente': 'pending',
+                                'pending': 'pending',
+                                'nao verificado': 'unverified',
+                                'não verificado': 'unverified',
+                                'unverified': 'unverified',
+                                'verificado': 'verified',
+                                'verified': 'verified'
+                            }.get(raw_status)
+                            if not normalized_status:
+                                raise HTTPException(status_code=400, detail="Status inválido")
+                            update_data['status'] = normalized_status
+                        if update_data:
+                            update_data['updated_at'] = datetime.utcnow().isoformat()
+                            updated = _db_call_with_retry(
+                                "contacts.upsert_by_conv.update",
+                                lambda: supabase.table('contacts').update(update_data).eq('id', existing_contact.get('id')).execute()
+                            )
+                            if updated.data:
+                                created_or_updated_contact = updated.data[0]
+                    else:
+                        name_value = (
+                            (desired_name or '').strip()
+                            or (conversation.get('contact_name') or '').strip()
+                            or normalized_phone
+                        )
+
+                        raw_status = str(data.status or 'pending').strip().lower()
+                        normalized_status = {
+                            'pendente': 'pending',
+                            'pending': 'pending',
+                            'nao verificado': 'unverified',
+                            'não verificado': 'unverified',
+                            'unverified': 'unverified',
+                            'verificado': 'verified',
+                            'verified': 'verified'
+                        }.get(raw_status) or 'pending'
+
+                        insert_data = {
+                            'tenant_id': tenant_value,
+                            'name': name_value,
+                            'phone': normalized_phone,
+                            'email': (data.email or '').strip() or None,
+                            'tags': data.tags or [],
+                            'custom_fields': data.custom_fields or {},
+                            'social_links': data.social_links or {},
+                            'notes_html': data.notes_html or '',
+                            'source': 'conversation',
+                            'status': normalized_status,
+                            'first_contact_at': conversation.get('created_at') or datetime.utcnow().isoformat(),
+                            'updated_at': datetime.utcnow().isoformat(),
+                        }
+
+                        insert_result = None
+                        try:
+                            insert_result = _db_call_with_retry(
+                                "contacts.upsert_by_conv.insert",
+                                lambda: supabase.table('contacts').insert(insert_data).execute()
+                            )
+                        except Exception:
+                            insert_result = None
+
+                        if not insert_result or not insert_result.data:
+                            insert_data_alt = dict(insert_data)
+                            insert_data_alt['full_name'] = insert_data_alt.pop('name', None)
+                            try:
+                                insert_result = _db_call_with_retry(
+                                    "contacts.upsert_by_conv.insert_alt",
+                                    lambda: supabase.table('contacts').insert(insert_data_alt).execute()
+                                )
+                            except Exception:
+                                insert_result = None
+
+                        if insert_result and insert_result.data:
+                            created_or_updated_contact = insert_result.data[0]
+                except HTTPException:
+                    raise
+                except Exception:
+                    created_or_updated_contact = None
+
+            if created_or_updated_contact:
+                _cache_contact_row(created_or_updated_contact)
+                full_name_value = created_or_updated_contact.get('full_name') or created_or_updated_contact.get('name') or normalized_phone
+                return {
+                    'id': created_or_updated_contact.get('id'),
+                    'tenantId': created_or_updated_contact.get('tenant_id'),
+                    'phone': created_or_updated_contact.get('phone'),
+                    'fullName': full_name_value,
+                    'email': created_or_updated_contact.get('email'),
+                    'tags': created_or_updated_contact.get('tags') or [],
+                    'customFields': created_or_updated_contact.get('custom_fields') or {},
+                    'socialLinks': created_or_updated_contact.get('social_links') or {},
+                    'notesHtml': created_or_updated_contact.get('notes_html') or '',
+                    'status': created_or_updated_contact.get('status'),
+                    'firstContactAt': created_or_updated_contact.get('first_contact_at'),
+                    'source': created_or_updated_contact.get('source'),
+                    'createdAt': created_or_updated_contact.get('created_at'),
+                    'updatedAt': created_or_updated_contact.get('updated_at')
+                }
+
             return {
                 'id': contact_id,
                 'tenantId': conversation.get('tenant_id'),
                 'phone': conversation.get('contact_phone'),
-                'fullName': data.full_name or conversation.get('contact_name'),
+                'fullName': desired_name or conversation.get('contact_name'),
                 'socialLinks': {},
                 'notesHtml': '',
                 'createdAt': conversation.get('created_at'),

@@ -576,6 +576,78 @@ code {
   @apply bg-slate-100/90;
 }
 
+.wa-audio-range {
+  --wa-range-value: 0%;
+  --wa-range-fill: rgba(52, 211, 153, 0.9);
+  --wa-range-track: rgba(255, 255, 255, 0.2);
+  --wa-range-thumb: rgb(52 211 153);
+  --wa-range-thumb-border: rgba(255, 255, 255, 0.35);
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--wa-range-fill) 0%,
+    var(--wa-range-fill) var(--wa-range-value),
+    var(--wa-range-track) var(--wa-range-value),
+    var(--wa-range-track) 100%
+  );
+  outline: none;
+}
+
+.wa-audio-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--wa-range-thumb);
+  border: 2px solid var(--wa-range-thumb-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.wa-audio-range::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--wa-range-track);
+  border: none;
+}
+
+.wa-audio-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--wa-range-fill);
+}
+
+.wa-audio-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--wa-range-thumb);
+  border: 2px solid var(--wa-range-thumb-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.wa-audio-range:focus-visible {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.wa-audio-range:disabled {
+  opacity: 0.6;
+}
+
+.light .wa-audio-range {
+  --wa-range-fill: #00a884;
+  --wa-range-track: #d1d7db;
+  --wa-range-thumb: #00a884;
+  --wa-range-thumb-border: #ffffff;
+}
+
+.light .wa-inline-audio {
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.08);
+}
+
 /* ============================================
    TEMA ESCURO (Padrão) - Refinamentos
    ============================================ */
