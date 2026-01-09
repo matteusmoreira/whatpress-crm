@@ -256,13 +256,15 @@ class LoginResponse(BaseModel):
 # JWT Secret (needed for login)
 JWT_SECRET = "whatsapp-crm-secret-key-2025"
 
-def create_token(user_id: str, email: str, role: str):
+def create_token(user_id: str, email: str, role: str, tenant_id: Optional[str] = None):
     payload = {
         "user_id": user_id,
         "email": email,
         "role": role,
         "exp": datetime.utcnow().timestamp() + 86400 * 7  # 7 days
     }
+    if tenant_id:
+        payload["tenant_id"] = tenant_id
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 def resolve_public_base_url(request: Optional[Request] = None) -> str:
@@ -355,7 +357,7 @@ async def direct_login(request: LoginRequest):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     
     user = result.data[0]
-    token = create_token(user['id'], user['email'], user['role'])
+    token = create_token(user['id'], user['email'], user['role'], user.get('tenant_id'))
     
     user_response = {
         'id': user['id'],
@@ -435,6 +437,15 @@ def _is_supabase_not_configured_error(exc: Exception) -> bool:
     return "supabase não configurado" in s or "supabase nao configurado" in s
 
 def _db_call_with_retry(op_name: str, fn: Callable[[], Any], max_attempts: int = 4) -> Any:
+    try:
+        asyncio.get_running_loop()
+        in_event_loop = True
+    except RuntimeError:
+        in_event_loop = False
+
+    if in_event_loop:
+        max_attempts = 1
+
     last_exc: Optional[Exception] = None
     for attempt in range(1, max_attempts + 1):
         try:
@@ -784,7 +795,18 @@ def get_user_tenant_id(payload: dict) -> str:
     """Get tenant ID from user"""
     if payload['role'] == 'superadmin':
         return None
-    user = supabase.table('users').select('tenant_id').eq('id', payload['user_id']).execute()
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id:
+        return token_tenant_id
+    try:
+        user = _db_call_with_retry(
+            "auth.get_user_tenant_id",
+            lambda: supabase.table('users').select('tenant_id').eq('id', payload['user_id']).execute(),
+        )
+    except Exception as e:
+        if _is_missing_table_or_schema_error(e, "users"):
+            raise HTTPException(status_code=503, detail="Banco de dados sem tabela de usuários.")
+        raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
     if user.data:
         return user.data[0]['tenant_id']
     return None
@@ -903,7 +925,7 @@ async def register_tenant(data: TenantRegister):
     user = user_result.data[0]
     
     # Generate token
-    token = create_token(user['id'], user['email'], user['role'])
+    token = create_token(user['id'], user['email'], user['role'], user.get('tenant_id'))
     
     return {
         "tenant": {
@@ -1757,7 +1779,7 @@ async def delete_connection(connection_id: str, payload: dict = Depends(verify_t
 
 @api_router.get("/conversations")
 async def list_conversations(
-    tenant_id: str,
+    tenant_id: Optional[str] = Query(None),
     status: Optional[str] = None,
     connection_id: Optional[str] = None,
     limit: int = 200,
@@ -1766,29 +1788,6 @@ async def list_conversations(
     payload: dict = Depends(verify_token)
 ):
     """List conversations for a tenant"""
-    query = supabase.table('conversations').select('*').eq('tenant_id', tenant_id)
-    
-    if status and status != 'all':
-        query = query.eq('status', status)
-    if connection_id and connection_id != 'all':
-        query = query.eq('connection_id', connection_id)
-    
-    if limit < 1:
-        limit = 1
-    if limit > 1000:
-        limit = 1000
-    if offset < 0:
-        offset = 0
-
-    result = query.order('last_message_at', desc=True).range(offset, offset + limit - 1).execute()
-
-    connection_by_id: Dict[str, Dict[str, Any]] = {}
-    try:
-        connections = supabase.table('connections').select('id, instance_name, provider').eq('tenant_id', tenant_id).execute()
-        connection_by_id = {c['id']: c for c in (connections.data or []) if c.get('id')}
-    except:
-        connection_by_id = {}
-
     def needs_avatar_refresh(conv_row: dict) -> bool:
         avatar = conv_row.get('contact_avatar')
         if not avatar:
@@ -1797,78 +1796,132 @@ async def list_conversations(
             return True
         return False
 
-    to_refresh = [c for c in (result.data or []) if needs_avatar_refresh(c)] if refresh_avatars else []
-    refreshed: Dict[str, Optional[str]] = {}
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+        effective_tenant_id = user_tenant_id
+        if not effective_tenant_id and payload.get('role') == 'superadmin':
+            effective_tenant_id = tenant_id
+        if not effective_tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant não identificado")
 
-    async def refresh_avatar(conv_row: dict) -> Optional[str]:
-        conn = connection_by_id.get(conv_row.get('connection_id'))
-        avatar = conv_row.get('contact_avatar')
+        query = supabase.table('conversations').select('*').eq('tenant_id', effective_tenant_id)
 
-        if not conn or conn.get('provider') != 'evolution' or not conn.get('instance_name'):
+        if status and status != 'all':
+            query = query.eq('status', status)
+        if connection_id and connection_id != 'all':
+            query = query.eq('connection_id', connection_id)
+
+        if limit < 1:
+            limit = 1
+        if limit > 1000:
+            limit = 1000
+        if offset < 0:
+            offset = 0
+
+        try:
+            result = _db_call_with_retry(
+                "conversations.list",
+                lambda: query.order('last_message_at', desc=True).range(offset, offset + limit - 1).execute()
+            )
+        except Exception as e:
+            if _is_missing_table_or_schema_error(e, "conversations"):
+                return []
+            raise
+
+        connection_by_id: Dict[str, Dict[str, Any]] = {}
+        try:
+            connections = _db_call_with_retry(
+                "connections.list_for_conversations",
+                lambda: supabase.table('connections').select('id, instance_name, provider').eq('tenant_id', effective_tenant_id).execute()
+            )
+            connection_by_id = {c['id']: c for c in (connections.data or []) if isinstance(c, dict) and c.get('id')}
+        except Exception:
+            connection_by_id = {}
+
+        to_refresh = [c for c in (result.data or []) if needs_avatar_refresh(c)] if refresh_avatars else []
+        refreshed: Dict[str, Optional[str]] = {}
+
+        async def refresh_avatar(conv_row: dict) -> Optional[str]:
+            conn = connection_by_id.get(conv_row.get('connection_id'))
+            avatar = conv_row.get('contact_avatar')
+
+            if not conn or conn.get('provider') != 'evolution' or not conn.get('instance_name'):
+                if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
+                    try:
+                        supabase.table('conversations').update({'contact_avatar': None}).eq('id', conv_row['id']).execute()
+                    except Exception:
+                        pass
+                return None
+
+            try:
+                data = await evolution_api.get_profile_picture(conn['instance_name'], conv_row.get('contact_phone') or '')
+                url = extract_profile_picture_url(data)
+            except Exception:
+                url = None
+
+            if url:
+                try:
+                    supabase.table('conversations').update({'contact_avatar': url}).eq('id', conv_row['id']).execute()
+                except Exception:
+                    pass
+                return url
+
             if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
                 try:
                     supabase.table('conversations').update({'contact_avatar': None}).eq('id', conv_row['id']).execute()
-                except:
+                except Exception:
                     pass
+
             return None
 
-        try:
-            data = await evolution_api.get_profile_picture(conn['instance_name'], conv_row.get('contact_phone') or '')
-            url = extract_profile_picture_url(data)
-        except:
-            url = None
+        if refresh_avatars and to_refresh:
+            results = await asyncio.gather(*(refresh_avatar(c) for c in to_refresh), return_exceptions=True)
+            for row, res in zip(to_refresh, results):
+                if isinstance(res, str) and res.strip():
+                    refreshed[row['id']] = res.strip()
+                else:
+                    refreshed[row['id']] = None
 
-        if url:
-            try:
-                supabase.table('conversations').update({'contact_avatar': url}).eq('id', conv_row['id']).execute()
-            except:
-                pass
-            return url
+        conversations = []
+        for c in (result.data or []):
+            avatar = refreshed.get(c['id']) if c.get('id') in refreshed else c.get('contact_avatar')
+            if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
+                avatar = None
+            conversations.append({
+                'id': c['id'],
+                'tenantId': c['tenant_id'],
+                'connectionId': c['connection_id'],
+                'contactPhone': c['contact_phone'],
+                'contactName': c['contact_name'],
+                'contactAvatar': avatar,
+                'status': c['status'],
+                'assignedTo': c['assigned_to'],
+                'transferStatus': c.get('transfer_status'),
+                'transferTo': c.get('transfer_to'),
+                'transferReason': c.get('transfer_reason'),
+                'transferInitiatedBy': c.get('transfer_initiated_by'),
+                'transferInitiatedAt': c.get('transfer_initiated_at'),
+                'transferCompletedAt': c.get('transfer_completed_at'),
+                'lastMessageAt': c['last_message_at'],
+                'unreadCount': c['unread_count'],
+                'lastMessagePreview': c['last_message_preview'],
+                'labels': c.get('labels', []),
+                'createdAt': c['created_at']
+            })
 
-        if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
-            try:
-                supabase.table('conversations').update({'contact_avatar': None}).eq('id', conv_row['id']).execute()
-            except:
-                pass
+        return conversations
 
-        return None
-
-    if refresh_avatars and to_refresh:
-        results = await asyncio.gather(*(refresh_avatar(c) for c in to_refresh), return_exceptions=True)
-        for row, res in zip(to_refresh, results):
-            if isinstance(res, str) and res.strip():
-                refreshed[row['id']] = res.strip()
-            else:
-                refreshed[row['id']] = None
-
-    conversations = []
-    for c in (result.data or []):
-        avatar = refreshed.get(c['id']) if c.get('id') in refreshed else c.get('contact_avatar')
-        if isinstance(avatar, str) and 'api.dicebear.com' in avatar:
-            avatar = None
-        conversations.append({
-            'id': c['id'],
-            'tenantId': c['tenant_id'],
-            'connectionId': c['connection_id'],
-            'contactPhone': c['contact_phone'],
-            'contactName': c['contact_name'],
-            'contactAvatar': avatar,
-            'status': c['status'],
-            'assignedTo': c['assigned_to'],
-            'transferStatus': c.get('transfer_status'),
-            'transferTo': c.get('transfer_to'),
-            'transferReason': c.get('transfer_reason'),
-            'transferInitiatedBy': c.get('transfer_initiated_by'),
-            'transferInitiatedAt': c.get('transfer_initiated_at'),
-            'transferCompletedAt': c.get('transfer_completed_at'),
-            'lastMessageAt': c['last_message_at'],
-            'unreadCount': c['unread_count'],
-            'lastMessagePreview': c['last_message_preview'],
-            'labels': c.get('labels', []),
-            'createdAt': c['created_at']
-        })
-
-    return conversations
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_supabase_not_configured_error(e):
+            return []
+        if _is_missing_table_or_schema_error(e, "conversations"):
+            return []
+        if _is_transient_db_error(e):
+            raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
+        logger.error(f"Error listing conversations: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao listar conversas: {str(e)}")
 
 @api_router.patch("/conversations/{conversation_id}/status")
 async def update_conversation_status(conversation_id: str, status_update: ConversationStatusUpdate, payload: dict = Depends(verify_token)):
@@ -5369,43 +5422,105 @@ async def assign_with_history(conversation_id: str, data: AssignAgent, payload: 
 # ==================== ANALYTICS ====================
 
 @api_router.get("/analytics/overview")
-async def get_analytics_overview(tenant_id: str, payload: dict = Depends(verify_token)):
+async def get_analytics_overview(tenant_id: Optional[str] = Query(None), payload: dict = Depends(verify_token)):
     """Get analytics overview for tenant"""
-    # Get conversation stats
-    conversations = supabase.table('conversations').select('status', count='exact').eq('tenant_id', tenant_id).execute()
-    
-    open_count = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('status', 'open').execute()
-    pending_count = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('status', 'pending').execute()
-    resolved_count = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('status', 'resolved').execute()
-    
-    # Get message stats
-    messages = supabase.table('messages').select('direction', count='exact').execute()
-    
-    tenant = supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
-    
-    # Get today's message count
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    today_messages = supabase.table('messages').select('id', count='exact').gte('timestamp', today).execute()
-    
-    # Get active agents count
-    active_agents = supabase.table('users').select('id', count='exact').eq('tenant_id', tenant_id).eq('status', 'online').execute()
-    
-    return {
-        'conversations': {
-            'total': conversations.count or 0,
-            'open': open_count.count or 0,
-            'pending': pending_count.count or 0,
-            'resolved': resolved_count.count or 0
-        },
-        'messages': {
-            'thisMonth': tenant.data[0]['messages_this_month'] if tenant.data else 0,
-            'today': today_messages.count or 0,
-            'avgPerDay': (tenant.data[0]['messages_this_month'] // 30) if tenant.data else 0
-        },
-        'agents': {
-            'online': active_agents.count or 0
+    try:
+        user_tenant_id = get_user_tenant_id(payload)
+        effective_tenant_id = user_tenant_id
+        if not effective_tenant_id and payload.get('role') == 'superadmin':
+            effective_tenant_id = tenant_id
+        if not effective_tenant_id:
+            raise HTTPException(status_code=403, detail="Tenant não identificado")
+
+        try:
+            conversations = _db_call_with_retry(
+                "analytics.conversations.total",
+                lambda: supabase.table('conversations').select('status', count='exact').eq('tenant_id', effective_tenant_id).execute()
+            )
+            open_count = _db_call_with_retry(
+                "analytics.conversations.open",
+                lambda: supabase.table('conversations').select('id', count='exact').eq('tenant_id', effective_tenant_id).eq('status', 'open').execute()
+            )
+            pending_count = _db_call_with_retry(
+                "analytics.conversations.pending",
+                lambda: supabase.table('conversations').select('id', count='exact').eq('tenant_id', effective_tenant_id).eq('status', 'pending').execute()
+            )
+            resolved_count = _db_call_with_retry(
+                "analytics.conversations.resolved",
+                lambda: supabase.table('conversations').select('id', count='exact').eq('tenant_id', effective_tenant_id).eq('status', 'resolved').execute()
+            )
+        except Exception as e:
+            if _is_missing_table_or_schema_error(e, "conversations"):
+                conversations = type("x", (), {"count": 0})()
+                open_count = type("x", (), {"count": 0})()
+                pending_count = type("x", (), {"count": 0})()
+                resolved_count = type("x", (), {"count": 0})()
+            else:
+                raise
+
+        this_month = 0
+        try:
+            tenant_row = _db_call_with_retry(
+                "analytics.tenants.messages_this_month",
+                lambda: supabase.table('tenants').select('messages_this_month').eq('id', effective_tenant_id).limit(1).execute()
+            )
+            if tenant_row.data and isinstance(tenant_row.data[0], dict):
+                this_month = int(tenant_row.data[0].get('messages_this_month') or 0)
+        except Exception:
+            this_month = 0
+
+        today_messages_count = 0
+        try:
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            today_messages = _db_call_with_retry(
+                "analytics.messages.today",
+                lambda: supabase.table('messages').select('id', count='exact').gte('timestamp', today).execute()
+            )
+            today_messages_count = int(getattr(today_messages, "count", 0) or 0)
+        except Exception:
+            today_messages_count = 0
+
+        online_agents = 0
+        try:
+            active_agents = _db_call_with_retry(
+                "analytics.agents.online",
+                lambda: supabase.table('users').select('id', count='exact').eq('tenant_id', effective_tenant_id).eq('status', 'online').execute()
+            )
+            online_agents = int(getattr(active_agents, "count", 0) or 0)
+        except Exception:
+            online_agents = 0
+
+        return {
+            'conversations': {
+                'total': getattr(conversations, "count", 0) or 0,
+                'open': getattr(open_count, "count", 0) or 0,
+                'pending': getattr(pending_count, "count", 0) or 0,
+                'resolved': getattr(resolved_count, "count", 0) or 0
+            },
+            'messages': {
+                'thisMonth': this_month,
+                'today': today_messages_count,
+                'avgPerDay': (this_month // 30) if this_month else 0
+            },
+            'agents': {
+                'online': online_agents
+            }
         }
-    }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        if _is_supabase_not_configured_error(e):
+            return {
+                'conversations': {'total': 0, 'open': 0, 'pending': 0, 'resolved': 0},
+                'messages': {'thisMonth': 0, 'today': 0, 'avgPerDay': 0},
+                'agents': {'online': 0},
+                'notConfigured': True
+            }
+        if _is_transient_db_error(e):
+            raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
+        logger.error(f"Error getting analytics overview: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao carregar analytics: {str(e)}")
 
 @api_router.get("/analytics/messages-by-day")
 async def get_messages_by_day(tenant_id: str, days: int = 7, payload: dict = Depends(verify_token)):
