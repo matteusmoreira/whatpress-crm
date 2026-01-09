@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthAPI } from '../lib/api';
+import { AuthAPI, MaintenanceAPI } from '../lib/api';
 
 export const useAuthStore = create(
   persist(
@@ -28,7 +28,7 @@ export const useAuthStore = create(
       },
 
       logout: () => {
-        set({ user: null, token: null, isAuthenticated: false, error: null });
+        set({ user: null, token: null, isAuthenticated: false, error: null, maintenance: null, maintenanceDismissedKey: null });
       },
 
       refreshCurrentUser: async () => {
@@ -39,6 +39,18 @@ export const useAuthStore = create(
           return user;
         } catch (error) {
           return null;
+        }
+      },
+
+      refreshMaintenance: async () => {
+        if (!get().token) return null;
+        try {
+          const maintenance = await MaintenanceAPI.get();
+          const normalizedMaintenance = maintenance?.enabled ? maintenance : null;
+          set({ maintenance: normalizedMaintenance });
+          return normalizedMaintenance;
+        } catch (error) {
+          return get().maintenance || null;
         }
       },
 
