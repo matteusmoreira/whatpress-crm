@@ -53,7 +53,7 @@ def resolve_cors_allow_origins() -> List[str]:
             except Exception:
                 pass
         parsed = []
-        for o in raw.split(","):
+        for o in re.split(r"[,\s;]+", raw):
             origin = (o or "").strip().strip("'\"`").rstrip("/")
             if origin:
                 parsed.append(origin)
@@ -414,6 +414,25 @@ def _is_transient_db_error(exc: Exception) -> bool:
         "service unavailable",
     ]
     return any(m in s for m in transient_markers)
+
+def _is_missing_table_or_schema_error(exc: Exception, table_name: str) -> bool:
+    s = str(exc or "").lower()
+    t = (table_name or "").lower()
+    if not t:
+        return False
+    markers = [
+        "does not exist",
+        "undefined table",
+        "could not find the table",
+        "relation",
+        "pgrst",
+        "not found",
+    ]
+    return t in s and any(m in s for m in markers)
+
+def _is_supabase_not_configured_error(exc: Exception) -> bool:
+    s = str(exc or "").lower()
+    return "supabase não configurado" in s or "supabase nao configurado" in s
 
 def _db_call_with_retry(op_name: str, fn: Callable[[], Any], max_attempts: int = 4) -> Any:
     last_exc: Optional[Exception] = None
@@ -907,7 +926,12 @@ async def register_tenant(data: TenantRegister):
 @api_router.get("/auth/me")
 async def get_current_user(payload: dict = Depends(verify_token)):
     """Get current authenticated user"""
-    result = supabase.table('users').select('*').eq('id', payload['user_id']).execute()
+    try:
+        result = supabase.table('users').select('*').eq('id', payload['user_id']).execute()
+    except Exception as e:
+        if _is_missing_table_or_schema_error(e, "users"):
+            raise HTTPException(status_code=503, detail="Banco de dados sem tabela de usuários.")
+        raise HTTPException(status_code=503, detail="Banco de dados indisponível.")
     
     if not result.data:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -2262,7 +2286,7 @@ async def list_contacts(
             )
         except Exception as e:
             if _is_transient_db_error(e):
-                cached = _CONTACTS_CACHE_BY_TENANT.get(str(user_tenant_id))
+                cached = _CONTACTS_CACHE_BY_TENANT.get(str(effective_tenant_id))
                 if isinstance(cached, dict) and isinstance(cached.get("data"), list):
                     return {
                         'contacts': cached.get("data") or [],
@@ -2271,6 +2295,71 @@ async def list_contacts(
                         'offset': offset,
                         'cached': True
                     }
+            if _is_supabase_not_configured_error(e):
+                return {
+                    'contacts': [],
+                    'total': 0,
+                    'limit': limit,
+                    'offset': offset,
+                    'notConfigured': True
+                }
+            if _is_missing_table_or_schema_error(e, "contacts"):
+                try:
+                    conv_q = (
+                        supabase.table("conversations")
+                        .select("contact_phone, contact_name, contact_avatar, last_message_at")
+                        .eq("tenant_id", effective_tenant_id)
+                        .order("last_message_at", desc=True)
+                        .range(0, 999)
+                    )
+                    conv_result = _db_call_with_retry("contacts.fallback.conversations", lambda: conv_q.execute())
+                except Exception as conv_err:
+                    logger.error(f"Fallback contacts from conversations failed: {conv_err}")
+                    return {
+                        'contacts': [],
+                        'total': 0,
+                        'limit': limit,
+                        'offset': offset,
+                        'fallback': True
+                    }
+
+                seen = set()
+                derived = []
+                needle = (search or "").strip().lower()
+                for row in (conv_result.data or []):
+                    phone = (row.get("contact_phone") or "").strip()
+                    if not phone or phone in seen:
+                        continue
+                    name = (row.get("contact_name") or "").strip() or phone
+                    if needle:
+                        hay = f"{name} {phone}".lower()
+                        if needle not in hay:
+                            continue
+                    seen.add(phone)
+                    derived.append({
+                        'id': f"conv-contact:{phone}",
+                        'tenantId': effective_tenant_id,
+                        'name': name,
+                        'phone': phone,
+                        'email': None,
+                        'tags': [],
+                        'customFields': {},
+                        'status': 'pending',
+                        'firstContactAt': None,
+                        'source': 'conversation',
+                        'createdAt': row.get("last_message_at"),
+                        'updatedAt': row.get("last_message_at"),
+                    })
+
+                total_derived = len(derived)
+                paged = derived[offset: offset + limit]
+                return {
+                    'contacts': paged,
+                    'total': total_derived,
+                    'limit': limit,
+                    'offset': offset,
+                    'fallback': True
+                }
             raise
 
         contacts = []
@@ -2291,12 +2380,19 @@ async def list_contacts(
                 'updatedAt': c.get('updated_at')
             })
 
-        # Get total count
-        count_result = _db_call_with_retry(
-            "contacts.count",
-            lambda: supabase.table('contacts').select('id', count='exact').eq('tenant_id', effective_tenant_id).execute()
-        )
-        total = count_result.count if hasattr(count_result, 'count') and count_result.count else len(result.data or [])
+        total = len(result.data or [])
+        try:
+            count_result = _db_call_with_retry(
+                "contacts.count",
+                lambda: supabase.table('contacts').select('id', count='exact').eq('tenant_id', effective_tenant_id).execute()
+            )
+            if hasattr(count_result, 'count') and count_result.count:
+                total = count_result.count
+        except Exception as e:
+            if _is_missing_table_or_schema_error(e, "contacts"):
+                total = len(contacts)
+            else:
+                raise
 
         _CONTACTS_CACHE_BY_TENANT[str(effective_tenant_id)] = {
             "data": contacts,
