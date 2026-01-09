@@ -42,6 +42,33 @@ const normalizeMessageType = (type) => {
   return 'unknown';
 };
 
+const decodeJwtPayload = (token) => {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+};
+
+const shouldUseSupabaseRealtimeAuth = (token) => {
+  if (!token) return false;
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload !== 'object') return false;
+  const iss = typeof payload.iss === 'string' ? payload.iss : '';
+  const ref = typeof payload.ref === 'string' ? payload.ref : '';
+  if (ref) return true;
+  if (iss === 'supabase') return true;
+  if (iss.includes('supabase')) return true;
+  if (iss.includes('.supabase.co/auth/v1')) return true;
+  return false;
+};
+
 export const RealtimeProvider = ({ children }) => {
   const { user, token, isAuthenticated } = useAuthStore();
   const {
@@ -343,23 +370,35 @@ export const RealtimeProvider = ({ children }) => {
     let unsubConversations;
     let unsubConnections;
     let mounted = true;
+    let retryTimer;
 
     const updateStatus = (key, status) => {
       statusesRef.current = { ...statusesRef.current, [key]: status };
-      const nextConnected =
-        statusesRef.current.conversations === 'SUBSCRIBED' &&
-        statusesRef.current.connections === 'SUBSCRIBED';
+      const nextConnected = statusesRef.current.conversations === 'SUBSCRIBED';
       if (mounted) setIsConnected(nextConnected);
+
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          if (!mounted) return;
+          initRealtime();
+        }, 4000);
+      }
     };
 
     const initRealtime = async () => {
       try {
         if (!mounted) return;
 
+        unsubConversations?.();
+        unsubConnections?.();
+        unsubConversations = undefined;
+        unsubConnections = undefined;
+
         statusesRef.current = { conversations: 'CLOSED', connections: 'CLOSED' };
         setIsConnected(false);
 
-        if (token) {
+        if (shouldUseSupabaseRealtimeAuth(token)) {
           await setRealtimeAuth(token);
         }
 
@@ -379,6 +418,7 @@ export const RealtimeProvider = ({ children }) => {
 
     return () => {
       mounted = false;
+      clearTimeout(retryTimer);
       unsubConversations?.();
       unsubConnections?.();
       statusesRef.current = { conversations: 'CLOSED', connections: 'CLOSED' };
