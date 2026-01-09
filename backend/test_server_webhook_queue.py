@@ -314,6 +314,53 @@ def test_system_settings_falls_back_to_storage_when_table_write_fails(monkeypatc
     assert b"enabled" in (uploaded["body"] or b"")
 
 
+def test_system_settings_falls_back_to_memory_when_storage_write_fails(monkeypatch):
+    import backend.server as server
+
+    class _Bucket:
+        def upload(self, *_args, **_kwargs):
+            raise Exception("bucket missing")
+
+        def update(self, *_args, **_kwargs):
+            raise Exception("bucket missing")
+
+        def download(self, *_args, **_kwargs):
+            raise Exception("bucket missing")
+
+    class _Storage:
+        def from_(self, _name):
+            return _Bucket()
+
+    class _FailingQuery:
+        def upsert(self, *_args, **_kwargs):
+            return self
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            raise Exception("PGRST205: system_settings not found")
+
+    class _Supabase:
+        def __init__(self):
+            self.storage = _Storage()
+
+        def rpc(self, *_args, **_kwargs):
+            raise Exception("rpc indisponível")
+
+        def table(self, _name):
+            return _FailingQuery()
+
+    monkeypatch.setattr(server, "supabase", _Supabase())
+
+    server._set_system_setting_json("maintenance", {"enabled": True})
+    saved = server._get_system_setting_json("maintenance", {})
+    assert saved.get("enabled") is True
+
+
 def test_agent_cannot_access_admin_assigned_conversation(monkeypatch):
     import backend.server as server
     from fastapi.testclient import TestClient

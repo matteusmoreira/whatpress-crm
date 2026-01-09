@@ -942,6 +942,7 @@ def _ensure_system_settings_schema() -> None:
 
 _SYSTEM_SETTINGS_STORAGE_BUCKET = (os.getenv("SYSTEM_SETTINGS_STORAGE_BUCKET") or "uploads").strip() or "uploads"
 _SYSTEM_SETTINGS_STORAGE_PREFIX = (os.getenv("SYSTEM_SETTINGS_STORAGE_PREFIX") or "system_settings").strip().strip("/") or "system_settings"
+_SYSTEM_SETTINGS_IN_MEMORY: Dict[str, Any] = {}
 
 def _system_settings_storage_path(key: str) -> str:
     k = (key or "").strip()
@@ -970,7 +971,10 @@ def _get_system_setting_json(key: str, default: Any) -> Any:
         parsed = json.loads(raw)
         return default if parsed is None else parsed
     except Exception:
-        return default
+        pass
+    if key in _SYSTEM_SETTINGS_IN_MEMORY:
+        return _SYSTEM_SETTINGS_IN_MEMORY.get(key)
+    return default
 
 def _set_system_setting_json(key: str, value_json: Any) -> None:
     _ensure_system_settings_schema()
@@ -1001,8 +1005,9 @@ def _set_system_setting_json(key: str, value_json: Any) -> None:
         )
         return
     except Exception as e:
-        msg = f"system_settings_write_failed: upload={upload_error} update={e}"
-        raise RuntimeError(msg)
+        logger.error(f"system_settings_write_failed: upload={upload_error} update={e}")
+        _SYSTEM_SETTINGS_IN_MEMORY[key] = value_json if value_json is not None else {}
+        return
 
 def _normalize_maintenance_settings(value: Any) -> dict:
     base = {"enabled": False, "messageHtml": "", "attachments": [], "updatedAt": None}
@@ -1075,10 +1080,6 @@ async def update_maintenance(patch: MaintenanceSettingsUpdate, payload: dict = D
         logger.error(f"update_maintenance error: {type(e).__name__}: {e}")
         if _is_supabase_not_configured_error(e):
             raise HTTPException(status_code=503, detail="Supabase não configurado")
-        if _is_missing_table_or_schema_error(e, "system_settings") or _is_missing_table_error(e, "system_settings"):
-            raise HTTPException(status_code=503, detail="Banco de dados sem tabela system_settings")
-        if "system_settings_write_failed:" in str(e):
-            raise HTTPException(status_code=503, detail="Não foi possível salvar a manutenção no Supabase")
         if _is_transient_db_error(e):
             raise HTTPException(status_code=503, detail="Banco de dados indisponível")
         raise HTTPException(status_code=500, detail="Erro ao salvar manutenção")
