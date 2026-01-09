@@ -3,6 +3,7 @@
 import httpx
 import logging
 import json
+import os
 from typing import Optional, Dict, Any, List, Tuple
 import base64
 
@@ -12,15 +13,19 @@ class EvolutionAPI:
     """Client for Evolution API v2"""
     
     def __init__(self, base_url: str, api_key: str):
-        self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
+        self.base_url = (base_url or "").rstrip('/')
+        self.api_key = (api_key or "").strip()
         self.headers = {
-            'apikey': api_key,
+            'apikey': self.api_key,
             'Content-Type': 'application/json'
         }
     
     async def _request(self, method: str, endpoint: str, data: dict = None) -> dict:
         """Make HTTP request to Evolution API"""
+        if not self.base_url:
+            raise Exception("Evolution API não configurada (EVOLUTION_API_BASE_URL).")
+        if not self.api_key:
+            raise Exception("Evolution API não configurada (EVOLUTION_API_KEY).")
         url = f"{self.base_url}{endpoint}"
         candidates = [url]
         last_segment = (self.base_url.rstrip('/').split('/')[-1] or '').lower()
@@ -42,7 +47,10 @@ class EvolutionAPI:
                         raise Exception(f"Unsupported method: {method}")
                     
                     response.raise_for_status()
-                    return response.json()
+                    try:
+                        return response.json()
+                    except Exception:
+                        return {"raw_text": response.text}
                 except httpx.HTTPStatusError as e:
                     last_error = e
                     if e.response is not None and e.response.status_code == 404 and idx < len(candidates) - 1:
@@ -977,7 +985,18 @@ class EvolutionAPI:
 
 
 # Global instance
+EVOLUTION_API_BASE_URL = (
+    (os.getenv("EVOLUTION_API_BASE_URL") or "").strip()
+    or (os.getenv("EVOLUTION_BASE_URL") or "").strip()
+    or (os.getenv("EVOLUTION_URL") or "").strip()
+    or "https://api.whatpress.pro"
+)
+EVOLUTION_API_KEY = (
+    (os.getenv("EVOLUTION_API_KEY") or "").strip()
+    or (os.getenv("EVOLUTION_KEY") or "").strip()
+    or (os.getenv("EVOLUTION_API_TOKEN") or "").strip()
+)
 evolution_api = EvolutionAPI(
-    base_url="https://api.whatpress.pro",
-    api_key="c5176bf19a9b2e240204522e45236822"
+    base_url=EVOLUTION_API_BASE_URL,
+    api_key=EVOLUTION_API_KEY
 )

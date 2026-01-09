@@ -2515,6 +2515,58 @@ async def list_contacts(
                 'updatedAt': c.get('updated_at')
             })
 
+        if not contacts:
+            try:
+                conv_q = (
+                    supabase.table("conversations")
+                    .select("contact_phone, contact_name, contact_avatar, last_message_at")
+                    .eq("tenant_id", effective_tenant_id)
+                    .order("last_message_at", desc=True)
+                    .range(0, 999)
+                )
+                conv_result = _db_call_with_retry(
+                    "contacts.fallback.conversations.empty",
+                    lambda: conv_q.execute(),
+                )
+                seen = set()
+                derived = []
+                needle = (search or "").strip().lower()
+                for row in (conv_result.data or []):
+                    phone = (row.get("contact_phone") or "").strip()
+                    if not phone or phone in seen:
+                        continue
+                    name = (row.get("contact_name") or "").strip() or phone
+                    if needle:
+                        hay = f"{name} {phone}".lower()
+                        if needle not in hay:
+                            continue
+                    seen.add(phone)
+                    derived.append({
+                        'id': f"conv-contact:{phone}",
+                        'tenantId': effective_tenant_id,
+                        'name': name,
+                        'phone': phone,
+                        'email': None,
+                        'tags': [],
+                        'customFields': {},
+                        'status': 'pending',
+                        'firstContactAt': None,
+                        'source': 'conversation',
+                        'createdAt': row.get("last_message_at"),
+                        'updatedAt': row.get("last_message_at"),
+                    })
+                total_derived = len(derived)
+                paged = derived[offset: offset + limit]
+                return {
+                    'contacts': paged,
+                    'total': total_derived,
+                    'limit': limit,
+                    'offset': offset,
+                    'fallback': True
+                }
+            except Exception:
+                pass
+
         total = len(result.data or [])
         try:
             count_result = _db_call_with_retry(
@@ -6122,10 +6174,73 @@ async def proxy_whatsapp_media(
     This is needed because WhatsApp media URLs are temporary and require authentication.
     """
     try:
+        def _looks_like_uuid(value: Any) -> bool:
+            s = str(value or "").strip().lower()
+            if not s:
+                return False
+            return bool(re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", s))
+
+        def _normalize_remote_jid(value: Any) -> str:
+            s = str(value or "").strip()
+            if not s:
+                return ""
+            s = s.replace(" ", "")
+            if "@" in s:
+                return s
+            digits = "".join(ch for ch in s if ch.isdigit())
+            if digits:
+                return f"{digits}@s.whatsapp.net"
+            return s
+
+        def _extract_base64_and_mime(obj: Any) -> Tuple[Optional[str], Optional[str]]:
+            def _walk(node: Any, depth: int = 0) -> Tuple[Optional[str], Optional[str]]:
+                if depth > 5:
+                    return None, None
+                if isinstance(node, dict):
+                    b64 = node.get("base64") or node.get("base64Data") or node.get("data_base64")
+                    mime = (
+                        node.get("mimetype")
+                        or node.get("mimeType")
+                        or node.get("contentType")
+                        or node.get("type")
+                    )
+                    if isinstance(b64, str) and b64.strip():
+                        return b64.strip(), (str(mime).strip() if mime else None)
+                    for key in ("data", "result", "response", "message", "payload"):
+                        if key in node:
+                            found_b64, found_mime = _walk(node.get(key), depth + 1)
+                            if found_b64:
+                                return found_b64, found_mime
+                    for v in node.values():
+                        found_b64, found_mime = _walk(v, depth + 1)
+                        if found_b64:
+                            return found_b64, found_mime
+                if isinstance(node, list):
+                    for v in node:
+                        found_b64, found_mime = _walk(v, depth + 1)
+                        if found_b64:
+                            return found_b64, found_mime
+                return None, None
+
+            return _walk(obj, 0)
+
+        if not (message_id or "").strip():
+            raise HTTPException(status_code=400, detail="message_id é obrigatório")
+        if not (remote_jid or "").strip():
+            raise HTTPException(status_code=400, detail="remote_jid é obrigatório")
+        if not (instance_name or "").strip():
+            raise HTTPException(status_code=400, detail="instance_name é obrigatório")
+
         evo_message_id = message_id
         resolved_message = None
         try:
-            resolved_message = supabase.table('messages').select('id, conversation_id, external_id').eq('id', message_id).limit(1).execute()
+            resolved_message = (
+                supabase.table('messages')
+                .select('id, conversation_id, external_id')
+                .eq('id', message_id)
+                .limit(1)
+                .execute()
+            )
         except Exception:
             resolved_message = None
 
@@ -6134,7 +6249,13 @@ async def proxy_whatsapp_media(
             row = resolved_message.data[0]
         else:
             try:
-                resolved_message = supabase.table('messages').select('id, conversation_id, external_id').eq('external_id', message_id).limit(1).execute()
+                resolved_message = (
+                    supabase.table('messages')
+                    .select('id, conversation_id, external_id')
+                    .eq('external_id', message_id)
+                    .limit(1)
+                    .execute()
+                )
             except Exception:
                 resolved_message = None
             if resolved_message and getattr(resolved_message, "data", None):
@@ -6153,23 +6274,42 @@ async def proxy_whatsapp_media(
             if external_id:
                 evo_message_id = external_id
 
+        if _looks_like_uuid(evo_message_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Mensagem sem external_id; não é possível buscar mídia na Evolution.",
+            )
+
         # Call Evolution API to get base64 media
+        normalized_remote_jid = _normalize_remote_jid(remote_jid)
         result = await evolution_api.get_base64_from_media_message(
             instance_name=instance_name,
             message_id=evo_message_id,
-            remote_jid=remote_jid,
+            remote_jid=normalized_remote_jid,
             from_me=from_me
         )
         
-        if not result:
+        if not result or not isinstance(result, (dict, list)):
             raise HTTPException(status_code=404, detail="Mídia não encontrada")
         
         # Result should contain base64 and mimetype
-        base64_data = result.get('base64') or result.get('data', {}).get('base64')
-        mimetype = result.get('mimetype') or result.get('data', {}).get('mimetype') or 'application/octet-stream'
+        base64_data, mimetype = _extract_base64_and_mime(result)
+        if not mimetype:
+            mimetype = 'application/octet-stream'
         
         if not base64_data:
             raise HTTPException(status_code=404, detail="Dados da mídia não disponíveis")
+
+        if isinstance(base64_data, str) and base64_data.startswith("data:") and "," in base64_data:
+            header, b64 = base64_data.split(",", 1)
+            base64_data = b64
+            if (not mimetype) or mimetype == 'application/octet-stream':
+                try:
+                    header_mime = header[5:].split(";", 1)[0].strip()
+                    if header_mime:
+                        mimetype = header_mime
+                except Exception:
+                    pass
         
         head_bytes = b""
         try:
@@ -6199,8 +6339,18 @@ async def proxy_whatsapp_media(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Media proxy error: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao obter mídia: {str(e)}")
+        s = str(e or "")
+        logger.error(f"Media proxy error: {s}")
+        lowered = s.lower()
+        if "evolution api não configurada" in lowered:
+            raise HTTPException(status_code=500, detail="Evolution API não configurada no backend.")
+        if "401" in lowered or "403" in lowered:
+            raise HTTPException(status_code=502, detail="Falha ao autenticar na Evolution API.")
+        if "404" in lowered:
+            raise HTTPException(status_code=404, detail="Mídia não encontrada na Evolution API.")
+        if "timeout" in lowered or "timed out" in lowered or "502" in lowered or "503" in lowered or "504" in lowered:
+            raise HTTPException(status_code=503, detail="Evolution API indisponível.")
+        raise HTTPException(status_code=502, detail="Erro ao obter mídia.")
 
 # Include the router in the main app
 app.include_router(api_router)
