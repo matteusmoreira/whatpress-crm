@@ -805,6 +805,30 @@ export const UploadAPI = {
   }
 };
 
+export const MaintenanceAPI = {
+  async get() {
+    const response = await apiClient.get('/maintenance');
+    return response.data;
+  },
+
+  async update(patch) {
+    const response = await apiClient.patch('/maintenance', patch);
+    return response.data;
+  },
+
+  async uploadAttachment(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiClient.post('/maintenance/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  }
+};
+
 export const MediaAPI = {
   async proxy({ messageId, remoteJid, instanceName, fromMe = false }) {
     const response = await apiClient.get('/media/proxy', {

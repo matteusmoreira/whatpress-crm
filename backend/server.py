@@ -300,6 +300,24 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     user: dict
     token: str
+    maintenance: Optional[dict] = None
+
+class MaintenanceAttachment(BaseModel):
+    url: str
+    name: Optional[str] = None
+    type: Optional[str] = None
+    size: Optional[int] = None
+
+class MaintenanceSettings(BaseModel):
+    enabled: bool = False
+    messageHtml: str = ""
+    attachments: List[MaintenanceAttachment] = []
+    updatedAt: Optional[str] = None
+
+class MaintenanceSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    messageHtml: Optional[str] = None
+    attachments: Optional[List[MaintenanceAttachment]] = None
 
 # JWT Secret (needed for login)
 JWT_SECRET = (
@@ -452,7 +470,16 @@ async def direct_login(request: LoginRequest):
         "createdAt": user.get("created_at"),
     }
 
-    return {"user": user_response, "token": token}
+    maintenance = None
+    try:
+        if str(user.get("role") or "").strip().lower() != "superadmin":
+            settings = _get_maintenance_settings()
+            if settings.get("enabled"):
+                maintenance = settings
+    except Exception:
+        maintenance = None
+
+    return {"user": user_response, "token": token, "maintenance": maintenance}
 
 # Create a router with the /api prefix, ensuring trailing slash handling
 api_router = APIRouter(prefix="/api")
@@ -889,6 +916,234 @@ def get_user_tenant_id(payload: dict) -> str:
     if user.data:
         return user.data[0]['tenant_id']
     return None
+
+def _sanitize_html_basic(value: Any) -> str:
+    s = str(value or "")
+    s = re.sub(r"(?is)<script\\b[^>]*>.*?</script>", "", s)
+    s = re.sub(r"(?is)\\son\\w+\\s*=\\s*\"[^\"]*\"", "", s)
+    s = re.sub(r"(?is)\\son\\w+\\s*=\\s*'[^']*'", "", s)
+    return s.strip()
+
+def _ensure_system_settings_schema() -> None:
+    sql = """
+    CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "Service role full access system_settings" ON system_settings;
+    CREATE POLICY "Service role full access system_settings" ON system_settings FOR ALL USING (true) WITH CHECK (true);
+    """
+    try:
+        supabase.rpc('exec_sql', {'sql': sql}).execute()
+    except Exception:
+        return
+
+def _get_system_setting_json(key: str, default: Any) -> Any:
+    _ensure_system_settings_schema()
+    try:
+        res = supabase.table("system_settings").select("value_json").eq("key", key).execute()
+    except Exception:
+        return default
+    if getattr(res, "data", None):
+        row = res.data[0]
+        val = row.get("value_json")
+        if val is None:
+            return default
+        return val
+    return default
+
+def _set_system_setting_json(key: str, value_json: Any) -> None:
+    _ensure_system_settings_schema()
+    now = datetime.utcnow().isoformat()
+    payload = {"key": key, "value_json": value_json, "updated_at": now}
+    supabase.table("system_settings").upsert(payload).execute()
+
+def _normalize_maintenance_settings(value: Any) -> dict:
+    base = {"enabled": False, "messageHtml": "", "attachments": [], "updatedAt": None}
+    if not isinstance(value, dict):
+        return base
+    enabled = bool(value.get("enabled"))
+    msg = _sanitize_html_basic(value.get("messageHtml"))
+    attachments = value.get("attachments")
+    if not isinstance(attachments, list):
+        attachments = []
+    safe_attachments = []
+    for a in attachments:
+        if not isinstance(a, dict):
+            continue
+        url = str(a.get("url") or "").strip()
+        if not url:
+            continue
+        safe_attachments.append(
+            {
+                "url": url,
+                "name": (str(a.get("name") or "").strip() or None),
+                "type": (str(a.get("type") or "").strip() or None),
+                "size": (int(a.get("size")) if isinstance(a.get("size"), int) else None),
+            }
+        )
+    updated_at = value.get("updatedAt")
+    if isinstance(updated_at, str) and updated_at.strip():
+        updated_at = updated_at.strip()
+    else:
+        updated_at = None
+    return {"enabled": enabled, "messageHtml": msg, "attachments": safe_attachments, "updatedAt": updated_at}
+
+def _get_maintenance_settings() -> dict:
+    value = _get_system_setting_json("maintenance", {})
+    return _normalize_maintenance_settings(value)
+
+def _update_maintenance_settings(patch: MaintenanceSettingsUpdate) -> dict:
+    current = _get_maintenance_settings()
+    next_value = {
+        "enabled": current.get("enabled", False),
+        "messageHtml": current.get("messageHtml", ""),
+        "attachments": current.get("attachments", []),
+        "updatedAt": datetime.utcnow().isoformat(),
+    }
+    if patch.enabled is not None:
+        next_value["enabled"] = bool(patch.enabled)
+    if patch.messageHtml is not None:
+        next_value["messageHtml"] = _sanitize_html_basic(patch.messageHtml)
+    if patch.attachments is not None:
+        next_value["attachments"] = _normalize_maintenance_settings({"attachments": patch.attachments}).get("attachments", [])
+    _set_system_setting_json("maintenance", next_value)
+    return _normalize_maintenance_settings(next_value)
+
+@api_router.get("/maintenance")
+async def get_maintenance(payload: dict = Depends(verify_token)):
+    if str(payload.get("role") or "").strip().lower() != "superadmin":
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    return _get_maintenance_settings()
+
+@api_router.patch("/maintenance")
+async def update_maintenance(patch: MaintenanceSettingsUpdate, payload: dict = Depends(verify_token)):
+    if str(payload.get("role") or "").strip().lower() != "superadmin":
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    return _update_maintenance_settings(patch)
+
+@api_router.post("/maintenance/upload")
+async def upload_maintenance_attachment(
+    file: UploadFile = File(...),
+    payload: dict = Depends(verify_token),
+):
+    if str(payload.get("role") or "").strip().lower() != "superadmin":
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    try:
+        content = await file.read()
+        file_size = len(content)
+
+        max_size = 10 * 1024 * 1024
+        if file_size > max_size:
+            raise HTTPException(status_code=400, detail="Arquivo muito grande. Máximo: 10MB")
+
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'bin'
+        unique_filename = f"{uuid.uuid4()}.{file_ext}"
+
+        detected = detect_media_kind(
+            declared_mime_type=file.content_type,
+            filename=file.filename,
+            head_bytes=content[:96] if isinstance(content, (bytes, bytearray)) else b"",
+        )
+        kind = detected.kind if detected.kind in {'image', 'video', 'audio', 'document', 'sticker'} else 'document'
+        content_type = detected.mime_type or (file.content_type or 'application/octet-stream')
+
+        if kind == 'image':
+            folder = 'images'
+        elif kind == 'video':
+            folder = 'videos'
+        elif kind == 'audio':
+            folder = 'audios'
+        elif kind == 'sticker':
+            folder = 'stickers'
+        else:
+            folder = 'documents'
+
+        storage_path = f"{folder}/{unique_filename}"
+        try:
+            supabase.storage.from_('uploads').upload(
+                storage_path,
+                content,
+                file_options={"content-type": content_type}
+            )
+            public_url = supabase.storage.from_('uploads').get_public_url(storage_path)
+        except Exception as storage_error:
+            logger.warning(f"Supabase storage error: {storage_error}")
+            encoded = base64.b64encode(content).decode('utf-8')
+            public_url = f"data:{content_type};base64,{encoded}"
+
+        return {
+            "url": public_url,
+            "name": file.filename,
+            "type": content_type,
+            "size": file_size
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Maintenance upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao fazer upload: {str(e)}")
+
+def _get_tenant_plan_limits(tenant_id: str) -> dict:
+    default_limits = {"max_instances": 1, "max_messages_month": 500}
+    if not tenant_id:
+        return default_limits
+    try:
+        tenant_res = supabase.table("tenants").select("id, plan, plan_id, messages_this_month, connections_count").eq("id", tenant_id).execute()
+    except Exception:
+        return default_limits
+    if not getattr(tenant_res, "data", None):
+        return default_limits
+    tenant = tenant_res.data[0] or {}
+    plan_id = tenant.get("plan_id")
+    plan_slug = tenant.get("plan")
+    plan_row = None
+    try:
+        if plan_id:
+            plan_res = supabase.table("plans").select("max_instances, max_messages_month").eq("id", plan_id).execute()
+            if getattr(plan_res, "data", None):
+                plan_row = plan_res.data[0]
+        elif plan_slug:
+            plan_res = supabase.table("plans").select("max_instances, max_messages_month").eq("slug", plan_slug).execute()
+            if getattr(plan_res, "data", None):
+                plan_row = plan_res.data[0]
+    except Exception:
+        plan_row = None
+    max_instances = default_limits["max_instances"]
+    max_messages_month = default_limits["max_messages_month"]
+    if isinstance(plan_row, dict):
+        if isinstance(plan_row.get("max_instances"), int):
+            max_instances = plan_row["max_instances"]
+        if isinstance(plan_row.get("max_messages_month"), int):
+            max_messages_month = plan_row["max_messages_month"]
+    usage_messages = tenant.get("messages_this_month")
+    usage_conns = tenant.get("connections_count")
+    return {
+        "max_instances": max_instances,
+        "max_messages_month": max_messages_month,
+        "messages_this_month": int(usage_messages) if isinstance(usage_messages, int) else 0,
+        "connections_count": int(usage_conns) if isinstance(usage_conns, int) else 0,
+    }
+
+def _enforce_messages_limit(tenant_id: Optional[str]) -> None:
+    if not tenant_id:
+        return
+    snap = _get_tenant_plan_limits(tenant_id)
+    limit = snap.get("max_messages_month")
+    used = snap.get("messages_this_month", 0)
+    if isinstance(limit, int) and limit > 0 and used >= limit:
+        raise HTTPException(status_code=403, detail="Limite de mensagens do plano atingido")
+
+def _enforce_connections_limit(tenant_id: Optional[str]) -> None:
+    if not tenant_id:
+        return
+    snap = _get_tenant_plan_limits(tenant_id)
+    limit = snap.get("max_instances")
+    used = snap.get("connections_count", 0)
+    if isinstance(limit, int) and limit > 0 and used >= limit:
+        raise HTTPException(status_code=403, detail="Limite de conexões do plano atingido")
 
 
 def _require_conversation_access(conversation_id: str, payload: dict) -> dict:
@@ -1667,6 +1922,7 @@ async def create_connection(connection: ConnectionCreate, payload: dict = Depend
             raise HTTPException(status_code=403, detail="Tenant não identificado")
         if connection.tenant_id != user_tenant_id:
             raise HTTPException(status_code=403, detail="Acesso negado")
+    _enforce_connections_limit(connection.tenant_id)
     data = {
         'tenant_id': connection.tenant_id,
         'provider': connection.provider,
@@ -3672,6 +3928,8 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
                     content = prefix + content
         except Exception:
             pass
+
+    _enforce_messages_limit(conversation.get('tenant_id'))
 
     # Save message to database first
     data = {
@@ -6073,6 +6331,7 @@ async def upload_file(
 ):
     """Upload a file and return its URL"""
     try:
+        _require_conversation_access(conversation_id, payload)
         # Read file content
         content = await file.read()
         file_size = len(content)
@@ -6150,6 +6409,7 @@ async def send_media_message(
     payload: dict = Depends(verify_token)
 ):
     """Send a media message (image, video, audio, document)"""
+    _require_conversation_access(conversation_id, payload)
     # Get conversation details
     conv = supabase.table('conversations').select('*, connections(*)').eq('id', conversation_id).execute()
     if not conv.data:
@@ -6170,6 +6430,8 @@ async def send_media_message(
                     message_content = prefix + message_content
         except Exception:
             pass
+
+    _enforce_messages_limit(conversation.get('tenant_id'))
     
     # Save message to database
     data = {
@@ -6193,8 +6455,8 @@ async def send_media_message(
     if conversation.get('tenant_id'):
         tenant = supabase.table('tenants').select('messages_this_month').eq('id', conversation['tenant_id']).execute()
         if tenant.data:
-                new_count = tenant.data[0]['messages_this_month'] + 1
-                supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
+            new_count = tenant.data[0]['messages_this_month'] + 1
+            supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
 
     safe_insert_audit_log(
         tenant_id=conversation.get('tenant_id'),
@@ -6450,6 +6712,10 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
+    try:
+        _ensure_system_settings_schema()
+    except Exception:
+        pass
     sql = """
     ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(120);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(120);

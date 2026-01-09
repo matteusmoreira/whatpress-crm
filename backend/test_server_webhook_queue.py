@@ -320,6 +320,52 @@ def test_agent_cannot_access_admin_assigned_conversation(monkeypatch):
     assert allowed.status_code == 200
 
 
+def test_agent_cannot_send_media_message_to_admin_assigned_conversation(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    def table_handler(name, ops):
+        if name == "conversations":
+            conversation_id = None
+            for op in ops:
+                if op[0] == "eq" and op[1] == "id":
+                    conversation_id = op[2]
+                    break
+            if conversation_id == "conv_admin":
+                return _Result(
+                    data=[
+                        {
+                            "id": "conv_admin",
+                            "tenant_id": "tenant1",
+                            "assigned_to": "admin1",
+                        }
+                    ]
+                )
+            return _Result(data=[])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+    resp = client.post(
+        "/api/messages/media",
+        data={
+            "conversation_id": "conv_admin",
+            "media_type": "image",
+            "media_url": "https://example.com/x.jpg",
+            "media_name": "x.jpg",
+            "content": "teste",
+        },
+    )
+    assert resp.status_code == 403
+
+
 def test_agent_conversations_list_uses_assignment_filter(monkeypatch):
     import backend.server as server
     from fastapi.testclient import TestClient

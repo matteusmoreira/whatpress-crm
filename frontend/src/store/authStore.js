@@ -10,12 +10,15 @@ export const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      maintenance: null,
+      maintenanceDismissedKey: null,
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          const { user, token } = await AuthAPI.login(email, password);
-          set({ user, token, isAuthenticated: true, isLoading: false });
+          const { user, token, maintenance } = await AuthAPI.login(email, password);
+          const normalizedMaintenance = maintenance?.enabled ? maintenance : null;
+          set({ user, token, maintenance: normalizedMaintenance, isAuthenticated: true, isLoading: false });
           return user;
         } catch (error) {
           const message = error.response?.data?.detail || 'Erro ao fazer login';
@@ -46,6 +49,16 @@ export const useAuthStore = create(
         return user;
       },
 
+      dismissMaintenance: () => {
+        const m = get().maintenance;
+        const key = String(m?.updatedAt || '').trim() || (m?.enabled ? 'enabled' : '');
+        if (!key) {
+          set({ maintenance: null });
+          return;
+        }
+        set({ maintenanceDismissedKey: key });
+      },
+
       clearError: () => {
         set({ error: null });
       }
@@ -55,7 +68,8 @@ export const useAuthStore = create(
       partialize: (state) => ({ 
         user: state.user, 
         token: state.token,
-        isAuthenticated: state.isAuthenticated 
+        isAuthenticated: state.isAuthenticated,
+        maintenanceDismissedKey: state.maintenanceDismissedKey
       })
     }
   )

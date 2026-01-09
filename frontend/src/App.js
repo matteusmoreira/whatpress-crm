@@ -18,6 +18,7 @@ const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const TenantsPage = lazy(() => import("./pages/TenantsPage"));
 const PlansPage = lazy(() => import("./pages/PlansPage"));
 const UsersPage = lazy(() => import("./pages/UsersPage"));
+const MaintenancePage = lazy(() => import("./pages/MaintenancePage"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Automations = lazy(() => import("./pages/Automations"));
@@ -98,6 +99,7 @@ function App() {
                   <Route path="tenants" element={<TenantsPage />} />
                   <Route path="plans" element={<PlansPage />} />
                   <Route path="users" element={<UsersPage />} />
+                  <Route path="maintenance" element={<MaintenancePage />} />
                   <Route path="*" element={<Navigate to="/superadmin" replace />} />
                 </Route>
 
