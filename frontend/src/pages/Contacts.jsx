@@ -25,7 +25,8 @@ import { cn } from '../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '../components/ui/glass-toaster';
-import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { ContactsAPI } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 
@@ -613,7 +614,10 @@ const Contacts = () => {
 
             {/* Create Contact Modal */}
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-lg" aria-describedby={undefined}>
+                    <VisuallyHidden.Root>
+                        <DialogTitle>Novo Contato</DialogTitle>
+                    </VisuallyHidden.Root>
                     <div className="p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -745,7 +749,10 @@ const Contacts = () => {
 
             {/* Edit Contact Modal */}
             <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-lg" aria-describedby={undefined}>
+                    <VisuallyHidden.Root>
+                        <DialogTitle>Editar Contato</DialogTitle>
+                    </VisuallyHidden.Root>
                     <div className="p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-xl font-bold text-white flex items-center gap-2">

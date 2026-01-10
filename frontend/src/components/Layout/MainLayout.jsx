@@ -16,12 +16,15 @@ const MainLayout = () => {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
+    // Só chama refreshMaintenance se o usuário for superadmin
+    // Usuários normais não têm permissão para acessar o endpoint /api/maintenance
+    if (user?.role !== 'superadmin') return undefined;
     refreshMaintenance?.();
     const intervalId = window.setInterval(() => {
       refreshMaintenance?.();
     }, 30000);
     return () => window.clearInterval(intervalId);
-  }, [isAuthenticated, refreshMaintenance]);
+  }, [isAuthenticated, refreshMaintenance, user?.role]);
 
   const maintenanceBlocked = useMemo(() => {
     if (!isAuthenticated) return false;
