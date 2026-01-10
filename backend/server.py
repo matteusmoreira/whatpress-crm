@@ -7040,18 +7040,28 @@ async def proxy_whatsapp_media(
             if row:
                 # Try to extract media URL from message content or metadata
                 try:
-                    msg_full = supabase.table('messages').select('content, type, metadata').eq('id', message_id).limit(1).execute()
+                    msg_full = supabase.table('messages').select('content, type, metadata, media_url').eq('id', message_id).limit(1).execute()
                     if msg_full.data:
                         msg_data = msg_full.data[0]
                         content = msg_data.get('content')
                         metadata = msg_data.get('metadata') or {}
                         msg_type = msg_data.get('type') or 'unknown'
+                        stored_media_url = msg_data.get('media_url')
                         
                         # Check for media URL in content or metadata
                         media_url = None
                         mimetype_hint = None
                         
-                        if isinstance(content, dict):
+                        # Priority 1: Check media_url field directly (Supabase Storage URL)
+                        if stored_media_url and isinstance(stored_media_url, str):
+                            stored_url = stored_media_url.strip()
+                            if stored_url.startswith('http://') or stored_url.startswith('https://'):
+                                # This is likely a Supabase Storage URL, use it directly
+                                media_url = stored_url
+                                mimetype_hint = metadata.get('mime_type') or metadata.get('mimetype') or metadata.get('mimeType')
+                        
+                        # Priority 2: Check content dict
+                        if not media_url and isinstance(content, dict):
                             media_url = (
                                 content.get('url') or content.get('mediaUrl') or 
                                 content.get('media_url') or content.get('imageUrl') or
@@ -7060,6 +7070,7 @@ async def proxy_whatsapp_media(
                             )
                             mimetype_hint = content.get('mimetype') or content.get('mimeType')
                         
+                        # Priority 3: Check metadata dict
                         if not media_url and isinstance(metadata, dict):
                             media_url = (
                                 metadata.get('url') or metadata.get('mediaUrl') or 
@@ -7068,7 +7079,7 @@ async def proxy_whatsapp_media(
                             if not mimetype_hint:
                                 mimetype_hint = metadata.get('mimetype') or metadata.get('mimeType')
                         
-                        # Also check if content is a string URL
+                        # Priority 4: Check if content is a string URL
                         if not media_url and isinstance(content, str):
                             content_str = content.strip()
                             if content_str.startswith('http://') or content_str.startswith('https://'):
@@ -7076,7 +7087,7 @@ async def proxy_whatsapp_media(
                         
                         if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
                             # Return the media URL as fallback
-                            logger.info(f"Using fallback media URL for message {message_id}")
+                            logger.info(f"Using fallback media URL for message {message_id}: {media_url[:60]}...")
                             return {
                                 "success": True,
                                 "mediaUrl": media_url,
