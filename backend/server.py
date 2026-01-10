@@ -7037,71 +7037,79 @@ async def proxy_whatsapp_media(
 
         # Try to get media from message content/metadata if external_id is not available
         if _looks_like_uuid(evo_message_id):
-            if row:
-                # Try to extract media URL from message content or metadata
-                try:
-                    msg_full = supabase.table('messages').select('content, type, metadata, media_url').eq('id', message_id).limit(1).execute()
-                    if msg_full.data:
-                        msg_data = msg_full.data[0]
-                        content = msg_data.get('content')
-                        metadata = msg_data.get('metadata') or {}
-                        msg_type = msg_data.get('type') or 'unknown'
-                        stored_media_url = msg_data.get('media_url')
-                        
-                        # Check for media URL in content or metadata
-                        media_url = None
-                        mimetype_hint = None
-                        
-                        # Priority 1: Check media_url field directly (Supabase Storage URL)
-                        if stored_media_url and isinstance(stored_media_url, str):
-                            stored_url = stored_media_url.strip()
-                            if stored_url.startswith('http://') or stored_url.startswith('https://'):
-                                # This is likely a Supabase Storage URL, use it directly
-                                media_url = stored_url
-                                mimetype_hint = metadata.get('mime_type') or metadata.get('mimetype') or metadata.get('mimeType')
-                        
-                        # Priority 2: Check content dict
-                        if not media_url and isinstance(content, dict):
-                            media_url = (
-                                content.get('url') or content.get('mediaUrl') or 
-                                content.get('media_url') or content.get('imageUrl') or
-                                content.get('videoUrl') or content.get('audioUrl') or
-                                content.get('documentUrl')
-                            )
-                            mimetype_hint = content.get('mimetype') or content.get('mimeType')
-                        
-                        # Priority 3: Check metadata dict
-                        if not media_url and isinstance(metadata, dict):
-                            media_url = (
-                                metadata.get('url') or metadata.get('mediaUrl') or 
-                                metadata.get('media_url') or metadata.get('directPath')
-                            )
-                            if not mimetype_hint:
-                                mimetype_hint = metadata.get('mimetype') or metadata.get('mimeType')
-                        
-                        # Priority 4: Check if content is a string URL
-                        if not media_url and isinstance(content, str):
-                            content_str = content.strip()
-                            if content_str.startswith('http://') or content_str.startswith('https://'):
-                                media_url = content_str
-                        
-                        if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
-                            # Return the media URL as fallback
-                            logger.info(f"Using fallback media URL for message {message_id}: {media_url[:60]}...")
-                            return {
-                                "success": True,
-                                "mediaUrl": media_url,
-                                "mimetype": mimetype_hint or 'application/octet-stream',
-                                "kind": msg_type,
-                                "confidence": 0.5,
-                                "fallback": True
-                            }
-                except Exception as e:
-                    logger.warning(f"Fallback media fetch failed: {e}")
+            # Try to extract media URL from message content or metadata as fallback
+            media_url = None
+            mimetype_hint = None
+            msg_type = 'unknown'
             
+            try:
+                # Query message data to check for stored media URL
+                msg_full = supabase.table('messages').select('content, type, metadata, media_url').eq('id', message_id).limit(1).execute()
+                if msg_full.data:
+                    msg_data = msg_full.data[0]
+                    content = msg_data.get('content')
+                    metadata = msg_data.get('metadata') or {}
+                    msg_type = msg_data.get('type') or 'unknown'
+                    stored_media_url = msg_data.get('media_url')
+                    
+                    # Priority 1: Check media_url field directly (Supabase Storage URL)
+                    if stored_media_url and isinstance(stored_media_url, str):
+                        stored_url = stored_media_url.strip()
+                        if stored_url.startswith('http://') or stored_url.startswith('https://'):
+                            # This is likely a Supabase Storage URL or direct HTTP URL, use it directly
+                            media_url = stored_url
+                            mimetype_hint = metadata.get('mime_type') or metadata.get('mimetype') or metadata.get('mimeType')
+                            logger.info(f"Found media_url in database for message {message_id}: {media_url[:60]}...")
+                    
+                    # Priority 2: Check content dict
+                    if not media_url and isinstance(content, dict):
+                        media_url = (
+                            content.get('url') or content.get('mediaUrl') or 
+                            content.get('media_url') or content.get('imageUrl') or
+                            content.get('videoUrl') or content.get('audioUrl') or
+                            content.get('documentUrl')
+                        )
+                        mimetype_hint = content.get('mimetype') or content.get('mimeType')
+                        if media_url:
+                            logger.info(f"Found media URL in content dict for message {message_id}")
+                    
+                    # Priority 3: Check metadata dict
+                    if not media_url and isinstance(metadata, dict):
+                        media_url = (
+                            metadata.get('url') or metadata.get('mediaUrl') or 
+                            metadata.get('media_url') or metadata.get('directPath')
+                        )
+                        if not mimetype_hint:
+                            mimetype_hint = metadata.get('mimetype') or metadata.get('mimeType')
+                        if media_url:
+                            logger.info(f"Found media URL in metadata for message {message_id}")
+                    
+                    # Priority 4: Check if content is a string URL
+                    if not media_url and isinstance(content, str):
+                        content_str = content.strip()
+                        if content_str.startswith('http://') or content_str.startswith('https://'):
+                            media_url = content_str
+                            logger.info(f"Found media URL in content string for message {message_id}")
+            except Exception as e:
+                logger.warning(f"Error fetching message data for fallback: {e}")
+            
+            # If we found a valid HTTP(S) URL, return it as fallback
+            if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
+                logger.info(f"Using fallback media URL for message {message_id}: {media_url[:60]}...")
+                return {
+                    "success": True,
+                    "mediaUrl": media_url,
+                    "mimetype": mimetype_hint or 'application/octet-stream',
+                    "kind": msg_type,
+                    "confidence": 0.5,
+                    "fallback": True
+                }
+            
+            # No media URL found and no external_id available
+            logger.warning(f"Message {message_id} has no external_id and no media_url in database")
             raise HTTPException(
                 status_code=400,
-                detail="Mensagem sem external_id; não é possível buscar mídia na Evolution.",
+                detail="Mensagem sem external_id e sem media_url; não é possível buscar mídia.",
             )
 
         # Call Evolution API to get base64 media
