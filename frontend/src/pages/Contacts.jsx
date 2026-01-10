@@ -218,7 +218,13 @@ const Contacts = () => {
             setShowEditModal(false);
             loadContacts(searchQuery, offset);
         } catch (error) {
-            toast.error(error.message || 'Erro ao atualizar contato');
+            if (error.response?.status === 404) {
+                toast.error('Contato não encontrado. Ele pode ter sido excluído.');
+                setShowEditModal(false);
+                loadContacts(searchQuery, offset);
+            } else {
+                toast.error(error.message || 'Erro ao atualizar contato');
+            }
         } finally {
             setSaving(false);
         }

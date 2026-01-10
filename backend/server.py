@@ -3588,57 +3588,71 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
         if contact_id.startswith('conv-'):
             conversation_id = contact_id.replace('conv-', '')
             conv = supabase.table('conversations').select('*').eq('id', conversation_id).execute()
+            
+            # If conversation doesn't exist, check if there's a real contact with this UUID
             if not conv.data:
-                raise HTTPException(status_code=404, detail="Conversa não encontrada")
-            
-            conversation = conv.data[0]
-            if user_tenant_id and conversation.get('tenant_id') != user_tenant_id:
-                raise HTTPException(status_code=403, detail="Acesso negado")
-
-            tenant_value = conversation.get('tenant_id')
-            phone_value = (conversation.get('contact_phone') or '').strip()
-            normalized_phone = normalize_phone_number(phone_value) or phone_value
-            desired_name: Optional[str] = None
-            
-            # Update conversation contact name
-            if data.full_name is not None:
-                desired_name = (data.full_name or '').strip()
-                if not desired_name:
-                    raise HTTPException(status_code=400, detail="Nome é obrigatório")
-                if len(desired_name) < 2 or len(desired_name) > 100:
-                    raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
                 try:
-                    if tenant_value and phone_value:
-                        supabase.table('conversations').update({
-                            'contact_name': desired_name
-                        }).eq('tenant_id', tenant_value).eq('contact_phone', phone_value).execute()
+                    existing_contact = supabase.table('contacts').select('*').eq('id', conversation_id).limit(1).execute()
+                    if existing_contact.data:
+                        # Found a real contact with this ID - use it directly instead of conv- processing
+                        contact_id = conversation_id
+                        # Fall through to the normal contact update logic below (outside this if block)
                     else:
+                        raise HTTPException(status_code=404, detail="Contato ou conversa não encontrado")
+                except HTTPException:
+                    raise
+                except Exception:
+                    raise HTTPException(status_code=404, detail="Contato ou conversa não encontrado")
+            else:
+                # Conversation exists - process as synthetic contact
+                conversation = conv.data[0]
+                if user_tenant_id and conversation.get('tenant_id') != user_tenant_id:
+                    raise HTTPException(status_code=403, detail="Acesso negado")
+
+                tenant_value = conversation.get('tenant_id')
+                phone_value = (conversation.get('contact_phone') or '').strip()
+                normalized_phone = normalize_phone_number(phone_value) or phone_value
+                desired_name: Optional[str] = None
+                
+                # Update conversation contact name
+                if data.full_name is not None:
+                    desired_name = (data.full_name or '').strip()
+                    if not desired_name:
+                        raise HTTPException(status_code=400, detail="Nome é obrigatório")
+                    if len(desired_name) < 2 or len(desired_name) > 100:
+                        raise HTTPException(status_code=400, detail="Nome deve ter entre 2 e 100 caracteres")
+                    try:
+                        if tenant_value and phone_value:
+                            supabase.table('conversations').update({
+                                'contact_name': desired_name
+                            }).eq('tenant_id', tenant_value).eq('contact_phone', phone_value).execute()
+                        else:
+                            supabase.table('conversations').update({
+                                'contact_name': desired_name
+                            }).eq('id', conversation_id).execute()
+                    except Exception:
                         supabase.table('conversations').update({
                             'contact_name': desired_name
                         }).eq('id', conversation_id).execute()
-                except Exception:
-                    supabase.table('conversations').update({
-                        'contact_name': desired_name
-                    }).eq('id', conversation_id).execute()
 
-                safe_insert_audit_log(
-                    tenant_id=conversation.get('tenant_id'),
-                    actor_user_id=payload.get('user_id'),
-                    action='contact.updated',
-                    entity_type='conversation',
-                    entity_id=conversation_id,
-                    metadata={'fields': ['contact_name']}
-                )
+                    safe_insert_audit_log(
+                        tenant_id=conversation.get('tenant_id'),
+                        actor_user_id=payload.get('user_id'),
+                        action='contact.updated',
+                        entity_type='conversation',
+                        entity_id=conversation_id,
+                        metadata={'fields': ['contact_name']}
+                    )
 
-            created_or_updated_contact = None
-            should_upsert_contact = any([
-                data.email is not None,
-                data.tags is not None,
-                data.custom_fields is not None,
-                data.social_links is not None,
-                data.notes_html is not None,
-                data.status is not None,
-            ])
+                created_or_updated_contact = None
+                should_upsert_contact = any([
+                    data.email is not None,
+                    data.tags is not None,
+                    data.custom_fields is not None,
+                    data.social_links is not None,
+                    data.notes_html is not None,
+                    data.status is not None,
+                ])
 
             if should_upsert_contact and tenant_value and normalized_phone:
                 try:
@@ -7021,7 +7035,59 @@ async def proxy_whatsapp_media(
             if external_id:
                 evo_message_id = external_id
 
+        # Try to get media from message content/metadata if external_id is not available
         if _looks_like_uuid(evo_message_id):
+            if row:
+                # Try to extract media URL from message content or metadata
+                try:
+                    msg_full = supabase.table('messages').select('content, type, metadata').eq('id', message_id).limit(1).execute()
+                    if msg_full.data:
+                        msg_data = msg_full.data[0]
+                        content = msg_data.get('content')
+                        metadata = msg_data.get('metadata') or {}
+                        msg_type = msg_data.get('type') or 'unknown'
+                        
+                        # Check for media URL in content or metadata
+                        media_url = None
+                        mimetype_hint = None
+                        
+                        if isinstance(content, dict):
+                            media_url = (
+                                content.get('url') or content.get('mediaUrl') or 
+                                content.get('media_url') or content.get('imageUrl') or
+                                content.get('videoUrl') or content.get('audioUrl') or
+                                content.get('documentUrl')
+                            )
+                            mimetype_hint = content.get('mimetype') or content.get('mimeType')
+                        
+                        if not media_url and isinstance(metadata, dict):
+                            media_url = (
+                                metadata.get('url') or metadata.get('mediaUrl') or 
+                                metadata.get('media_url') or metadata.get('directPath')
+                            )
+                            if not mimetype_hint:
+                                mimetype_hint = metadata.get('mimetype') or metadata.get('mimeType')
+                        
+                        # Also check if content is a string URL
+                        if not media_url and isinstance(content, str):
+                            content_str = content.strip()
+                            if content_str.startswith('http://') or content_str.startswith('https://'):
+                                media_url = content_str
+                        
+                        if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
+                            # Return the media URL as fallback
+                            logger.info(f"Using fallback media URL for message {message_id}")
+                            return {
+                                "success": True,
+                                "mediaUrl": media_url,
+                                "mimetype": mimetype_hint or 'application/octet-stream',
+                                "kind": msg_type,
+                                "confidence": 0.5,
+                                "fallback": True
+                            }
+                except Exception as e:
+                    logger.warning(f"Fallback media fetch failed: {e}")
+            
             raise HTTPException(
                 status_code=400,
                 detail="Mensagem sem external_id; não é possível buscar mídia na Evolution.",

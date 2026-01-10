@@ -653,11 +653,14 @@ const WhatsAppMediaDisplay = ({
         instanceName: proxyInfo.instanceName,
         fromMe: Boolean(proxyInfo.fromMe)
       });
-      const dataUrl = result?.dataUrl;
-      if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+      const dataUrl = result?.dataUrl || result?.mediaUrl;
+      if (typeof dataUrl === 'string' && (dataUrl.startsWith('data:') || dataUrl.startsWith('http'))) {
         setProxiedUrl(dataUrl);
         setLoadError(false);
         setLoading(false);
+      } else {
+        setLoading(false);
+        setLoadError(true);
       }
     } catch {
       setLoading(false);
@@ -757,7 +760,7 @@ const WhatsAppMediaDisplay = ({
                     instanceName: proxyInfo.instanceName,
                     fromMe: Boolean(proxyInfo.fromMe)
                   });
-                  const dataUrl = result?.dataUrl;
+                  const dataUrl = result?.dataUrl || result?.mediaUrl;
                   const resolvedUrl = typeof dataUrl === 'string' ? dataUrl : '';
                   if (resolvedUrl && resolvedUrl.startsWith('data:')) {
                     const a = document.createElement('a');
@@ -766,6 +769,11 @@ const WhatsAppMediaDisplay = ({
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
+                    return;
+                  }
+                  if (resolvedUrl && (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://'))) {
+                    // For HTTP URLs, open in new window to trigger browser download
+                    window.open(resolvedUrl, '_blank');
                     return;
                   }
                   toast.error('Não foi possível baixar este documento');
@@ -2277,292 +2285,292 @@ const Inbox = () => {
                       );
 
                       return (
-                      <div key={msg.id} className={wrapClassName}>
-                        {(() => {
-                          const rawContent = typeof msg.content === 'string'
-                            ? msg.content
-                            : msg.content == null
-                              ? ''
-                              : String(msg.content);
-                          const rawTrim = rawContent.trim();
-                          const normalizedType = normalizeMessageType(msg.type);
-                          const fallback =
-                            normalizedType === 'audio' ? '[Áudio]' :
-                              normalizedType === 'image' ? '[Imagem]' :
-                                normalizedType === 'video' ? '[Vídeo]' :
-                                  normalizedType === 'document' ? '[Documento]' :
-                                    normalizedType === 'sticker' ? '[Figurinha]' :
-                                      '[Mensagem]';
-                          const mediaUrlRaw =
-                            typeof msg.mediaUrl === 'string' ? msg.mediaUrl :
-                              typeof msg.media_url === 'string' ? msg.media_url :
-                                typeof msg.url === 'string' ? msg.url :
-                                  '';
-                          const mediaUrl = typeof mediaUrlRaw === 'string' && mediaUrlRaw.trim() ? mediaUrlRaw.trim() : '';
-                          const isMediaType = ['image', 'video', 'audio', 'document', 'sticker'].includes(normalizedType);
-                          const canInlineMedia = Boolean(mediaUrl) && isMediaType;
+                        <div key={msg.id} className={wrapClassName}>
+                          {(() => {
+                            const rawContent = typeof msg.content === 'string'
+                              ? msg.content
+                              : msg.content == null
+                                ? ''
+                                : String(msg.content);
+                            const rawTrim = rawContent.trim();
+                            const normalizedType = normalizeMessageType(msg.type);
+                            const fallback =
+                              normalizedType === 'audio' ? '[Áudio]' :
+                                normalizedType === 'image' ? '[Imagem]' :
+                                  normalizedType === 'video' ? '[Vídeo]' :
+                                    normalizedType === 'document' ? '[Documento]' :
+                                      normalizedType === 'sticker' ? '[Figurinha]' :
+                                        '[Mensagem]';
+                            const mediaUrlRaw =
+                              typeof msg.mediaUrl === 'string' ? msg.mediaUrl :
+                                typeof msg.media_url === 'string' ? msg.media_url :
+                                  typeof msg.url === 'string' ? msg.url :
+                                    '';
+                            const mediaUrl = typeof mediaUrlRaw === 'string' && mediaUrlRaw.trim() ? mediaUrlRaw.trim() : '';
+                            const isMediaType = ['image', 'video', 'audio', 'document', 'sticker'].includes(normalizedType);
+                            const canInlineMedia = Boolean(mediaUrl) && isMediaType;
 
-                          // Check if the content contains a WhatsApp media URL (for image/video types)
-                          const contentUrls = extractUrls(rawContent);
-                          const contentWhatsappUrl = contentUrls.find(u => isWhatsappMediaUrl(u)) || '';
-                          const hasWhatsappMediaInContent = Boolean(contentWhatsappUrl);
+                            // Check if the content contains a WhatsApp media URL (for image/video types)
+                            const contentUrls = extractUrls(rawContent);
+                            const contentWhatsappUrl = contentUrls.find(u => isWhatsappMediaUrl(u)) || '';
+                            const hasWhatsappMediaInContent = Boolean(contentWhatsappUrl);
 
-                          const effectiveMediaUrlCandidate = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
-                          const inferredKindFromUrl = effectiveMediaUrlCandidate ? inferWhatsappMediaKind(effectiveMediaUrlCandidate) : 'unknown';
+                            const effectiveMediaUrlCandidate = mediaUrl || (isMediaType && contentWhatsappUrl ? contentWhatsappUrl : '');
+                            const inferredKindFromUrl = effectiveMediaUrlCandidate ? inferWhatsappMediaKind(effectiveMediaUrlCandidate) : 'unknown';
 
-                          const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
-                          const proxyInfo = (() => {
-                            if (!msg?.id) return null;
-                            if (!meta) return null;
-                            const remoteJid = meta.remote_jid ?? meta.remoteJid ?? meta.remotejid ?? null;
-                            const instanceName = meta.instance_name ?? meta.instanceName ?? meta.instancename ?? null;
-                            const rawFromMe = meta.from_me ?? meta.fromMe ?? meta.fromme ?? null;
-                            const fromMe = (() => {
-                              if (typeof rawFromMe === 'boolean') return rawFromMe;
-                              if (typeof rawFromMe === 'number') return Boolean(rawFromMe);
-                              if (typeof rawFromMe === 'string') {
-                                const v = rawFromMe.trim().toLowerCase();
-                                if (['true', '1', 'yes', 'y', 'sim'].includes(v)) return true;
-                                if (['false', '0', 'no', 'n', 'nao', 'não', ''].includes(v)) return false;
-                              }
-                              return false;
+                            const meta = (msg && typeof msg === 'object' && msg.metadata && typeof msg.metadata === 'object') ? msg.metadata : null;
+                            const proxyInfo = (() => {
+                              if (!msg?.id) return null;
+                              if (!meta) return null;
+                              const remoteJid = meta.remote_jid ?? meta.remoteJid ?? meta.remotejid ?? null;
+                              const instanceName = meta.instance_name ?? meta.instanceName ?? meta.instancename ?? null;
+                              const rawFromMe = meta.from_me ?? meta.fromMe ?? meta.fromme ?? null;
+                              const fromMe = (() => {
+                                if (typeof rawFromMe === 'boolean') return rawFromMe;
+                                if (typeof rawFromMe === 'number') return Boolean(rawFromMe);
+                                if (typeof rawFromMe === 'string') {
+                                  const v = rawFromMe.trim().toLowerCase();
+                                  if (['true', '1', 'yes', 'y', 'sim'].includes(v)) return true;
+                                  if (['false', '0', 'no', 'n', 'nao', 'não', ''].includes(v)) return false;
+                                }
+                                return false;
+                              })();
+                              if (!remoteJid || !instanceName) return null;
+                              return {
+                                messageId: msg.id,
+                                remoteJid,
+                                instanceName,
+                                fromMe
+                              };
                             })();
-                            if (!remoteJid || !instanceName) return null;
-                            return {
-                              messageId: msg.id,
-                              remoteJid,
-                              instanceName,
-                              fromMe
-                            };
-                          })();
-                          const metaKindRaw = meta ? (meta.media_kind ?? meta.mediaKind ?? meta.kind ?? meta.type) : null;
-                          const metaKind = normalizeMessageType(metaKindRaw);
-                          const metaMimeRaw = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) : null;
-                          const metaMime = String(metaMimeRaw || '').toLowerCase();
-                          const kindFromMime = metaMime.includes('webp')
-                            ? 'sticker'
-                            : (metaMime.startsWith('audio/') || metaMime.includes('opus') || metaMime.includes('ogg'))
-                              ? 'audio'
-                              : metaMime.startsWith('video/')
-                                ? 'video'
-                                : metaMime.startsWith('image/')
-                                  ? 'image'
-                                  : null;
-                          // PRIORITY ORDER FOR MEDIA TYPE DETECTION:
-                          // 1. normalizedType (from msg.type - saved by backend, most reliable)
-                          // 2. metaKind (from metadata.media_kind - also from backend)
-                          // 3. kindFromMime (inferred from mime_type)
-                          // 4. inferredKindFromUrl (inferred from URL - least reliable fallback)
-                          const renderType = (normalizedType && normalizedType !== 'unknown' && normalizedType !== 'text')
-                            ? normalizedType
-                            : (metaKind && metaKind !== 'unknown' && metaKind !== 'text')
-                              ? metaKind
-                              : (kindFromMime && kindFromMime !== 'unknown')
-                                ? kindFromMime
-                                : (inferredKindFromUrl !== 'unknown')
-                                  ? inferredKindFromUrl
-                                  : normalizedType;
+                            const metaKindRaw = meta ? (meta.media_kind ?? meta.mediaKind ?? meta.kind ?? meta.type) : null;
+                            const metaKind = normalizeMessageType(metaKindRaw);
+                            const metaMimeRaw = meta ? (meta.mime_type ?? meta.mimeType ?? meta.mimetype ?? meta.mime) : null;
+                            const metaMime = String(metaMimeRaw || '').toLowerCase();
+                            const kindFromMime = metaMime.includes('webp')
+                              ? 'sticker'
+                              : (metaMime.startsWith('audio/') || metaMime.includes('opus') || metaMime.includes('ogg'))
+                                ? 'audio'
+                                : metaMime.startsWith('video/')
+                                  ? 'video'
+                                  : metaMime.startsWith('image/')
+                                    ? 'image'
+                                    : null;
+                            // PRIORITY ORDER FOR MEDIA TYPE DETECTION:
+                            // 1. normalizedType (from msg.type - saved by backend, most reliable)
+                            // 2. metaKind (from metadata.media_kind - also from backend)
+                            // 3. kindFromMime (inferred from mime_type)
+                            // 4. inferredKindFromUrl (inferred from URL - least reliable fallback)
+                            const renderType = (normalizedType && normalizedType !== 'unknown' && normalizedType !== 'text')
+                              ? normalizedType
+                              : (metaKind && metaKind !== 'unknown' && metaKind !== 'text')
+                                ? metaKind
+                                : (kindFromMime && kindFromMime !== 'unknown')
+                                  ? kindFromMime
+                                  : (inferredKindFromUrl !== 'unknown')
+                                    ? inferredKindFromUrl
+                                    : normalizedType;
 
-                          const base64MediaUrl = (() => {
-                            if (!isMediaType) return '';
-                            if (!rawTrim) return '';
-                            if (rawTrim.startsWith('data:')) return rawTrim;
-                            if (!isLikelyBareBase64(rawTrim)) return '';
-                            const mime = resolveMediaMimeType(renderType, metaMime);
-                            return toDataUrlFromBareBase64(rawTrim, mime);
-                          })();
+                            const base64MediaUrl = (() => {
+                              if (!isMediaType) return '';
+                              if (!rawTrim) return '';
+                              if (rawTrim.startsWith('data:')) return rawTrim;
+                              if (!isLikelyBareBase64(rawTrim)) return '';
+                              const mime = resolveMediaMimeType(renderType, metaMime);
+                              return toDataUrlFromBareBase64(rawTrim, mime);
+                            })();
 
-                          const effectiveMediaUrl = effectiveMediaUrlCandidate || base64MediaUrl;
+                            const effectiveMediaUrl = effectiveMediaUrlCandidate || base64MediaUrl;
 
-                          const hasContent = rawTrim.length > 0 && !base64MediaUrl;
-                          const displayContent = hasContent ? rawContent : fallback;
+                            const hasContent = rawTrim.length > 0 && !base64MediaUrl;
+                            const displayContent = hasContent ? rawContent : fallback;
 
-                          const urls = extractUrls(displayContent);
-                          const hasOnlyUrl = normalizedType === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
-                          const primaryUrl = hasOnlyUrl ? urls[0] : '';
-                          const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
+                            const urls = extractUrls(displayContent);
+                            const hasOnlyUrl = normalizedType === 'text' && urls.length === 1 && displayContent.trim() === urls[0];
+                            const primaryUrl = hasOnlyUrl ? urls[0] : '';
+                            const isWhatsappMedia = primaryUrl ? isWhatsappMediaUrl(primaryUrl) : false;
 
-                          const mediaRenderableKind = ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
-                          const shouldRenderMedia = mediaRenderableKind && (Boolean(effectiveMediaUrl) || Boolean(proxyInfo));
+                            const mediaRenderableKind = ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType);
+                            const shouldRenderMedia = mediaRenderableKind && (Boolean(effectiveMediaUrl) || Boolean(proxyInfo));
 
-                          const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) :
-                            (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
-                          const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
-                          const originInfo = getMessageOriginInfo(msg);
-                          // Use renderType for badge - it already has correct priority logic
-                          const typeForBadge = ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType)
-                            ? renderType
-                            : (hasOnlyUrl && isWhatsappMedia
-                              ? (mediaKind === 'sticker' ? 'sticker' : mediaKind === 'audio' ? 'audio' : mediaKind === 'video' ? 'video' : 'image')
-                              : null);
-                          const typeBadgeInfo = typeForBadge ? getMessageTypeBadgeInfo(typeForBadge) : null;
+                            const mediaKind = isWhatsappMedia ? inferWhatsappMediaKind(primaryUrl) :
+                              (hasWhatsappMediaInContent ? inferWhatsappMediaKind(contentWhatsappUrl) : 'unknown');
+                            const whatsappMeta = isWhatsappMedia ? getWhatsappMediaMeta(mediaKind) : null;
+                            const originInfo = getMessageOriginInfo(msg);
+                            // Use renderType for badge - it already has correct priority logic
+                            const typeForBadge = ['image', 'video', 'audio', 'document', 'sticker'].includes(renderType)
+                              ? renderType
+                              : (hasOnlyUrl && isWhatsappMedia
+                                ? (mediaKind === 'sticker' ? 'sticker' : mediaKind === 'audio' ? 'audio' : mediaKind === 'video' ? 'video' : 'image')
+                                : null);
+                            const typeBadgeInfo = typeForBadge ? getMessageTypeBadgeInfo(typeForBadge) : null;
 
-                          return (
-                            <div
-                              className={cn(
-                                'flex group wa-message-row',
-                                msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
-                              )}
-                            >
-                              {msg.direction === 'outbound' && (
-                                <div className="self-center mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                  <button
-                                    onClick={() => handleDeleteMessage(msg.id)}
-                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-all"
-                                    title="Excluir"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
-                                    className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                                    title="Responder"
-                                  >
-                                    <Reply className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
-
+                            return (
                               <div
                                 className={cn(
-                                  'max-w-[72%] wa-bubble',
-                                  msg.direction === 'outbound'
-                                    ? (isDark
-                                      ? 'bg-emerald-500 text-white rounded-2xl rounded-br-md px-4 py-3'
-                                      : 'wa-bubble-out text-slate-900 rounded-lg rounded-br-sm px-3 py-2')
-                                    : (isDark
-                                      ? 'bg-white/10 backdrop-blur-sm text-white rounded-2xl rounded-bl-md px-4 py-3'
-                                      : 'wa-bubble-in text-slate-900 rounded-lg rounded-bl-sm px-3 py-2')
+                                  'flex group wa-message-row',
+                                  msg.direction === 'outbound' ? 'justify-end' : 'justify-start'
                                 )}
                               >
-                                {typeBadgeInfo && (
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div
-                                      className={cn(
-                                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-type-badge',
-                                        typeBadgeInfo.badgeClass
-                                      )}
+                                {msg.direction === 'outbound' && (
+                                  <div className="self-center mr-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button
+                                      onClick={() => handleDeleteMessage(msg.id)}
+                                      className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-all"
+                                      title="Excluir"
                                     >
-                                      <span className={cn('w-1.5 h-1.5 rounded-full', typeBadgeInfo.dotClass)} />
-                                      {getMessageTypeIcon(typeForBadge)}
-                                      <span>{typeBadgeInfo.label}</span>
-                                    </div>
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                                      className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                                      title="Responder"
+                                    >
+                                      <Reply className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 )}
-                                {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio' || renderType === 'sticker' || renderType === 'document') && (
-                                  <WhatsAppMediaDisplay
-                                    type={renderType}
-                                    mediaUrl={effectiveMediaUrl}
-                                    content={displayContent}
-                                    direction={msg.direction}
-                                    onImageClick={setMediaViewer}
-                                    messageId={msg.id}
-                                    proxyInfo={proxyInfo}
-                                    meta={meta}
-                                  />
-                                )}
-                                {/* WhatsApp media URL in text message - render inline */}
-                                {normalizedType === 'text' && hasOnlyUrl && isWhatsappMedia && (
-                                  <WhatsAppMediaDisplay
-                                    type={mediaKind === 'video' ? 'video' : mediaKind === 'audio' ? 'audio' : 'image'}
-                                    mediaUrl={primaryUrl}
-                                    content={whatsappMeta?.label || 'Mídia do WhatsApp'}
-                                    direction={msg.direction}
-                                    onImageClick={setMediaViewer}
-                                    messageId={msg.id}
-                                    proxyInfo={proxyInfo}
-                                    meta={meta}
-                                  />
-                                )}
-                                {normalizedType === 'text' && hasOnlyUrl && !isWhatsappMedia && (
-                                  <a
-                                    href={primaryUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className={cn(
-                                      'flex items-center gap-3 p-3 rounded-xl border w-full',
-                                      msg.direction === 'outbound'
-                                        ? 'bg-white/10 border-white/20 hover:bg-white/15'
-                                        : 'bg-black/20 border-white/10 hover:bg-black/30'
-                                    )}
-                                  >
-                                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
-                                      <Link2 className="w-5 h-5 opacity-80" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">{shortenUrl(primaryUrl)}</p>
-                                      <p className="text-xs opacity-70 truncate">{primaryUrl}</p>
-                                    </div>
-                                  </a>
-                                )}
-                                {(!shouldRenderMedia && !(normalizedType === 'text' && hasOnlyUrl)) && (
-                                  <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
-                                    {renderTextWithLinks(displayContent)}
-                                  </p>
-                                )}
-                                {shouldRenderMedia && hasContent && renderType !== 'document' && (
-                                  <p className="whitespace-pre-wrap mt-2">
-                                    {renderTextWithLinks(rawContent)}
-                                  </p>
-                                )}
+
                                 <div
                                   className={cn(
-                                    'flex items-center justify-between gap-2 mt-1',
-                                    msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
+                                    'max-w-[72%] wa-bubble',
+                                    msg.direction === 'outbound'
+                                      ? (isDark
+                                        ? 'bg-emerald-500 text-white rounded-2xl rounded-br-md px-4 py-3'
+                                        : 'wa-bubble-out text-slate-900 rounded-lg rounded-br-sm px-3 py-2')
+                                      : (isDark
+                                        ? 'bg-white/10 backdrop-blur-sm text-white rounded-2xl rounded-bl-md px-4 py-3'
+                                        : 'wa-bubble-in text-slate-900 rounded-lg rounded-bl-sm px-3 py-2')
                                   )}
                                 >
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
+                                  {typeBadgeInfo && (
+                                    <div className="flex items-center gap-2 mb-2">
                                       <div
                                         className={cn(
-                                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-origin-badge',
-                                          originInfo.badgeClass
+                                          'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-type-badge',
+                                          typeBadgeInfo.badgeClass
                                         )}
                                       >
-                                        <span
-                                          className={cn(
-                                            'w-1.5 h-1.5 rounded-full',
-                                            originInfo.dotClass
-                                          )}
-                                        />
-                                        <span>{originInfo.label}</span>
+                                        <span className={cn('w-1.5 h-1.5 rounded-full', typeBadgeInfo.dotClass)} />
+                                        {getMessageTypeIcon(typeForBadge)}
+                                        <span>{typeBadgeInfo.label}</span>
                                       </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" sideOffset={6}>
-                                      {originInfo.tooltip}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs">
-                                      {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                    {msg.direction === 'outbound' && getStatusIcon(msg.status)}
+                                    </div>
+                                  )}
+                                  {shouldRenderMedia && (renderType === 'image' || renderType === 'video' || renderType === 'audio' || renderType === 'sticker' || renderType === 'document') && (
+                                    <WhatsAppMediaDisplay
+                                      type={renderType}
+                                      mediaUrl={effectiveMediaUrl}
+                                      content={displayContent}
+                                      direction={msg.direction}
+                                      onImageClick={setMediaViewer}
+                                      messageId={msg.id}
+                                      proxyInfo={proxyInfo}
+                                      meta={meta}
+                                    />
+                                  )}
+                                  {/* WhatsApp media URL in text message - render inline */}
+                                  {normalizedType === 'text' && hasOnlyUrl && isWhatsappMedia && (
+                                    <WhatsAppMediaDisplay
+                                      type={mediaKind === 'video' ? 'video' : mediaKind === 'audio' ? 'audio' : 'image'}
+                                      mediaUrl={primaryUrl}
+                                      content={whatsappMeta?.label || 'Mídia do WhatsApp'}
+                                      direction={msg.direction}
+                                      onImageClick={setMediaViewer}
+                                      messageId={msg.id}
+                                      proxyInfo={proxyInfo}
+                                      meta={meta}
+                                    />
+                                  )}
+                                  {normalizedType === 'text' && hasOnlyUrl && !isWhatsappMedia && (
+                                    <a
+                                      href={primaryUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={cn(
+                                        'flex items-center gap-3 p-3 rounded-xl border w-full',
+                                        msg.direction === 'outbound'
+                                          ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                          : 'bg-black/20 border-white/10 hover:bg-black/30'
+                                      )}
+                                    >
+                                      <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+                                        <Link2 className="w-5 h-5 opacity-80" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">{shortenUrl(primaryUrl)}</p>
+                                        <p className="text-xs opacity-70 truncate">{primaryUrl}</p>
+                                      </div>
+                                    </a>
+                                  )}
+                                  {(!shouldRenderMedia && !(normalizedType === 'text' && hasOnlyUrl)) && (
+                                    <p className={cn('whitespace-pre-wrap', !hasContent && 'italic text-white/70')}>
+                                      {renderTextWithLinks(displayContent)}
+                                    </p>
+                                  )}
+                                  {shouldRenderMedia && hasContent && renderType !== 'document' && (
+                                    <p className="whitespace-pre-wrap mt-2">
+                                      {renderTextWithLinks(rawContent)}
+                                    </p>
+                                  )}
+                                  <div
+                                    className={cn(
+                                      'flex items-center justify-between gap-2 mt-1',
+                                      msg.direction === 'outbound' ? 'text-white/70' : 'text-white/40'
+                                    )}
+                                  >
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className={cn(
+                                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide wa-origin-badge',
+                                            originInfo.badgeClass
+                                          )}
+                                        >
+                                          <span
+                                            className={cn(
+                                              'w-1.5 h-1.5 rounded-full',
+                                              originInfo.dotClass
+                                            )}
+                                          />
+                                          <span>{originInfo.label}</span>
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" sideOffset={6}>
+                                        {originInfo.tooltip}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs">
+                                        {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                      {msg.direction === 'outbound' && getStatusIcon(msg.status)}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              {msg.direction === 'inbound' && (
-                                <div className="self-center ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                  <button
-                                    onClick={() => handleDeleteMessage(msg.id)}
-                                    className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-all"
-                                    title="Excluir"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
-                                    className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                                    title="Responder"
-                                  >
-                                    <Reply className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
+                                {msg.direction === 'inbound' && (
+                                  <div className="self-center ml-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button
+                                      onClick={() => handleDeleteMessage(msg.id)}
+                                      className="p-1.5 rounded-full hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-all"
+                                      title="Excluir"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => { setReplyToMessage(msg); inputRef.current?.focus(); }}
+                                      className="p-1.5 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                                      title="Responder"
+                                    >
+                                      <Reply className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       );
                     })}
                     <div ref={messagesEndRef} />
