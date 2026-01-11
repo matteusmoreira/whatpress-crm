@@ -421,21 +421,11 @@ const Contacts = () => {
                                                     <h3 className="font-semibold text-white truncate">
                                                         {contact.name || 'Sem nome'}
                                                     </h3>
-                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                        {contact.status && (
-                                                            <GlassBadge
-                                                                variant={formatContactStatus(contact.status).variant}
-                                                                className="px-2 py-0.5 text-xs"
-                                                            >
-                                                                {formatContactStatus(contact.status).label}
-                                                            </GlassBadge>
-                                                        )}
-                                                        {contact.source && (
-                                                            <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-white/60">
-                                                                {contact.source}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                    {contact.source && (
+                                                        <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-white/60">
+                                                            {contact.source}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
@@ -520,14 +510,6 @@ const Contacts = () => {
                                                     <h3 className="font-semibold text-white truncate">
                                                         {contact.name || 'Sem nome'}
                                                     </h3>
-                                                    {contact.status && (
-                                                        <GlassBadge
-                                                            variant={formatContactStatus(contact.status).variant}
-                                                            className="px-2 py-0.5 text-xs"
-                                                        >
-                                                            {formatContactStatus(contact.status).label}
-                                                        </GlassBadge>
-                                                    )}
                                                     {contact.source && (
                                                         <span className="px-2 py-0.5 rounded text-xs bg-white/10 text-white/60">
                                                             {contact.source}
