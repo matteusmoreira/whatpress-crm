@@ -129,7 +129,7 @@ const QuickRepliesPanel = ({ onSelect, onClose }) => {
   const getIcon = (category) => CATEGORY_ICONS[category] || '📝';
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl shadow-emerald-500/20 overflow-hidden z-50">
+    <div className="absolute bottom-full left-0 right-0 mb-2 bg-emerald-900/98 border border-white/20 rounded-2xl shadow-2xl shadow-emerald-500/20 overflow-hidden z-[9999] pointer-events-auto">
       {/* Header */}
       <div className="p-4 border-b border-white/10">
         <div className="flex items-center justify-between mb-3">

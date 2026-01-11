@@ -11,7 +11,7 @@ export const EmojiPicker = ({ onSelect, onClose, position = 'top' }) => {
 
     return (
         <div className={cn(
-            'absolute right-0 z-[1000] pointer-events-auto touch-manipulation backdrop-blur-xl bg-emerald-900/95 border border-white/20 rounded-xl shadow-xl p-2 max-w-[calc(100vw-1rem)]',
+            'absolute right-0 z-[10000] pointer-events-auto touch-manipulation bg-emerald-900/98 border border-white/20 rounded-xl shadow-2xl p-2 max-w-[calc(100vw-1rem)]',
             position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
         )}>
             <div className="grid grid-cols-6 sm:grid-cols-8 gap-1">
@@ -19,7 +19,7 @@ export const EmojiPicker = ({ onSelect, onClose, position = 'top' }) => {
                     <button
                         key={emoji}
                         onClick={() => { onSelect(emoji); onClose(); }}
-                        className="p-2 hover:bg-white/10 rounded-lg text-xl transition-colors"
+                        className="p-3 hover:bg-white/10 rounded-lg text-2xl transition-colors active:scale-95"
                     >
                         {emoji}
                     </button>
