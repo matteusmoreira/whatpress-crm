@@ -116,10 +116,12 @@ const useFlowStore = create((set, get) => ({
         }
     },
 
-    createFlow: async () => {
+    createFlow: async (flowData = {}) => {
         const { flowName, flowDescription, nodes, edges, flowStatus } = get();
+        const name = flowData.name || flowName;
+        const description = flowData.description !== undefined ? flowData.description : flowDescription;
 
-        if (!flowName.trim()) {
+        if (!name.trim()) {
             set({ error: 'Nome do fluxo é obrigatório' });
             return null;
         }
@@ -127,14 +129,17 @@ const useFlowStore = create((set, get) => ({
         set({ loading: true, error: null });
         try {
             const token = localStorage.getItem('token');
+            const tenantId = JSON.parse(localStorage.getItem('user') || '{}').tenantId;
+
             const response = await axios.post(
                 `${API_URL}/flows`,
                 {
-                    name: flowName,
-                    description: flowDescription,
+                    name,
+                    description,
                     nodes,
                     edges,
-                    status: flowStatus
+                    status: flowStatus,
+                    tenant_id: tenantId
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
