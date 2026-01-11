@@ -884,6 +884,30 @@ class TenantRegister(BaseModel):
     admin_password: str
     plan: str = "free"
 
+# ==================== FLOWS MODELS ====================
+
+class FlowCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    nodes: List[dict] = []
+    edges: List[dict] = []
+    variables: Optional[dict] = None
+    status: str = "draft"
+
+class FlowUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    nodes: Optional[List[dict]] = None
+    edges: Optional[List[dict]] = None
+    variables: Optional[dict] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class FlowDuplicate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
 # ==================== AUTH ====================
 # Note: create_token is defined at the top of the file
 
@@ -2246,7 +2270,273 @@ async def delete_connection(connection_id: str, payload: dict = Depends(verify_t
     supabase.table('connections').delete().eq('id', connection_id).execute()
     return {"success": True}
 
+# ==================== FLOWS ROUTES ====================
+
+@api_router.get("/flows")
+async def list_flows(
+    tenant_id: Optional[str] = Query(None),
+    status: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    payload: dict = Depends(verify_token)
+):
+    """List all flows for a tenant"""
+    user_tenant_id = get_user_tenant_id(payload)
+    effective_tenant_id = user_tenant_id
+    
+    if not effective_tenant_id and payload.get('role') == 'superadmin':
+        effective_tenant_id = tenant_id
+    
+    if not effective_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant não identificado")
+    
+    query = supabase.table('flows').select('*').eq('tenant_id', effective_tenant_id)
+    
+    if status:
+        query = query.eq('status', status)
+    if is_active is not None:
+        query = query.eq('is_active', is_active)
+    
+    query = query.order('updated_at', desc=True)
+    result = query.execute()
+    
+    flows = []
+    for f in result.data:
+        flows.append({
+            'id': f['id'],
+            'tenantId': f['tenant_id'],
+            'name': f['name'],
+            'description': f.get('description'),
+            'nodes': f.get('nodes', []),
+            'edges': f.get('edges', []),
+            'variables': f.get('variables', {}),
+            'status': f['status'],
+            'isActive': f['is_active'],
+            'createdBy': f.get('created_by'),
+            'createdAt': f['created_at'],
+            'updatedAt': f['updated_at']
+        })
+    
+    return flows
+
+@api_router.get("/flows/{flow_id}")
+async def get_flow(flow_id: str, payload: dict = Depends(verify_token)):
+    """Get a specific flow by ID"""
+    result = supabase.table('flows').select('*').eq('id', flow_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    f = result.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    
+    if payload.get('role') != 'superadmin' and user_tenant_id and f['tenant_id'] != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    return {
+        'id': f['id'],
+        'tenantId': f['tenant_id'],
+        'name': f['name'],
+        'description': f.get('description'),
+        'nodes': f.get('nodes', []),
+        'edges': f.get('edges', []),
+        'variables': f.get('variables', {}),
+        'status': f['status'],
+        'isActive': f['is_active'],
+        'createdBy': f.get('created_by'),
+        'createdAt': f['created_at'],
+        'updatedAt': f['updated_at']
+    }
+
+@api_router.post("/flows")
+async def create_flow(flow: FlowCreate, payload: dict = Depends(verify_token)):
+    """Create a new flow"""
+    user_tenant_id = get_user_tenant_id(payload)
+    
+    if not user_tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant não identificado")
+    
+    data = {
+        'tenant_id': user_tenant_id,
+        'name': flow.name,
+        'description': flow.description,
+        'nodes': flow.nodes or [],
+        'edges': flow.edges or [],
+        'variables': flow.variables or {},
+        'status': flow.status or 'draft',
+        'is_active': False,
+        'created_by': payload.get('user_id')
+    }
+    
+    result = supabase.table('flows').insert(data).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=400, detail="Erro ao criar fluxo")
+    
+    f = result.data[0]
+    return {
+        'id': f['id'],
+        'tenantId': f['tenant_id'],
+        'name': f['name'],
+        'description': f.get('description'),
+        'nodes': f.get('nodes', []),
+        'edges': f.get('edges', []),
+        'variables': f.get('variables', {}),
+        'status': f['status'],
+        'isActive': f['is_active'],
+        'createdBy': f.get('created_by'),
+        'createdAt': f['created_at'],
+        'updatedAt': f['updated_at']
+    }
+
+@api_router.put("/flows/{flow_id}")
+async def update_flow(flow_id: str, flow: FlowUpdate, payload: dict = Depends(verify_token)):
+    """Update an existing flow"""
+    # Verificar se o fluxo existe e se o usuário tem acesso
+    existing = supabase.table('flows').select('id, tenant_id').eq('id', flow_id).execute()
+    
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and existing.data[0]['tenant_id'] != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    data = {}
+    if flow.name is not None:
+        data['name'] = flow.name
+    if flow.description is not None:
+        data['description'] = flow.description
+    if flow.nodes is not None:
+        data['nodes'] = flow.nodes
+    if flow.edges is not None:
+        data['edges'] = flow.edges
+    if flow.variables is not None:
+        data['variables'] = flow.variables
+    if flow.status is not None:
+        data['status'] = flow.status
+    if flow.is_active is not None:
+        data['is_active'] = flow.is_active
+    
+    if not data:
+        raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
+    
+    result = supabase.table('flows').update(data).eq('id', flow_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    f = result.data[0]
+    return {
+        'id': f['id'],
+        'tenantId': f['tenant_id'],
+        'name': f['name'],
+        'description': f.get('description'),
+        'nodes': f.get('nodes', []),
+        'edges': f.get('edges', []),
+        'variables': f.get('variables', {}),
+        'status': f['status'],
+        'isActive': f['is_active'],
+        'createdBy': f.get('created_by'),
+        'createdAt': f['created_at'],
+        'updatedAt': f['updated_at']
+    }
+
+@api_router.delete("/flows/{flow_id}")
+async def delete_flow(flow_id: str, payload: dict = Depends(verify_token)):
+    """Delete a flow"""
+    # Verificar se o fluxo existe e se o usuário tem acesso
+    existing = supabase.table('flows').select('id, tenant_id').eq('id', flow_id).execute()
+    
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    user_tenant_id = get_user_tenant_id(payload)
+    if payload.get('role') != 'superadmin' and user_tenant_id and existing.data[0]['tenant_id'] != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    supabase.table('flows').delete().eq('id', flow_id).execute()
+    return {"success": True, "message": "Fluxo deletado com sucesso"}
+
+@api_router.post("/flows/{flow_id}/duplicate")
+async def duplicate_flow(flow_id: str, duplicate: FlowDuplicate, payload: dict = Depends(verify_token)):
+    """Duplicate an existing flow"""
+    # Buscar o fluxo original
+    result = supabase.table('flows').select('*').eq('id', flow_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    original = result.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    
+    if payload.get('role') != 'superadmin' and user_tenant_id and original['tenant_id'] != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    # Criar cópia
+    data = {
+        'tenant_id': original['tenant_id'],
+        'name': duplicate.name,
+        'description': duplicate.description or original.get('description'),
+        'nodes': original.get('nodes', []),
+        'edges': original.get('edges', []),
+        'variables': original.get('variables', {}),
+        'status': 'draft',
+        'is_active': False,
+        'created_by': payload.get('user_id')
+    }
+    
+    new_flow = supabase.table('flows').insert(data).execute()
+    
+    if not new_flow.data:
+        raise HTTPException(status_code=400, detail="Erro ao duplicar fluxo")
+    
+    f = new_flow.data[0]
+    return {
+        'id': f['id'],
+        'tenantId': f['tenant_id'],
+        'name': f['name'],
+        'description': f.get('description'),
+        'nodes': f.get('nodes', []),
+        'edges': f.get('edges', []),
+        'variables': f.get('variables', {}),
+        'status': f['status'],
+        'isActive': f['is_active'],
+        'createdBy': f.get('created_by'),
+        'createdAt': f['created_at'],
+        'updatedAt': f['updated_at']
+    }
+
+@api_router.patch("/flows/{flow_id}/toggle")
+async def toggle_flow(flow_id: str, payload: dict = Depends(verify_token)):
+    """Toggle flow active status"""
+    # Verificar se o fluxo existe
+    existing = supabase.table('flows').select('id, tenant_id, is_active').eq('id', flow_id).execute()
+    
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    flow_data = existing.data[0]
+    user_tenant_id = get_user_tenant_id(payload)
+    
+    if payload.get('role') != 'superadmin' and user_tenant_id and flow_data['tenant_id'] != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    
+    # Inverter estado
+    new_state = not flow_data['is_active']
+    result = supabase.table('flows').update({'is_active': new_state}).eq('id', flow_id).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Fluxo não encontrado")
+    
+    f = result.data[0]
+    return {
+        'id': f['id'],
+        'isActive': f['is_active'],
+        'message': f"Fluxo {'ativado' if f['is_active'] else 'desativado'} com sucesso"
+    }
+
 # ==================== CONVERSATIONS ROUTES ====================
+
 
 @api_router.get("/conversations")
 async def list_conversations(
