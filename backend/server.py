@@ -4430,9 +4430,16 @@ async def evolution_webhook(instance_name: str, payload: dict):
 
 async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
     logger.info(f"Webhook received for {instance_name}: {payload.get('event')}")
+    
+    # DEBUG: Log full payload for investigation
+    logger.info(f"Full webhook payload: {json.dumps(payload, indent=2, default=str)[:2000]}")
 
     try:
         parsed = evolution_api.parse_webhook_message(payload)
+        
+        # DEBUG: Log parsed push_name
+        if parsed.get('event') == 'message':
+            logger.info(f"DEBUG - Parsed pushName: '{parsed.get('push_name')}' | Phone: {parsed.get('remote_jid')}")
 
         if parsed['event'] == 'message':
             is_from_me = parsed.get('from_me', False)
@@ -4591,11 +4598,16 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         avatar_url = extract_profile_picture_url(data)
                     except Exception:
                         avatar_url = None
+                    
+                    # DEBUG: Log contact name being used
+                    contact_name_to_use = parsed.get('push_name') or phone
+                    logger.info(f"DEBUG - Creating conversation with contact_name: '{contact_name_to_use}' | push_name from parsed: '{parsed.get('push_name')}' | phone: {phone}")
+                    
                     conv_data = {
                         'tenant_id': tenant_id,
                         'connection_id': connection['id'],
                         'contact_phone': phone,
-                        'contact_name': parsed.get('push_name') or phone,
+                        'contact_name': contact_name_to_use,
                         'contact_avatar': avatar_url,
                         'status': 'open',
                         'unread_count': 0 if is_from_me else 1,  # Don't count as unread if from_me
@@ -4678,6 +4690,10 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                 pass
                         else:
                             push_name = (parsed.get('push_name') or '').strip() or None
+                            
+                            # DEBUG: Log auto-contact creation
+                            logger.info(f"DEBUG - Auto-creating contact | push_name: '{push_name}' | phone: {phone} | tenant: {tenant_id}")
+                            
                             try:
                                 insert_data = {
                                     'tenant_id': tenant_id,
