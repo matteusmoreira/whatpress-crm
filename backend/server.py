@@ -7106,11 +7106,8 @@ async def proxy_whatsapp_media(
                 }
             
             # No media URL found and no external_id available
-            logger.warning(f"Message {message_id} has no external_id and no media_url in database")
-            raise HTTPException(
-                status_code=400,
-                detail="Mensagem sem external_id e sem media_url; não é possível buscar mídia.",
-            )
+            # Try using message_id directly as a fallback (it might be the Evolution API message ID)
+            logger.warning(f"Message {message_id} has no external_id and no media_url in database. Trying message_id as external_id...")
 
         # Call Evolution API to get base64 media
         normalized_remote_jid = _normalize_remote_jid(remote_jid)
