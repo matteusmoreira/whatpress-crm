@@ -18,7 +18,8 @@ import {
   CreditCard,
   Wrench,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  Workflow
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -57,6 +58,7 @@ const Sidebar = () => {
       { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
       { to: '/app/contacts', icon: Users, label: 'Contatos' },
       { to: '/app/automations', icon: Bot, label: 'Automações' },
+      { to: '/app/flows', icon: Workflow, label: 'Fluxos' },
       { to: '/app/chatbot', icon: Bot, label: 'Chatbot' },
       { to: '/app/templates', icon: FileText, label: 'Templates' },
       { to: '/app/kb', icon: BookOpen, label: 'Base de Conhecimento' },
