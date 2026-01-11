@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request, Query
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -3826,7 +3827,7 @@ async def update_contact(contact_id: str, data: ContactUpdate, payload: dict = D
         raise HTTPException(status_code=500, detail=f"Erro ao atualizar contato: {str(e)}")
 
 @api_router.delete("/contacts/purge")
-async def purge_contacts(tenant_id: Optional[str] = None, payload: dict = Depends(verify_token)):
+async def purge_contacts(tenant_id: Optional[str] = Query(None), payload: dict = Depends(verify_token)):
     """Delete all contacts for a tenant"""
     requested_tenant_id = (tenant_id or '').strip() or None
     user_tenant_id = get_user_tenant_id(payload)
@@ -4324,6 +4325,206 @@ async def send_whatsapp_message(instance_name: str, phone: str, content: str, ms
     except Exception as e:
         logger.error(f"Failed to send WhatsApp message: {e}")
         supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+
+# ==================== UPLOAD ROUTES ====================
+
+@api_router.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    conversation_id: str = Form(...),
+    payload: dict = Depends(verify_token)
+):
+    """Upload a file and return its URL"""
+    try:
+        # Validate conversation access
+        _require_conversation_access(conversation_id, payload)
+        
+        # Validate file
+        if not file:
+            raise HTTPException(status_code=400, detail="Nenhum arquivo enviado")
+        
+        # Validate file size (10MB max)
+        MAX_SIZE = 10 * 1024 * 1024  # 10MB
+        content = await file.read()
+        if len(content) > MAX_SIZE:
+            raise HTTPException(status_code=400, detail="Arquivo muito grande (máx. 10MB)")
+        
+        # Create uploads directory if it doesn't exist
+        uploads_dir = ROOT_DIR / "uploads"
+        uploads_dir.mkdir(exist_ok=True)
+        
+        # Generate unique filename
+        file_ext = Path(file.filename).suffix if file.filename else ''
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = uploads_dir / unique_filename
+        
+        # Save file
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Generate URL (use backend URL)
+        backend_url = os.getenv('BACKEND_URL', 'http://localhost:8000')
+        file_url = f"{backend_url}/uploads/{unique_filename}"
+        
+        return {
+            "url": file_url,
+            "filename": file.filename,
+            "size": len(content),
+            "path": str(file_path)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao fazer upload: {str(e)}")
+
+@api_router.post("/messages/media")
+async def send_media_message(
+    conversation_id: str = Form(...),
+    media_type: str = Form(...),
+    media_url: str = Form(...),
+    media_name: str = Form(...),
+    content: str = Form(""),
+    background_tasks: BackgroundTasks = None,
+    payload: dict = Depends(verify_token)
+):
+    """Send a media message (image, video, audio, document)"""
+    try:
+        # Validate conversation access
+        _require_conversation_access(conversation_id, payload)
+        
+        # Get conversation details
+        conv = supabase.table('conversations').select('*, connections(*)').eq('id', conversation_id).execute()
+        if not conv.data:
+            raise HTTPException(status_code=404, detail="Conversa não encontrada")
+        
+        conversation = conv.data[0]
+        connection = conversation.get('connections')
+        
+        # Enforce message limits
+        _enforce_messages_limit(conversation.get('tenant_id'))
+        
+        # Prepare caption (with user signature if applicable)
+        caption = (content or '').strip()
+        if media_type != 'system':
+            try:
+                user_row = supabase.table('users').select('name, job_title, department, signature_enabled, signature_include_title, signature_include_department').eq('id', payload.get('user_id')).execute()
+                if user_row.data:
+                    prefix = build_user_signature_prefix(user_row.data[0])
+                    if prefix and caption and not caption.startswith(prefix):
+                        caption = prefix + caption
+            except Exception:
+                pass
+        
+        # Save message to database
+        message_data = {
+            'conversation_id': conversation_id,
+            'content': caption or f"[{media_type}]",
+            'type': media_type,
+            'direction': 'outbound',
+            'status': 'sent',
+            'media_url': media_url
+        }
+        
+        result = supabase.table('messages').insert(message_data).execute()
+        
+        # Update conversation
+        preview = caption[:50] if caption else f"[{media_type.capitalize()}]"
+        supabase.table('conversations').update({
+            'last_message_at': datetime.utcnow().isoformat(),
+            'last_message_preview': preview
+        }).eq('id', conversation_id).execute()
+        
+        # Update tenant message count
+        if conversation.get('tenant_id'):
+            tenant = supabase.table('tenants').select('messages_this_month').eq('id', conversation['tenant_id']).execute()
+            if tenant.data:
+                new_count = tenant.data[0]['messages_this_month'] + 1
+                supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
+        
+        # Audit log
+        safe_insert_audit_log(
+            tenant_id=conversation.get('tenant_id'),
+            actor_user_id=payload.get('user_id'),
+            action='message.media_sent',
+            entity_type='message',
+            entity_id=(result.data[0]['id'] if result.data else None),
+            metadata={'conversation_id': conversation_id, 'media_type': media_type}
+        )
+        
+        connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
+        connection_status = (connection.get('status') if isinstance(connection, dict) else None)
+        is_evolution = str(connection_provider or '').lower() == 'evolution'
+        is_connected = str(connection_status or '').lower() in ['connected', 'open']
+        
+        status = 'sent'
+        
+        # Send via WhatsApp if Evolution API connection
+        if connection and is_evolution and is_connected:
+            if background_tasks:
+                background_tasks.add_task(
+                    send_whatsapp_media,
+                    connection['instance_name'],
+                    conversation['contact_phone'],
+                    media_type,
+                    media_url,
+                    caption,
+                    media_name,
+                    result.data[0]['id']
+                )
+            else:
+                # If no background tasks, send synchronously
+                await send_whatsapp_media(
+                    connection['instance_name'],
+                    conversation['contact_phone'],
+                    media_type,
+                    media_url,
+                    caption,
+                    media_name,
+                    result.data[0]['id']
+                )
+        else:
+            supabase.table('messages').update({'status': 'failed'}).eq('id', result.data[0]['id']).execute()
+            status = 'failed'
+        
+        m = result.data[0]
+        return {
+            'id': m['id'],
+            'conversationId': m['conversation_id'],
+            'content': m['content'],
+            'type': m['type'],
+            'direction': m['direction'],
+            'status': status,
+            'mediaUrl': m['media_url'],
+            'timestamp': m['timestamp']
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Media message error: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao enviar mídia: {str(e)}")
+
+async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, filename: str, message_id: str):
+    """Background task to send WhatsApp media message"""
+    try:
+        if media_type == 'image':
+            await evolution_api.send_media(instance_name, phone, 'image', media_url=media_url, caption=caption)
+        elif media_type == 'video':
+            await evolution_api.send_media(instance_name, phone, 'video', media_url=media_url, caption=caption)
+        elif media_type == 'audio':
+            await evolution_api.send_audio(instance_name, phone, media_url)
+        elif media_type == 'document':
+            await evolution_api.send_media(instance_name, phone, 'document', media_url=media_url, caption=caption, filename=filename)
+        else:
+            # Default to document
+            await evolution_api.send_media(instance_name, phone, 'document', media_url=media_url, caption=caption, filename=filename)
+        
+        # Update message status to delivered
+        supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
+    except Exception as e:
+        logger.error(f"Failed to send WhatsApp media: {e}")
+        supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+
 
 # ==================== WHATSAPP DIRECT ROUTES ====================
 
@@ -7096,6 +7297,11 @@ async def proxy_whatsapp_media(
         if "timeout" in lowered or "timed out" in lowered or "502" in lowered or "503" in lowered or "504" in lowered:
             raise HTTPException(status_code=503, detail="Evolution API indisponível.")
         raise HTTPException(status_code=502, detail="Erro ao obter mídia.")
+
+# Mount uploads directory for static file serving
+uploads_path = ROOT_DIR / "uploads"
+uploads_path.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
 # Include the router in the main app
 app.include_router(api_router)
