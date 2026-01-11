@@ -918,11 +918,24 @@ class EvolutionAPI:
                             if isinstance(payload_msg_key, dict):
                                 from_me_candidates.extend([payload_msg_key.get('fromMe'), payload_msg_key.get('from_me')])
 
+
                 for candidate in from_me_candidates:
                     if candidate is None:
                         continue
                     from_me = parse_bool(candidate)
                     break
+                
+                # Extract pushName from the correct location
+                # The pushName can be in  the top-level data object or inside msg
+                push_name = None
+                if isinstance(data, dict):
+                    push_name = data.get('pushName')
+                if not push_name and isinstance(msg, dict):
+                    push_name = msg.get('pushName')
+                if not push_name and isinstance(payload, dict):
+                    payload_data = payload.get('data')
+                    if isinstance(payload_data, dict):
+                        push_name = payload_data.get('pushName')
 
                 return {
                     'event': 'message',
@@ -937,8 +950,9 @@ class EvolutionAPI:
                     'mime_type': mime_type,
                     'media_url': media_url,
                     'timestamp': msg.get('messageTimestamp'),
-                    'push_name': msg.get('pushName')
+                    'push_name': push_name
                 }
+
         
         elif normalized_event == 'connection.update':
             # Evolution API v2 pode retornar o estado em diferentes formatos

@@ -1,0 +1,630 @@
+2026-01-11T12:59:54.360287515Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T12:59:54.360293121Z [inf]  INFO:     100.64.0.3:29008 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:01:44.989175412Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:01:44.989185387Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:01:44.989194840Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:01:44.989205059Z [inf]  INFO:     100.64.0.4:54536 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:01:44.989214837Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:01:44.989224067Z [inf]  INFO:     100.64.0.4:54538 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:01:44.989235638Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:01:44.989245980Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:01:44.989255930Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:01:44.989266920Z [inf]  INFO:     100.64.0.4:54536 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:02:44.898214571Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:02:44.898227653Z [inf]  INFO:     100.64.0.5:14600 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:02:44.898237606Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:02:45.166987974Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:02:45.641135862Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:02:45.641150321Z [inf]  INFO:     100.64.0.5:14592 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:02:45.906754684Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:02:46.178387073Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:02:46.681454918Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:02:46.681473936Z [inf]  INFO:     100.64.0.5:14592 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:02:53.000000000Z [inf]  Starting Container
+2026-01-11T13:02:55.806005695Z [err]  Supabase key role=anon; recomendado usar service_role no backend.
+2026-01-11T13:02:55.806011165Z [err]  INFO:     Started server process [1]
+2026-01-11T13:02:55.806015824Z [err]  INFO:     Waiting for application startup.
+2026-01-11T13:02:55.818466217Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:02:55.818473809Z [err]  WARNING:server:Auto messages schema not ensured (exec_sql unavailable?): {'message': 'Could not find the function public.exec_sql(sql) in the schema cache', 'code': 'PGRST202', 'hint': None, 'details': 'Searched for the function public.exec_sql with parameter sql or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.'}
+2026-01-11T13:02:56.071168463Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:02:56.318554312Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:02:56.318562735Z [err]  INFO:server:WhatsApp CRM API v2.0 started successfully
+2026-01-11T13:02:56.318570890Z [err]  INFO:     Application startup complete.
+2026-01-11T13:02:56.318579810Z [err]  INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+2026-01-11T13:02:57.101905284Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:02:57.107815134Z [inf]  INFO:     100.64.0.2:58819 - "GET /health HTTP/1.1" 200 OK
+2026-01-11T13:03:01.000000000Z [inf]  Stopping Container
+2026-01-11T13:03:06.469701983Z [err]  INFO:     Shutting down
+2026-01-11T13:03:06.469708893Z [err]  INFO:     Waiting for application shutdown.
+2026-01-11T13:03:06.469719166Z [err]  INFO:     Application shutdown complete.
+2026-01-11T13:03:06.469724151Z [err]  INFO:     Finished server process [1]
+2026-01-11T13:03:17.108603512Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:03:17.108616060Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:17.108626371Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:03:17.108634996Z [inf]  INFO:     100.64.0.3:61050 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:17.108643456Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:17.108652828Z [inf]  INFO:     100.64.0.3:61052 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:03:17.108663003Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:03:17.108671648Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:17.108679629Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:03:17.108687840Z [inf]  INFO:     100.64.0.3:61050 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:17.256397762Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:17.258840758Z [inf]  INFO:     100.64.0.3:34286 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:03:17.260316824Z [inf]  INFO:     100.64.0.3:34298 - "OPTIONS /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:17.260328735Z [inf]  INFO:     100.64.0.3:34308 - "OPTIONS /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:03:17.260338367Z [inf]  INFO:     100.64.0.3:34322 - "OPTIONS /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:17.262013135Z [inf]  INFO:     100.64.0.3:34334 - "OPTIONS /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:17.913118762Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id%2Cname%2Cavatar%2Cstatus&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:03:17.999823952Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:18.219841074Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:18.462679810Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:18.908392717Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e "HTTP/2 200 OK"
+2026-01-11T13:03:18.941941561Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:19.153461800Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:19.155061854Z [inf]  INFO:     100.64.0.3:34286 - "GET /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:19.391105309Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=status&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:19.624313294Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:03:19.870458723Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:03:20.043808842Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:20.265332535Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:03:20.488998525Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00 "HTTP/2 200 OK"
+2026-01-11T13:03:20.879503701Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.online "HTTP/2 200 OK"
+2026-01-11T13:03:20.879511401Z [inf]  INFO:     100.64.0.3:34298 - "GET /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:20.923349825Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:03:21.134796040Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:03:21.390354490Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:21.390364600Z [inf]  INFO:     100.64.0.3:34308 - "GET /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:21.610365258Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:21.908156664Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:22.075391042Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:22.332300131Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:22.545151872Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:22.927748289Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:22.981687666Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:23.194308583Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:23.521852363Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:23.882318822Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:23.950926318Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:24.154402017Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:24.359285170Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:24.570978842Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:24.570987074Z [inf]  INFO:     100.64.0.3:34322 - "GET /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:03:24.570996019Z [inf]  INFO:     100.64.0.3:34286 - "OPTIONS /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:03:24.571003798Z [inf]  INFO:     100.64.0.3:34334 - "OPTIONS /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:24.571964093Z [inf]  INFO:     100.64.0.3:30536 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:03:24.571974543Z [inf]  INFO:     100.64.0.3:30528 - "OPTIONS /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:24.573068337Z [inf]  INFO:     100.64.0.3:30552 - "OPTIONS /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:24.972900506Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=status&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:25.177095849Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:03:25.387657608Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:03:25.599828831Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:25.884446253Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:03:26.007102084Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00 "HTTP/2 200 OK"
+2026-01-11T13:03:26.219854255Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.online "HTTP/2 200 OK"
+2026-01-11T13:03:26.220625486Z [inf]  INFO:     100.64.0.3:30552 - "GET /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:26.438480551Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:26.438558666Z [inf]  INFO:     100.64.0.3:30536 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:03:26.643293932Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:26.904562538Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:27.064249810Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:27.272591222Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:27.477669152Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:27.893200314Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:27.923634673Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:28.125503921Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:28.339773412Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:28.539879073Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:28.867715276Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:28.956595414Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:29.163349632Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:03:29.368391906Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:29.369400466Z [inf]  INFO:     100.64.0.3:30528 - "GET /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:03:29.581361709Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id%2Cname%2Cavatar%2Cstatus&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:03:29.879434190Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:30.007123823Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:30.218405632Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:30.432335498Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e "HTTP/2 200 OK"
+2026-01-11T13:03:30.631078819Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:30.892492331Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:03:30.892499413Z [inf]  INFO:     100.64.0.3:34334 - "GET /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:31.061030520Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:03:31.261895331Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:03:31.469669240Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:03:31.469680665Z [inf]  INFO:     100.64.0.3:34286 - "GET /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:31.685993989Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:03:31.686001351Z [inf]  INFO:     100.64.0.3:30570 - "GET /api/agents?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:31.912671058Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:31.912679674Z [inf]  INFO:     100.64.0.3:30536 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:03:32.120427147Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:32.121829270Z [inf]  INFO:     100.64.0.3:30562 - "GET /api/connections?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:32.357323979Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:03:32.563809361Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:32.563817651Z [inf]  INFO:     100.64.0.3:30560 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:03:32.884713772Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/labels?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.asc "HTTP/2 200 OK"
+2026-01-11T13:03:32.975112783Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bbd3587e2-8262-4919-bcd0-e8cdde076c88%7D "HTTP/2 200 OK"
+2026-01-11T13:03:33.196030940Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bd817da34-6509-44b0-8673-16fbb774eb87%7D "HTTP/2 200 OK"
+2026-01-11T13:03:33.416535669Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B38f2baeb-1aab-4825-905d-67ca0e14b222%7D "HTTP/2 200 OK"
+2026-01-11T13:03:33.615544772Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba189e551-37e1-42db-9c94-cacfbf29c1e3%7D "HTTP/2 200 OK"
+2026-01-11T13:03:33.927316973Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B874ab56a-1799-44fe-b827-8e3e378e7153%7D "HTTP/2 200 OK"
+2026-01-11T13:03:34.035301429Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bc9c53e37-f956-49cc-ac99-e0b7ac6b4d06%7D "HTTP/2 200 OK"
+2026-01-11T13:03:34.240716280Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba3f2f0d1-990f-4d32-95b0-c75c3d7a4d7e%7D "HTTP/2 200 OK"
+2026-01-11T13:03:34.444903359Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bb3d0f346-58a4-4e42-9bc9-83a6276dd620%7D "HTTP/2 200 OK"
+2026-01-11T13:03:34.444913120Z [inf]  INFO:     100.64.0.3:30552 - "GET /api/labels?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:34.679964612Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:03:34.912156399Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:34.912165243Z [inf]  INFO:     100.64.0.3:30560 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:03:36.001344484Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:03:36.217007137Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:36.430418843Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:03:36.430424377Z [inf]  INFO:     100.64.0.3:30560 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:03:36.642593586Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:03:36.642602609Z [inf]  INFO:     100.64.0.3:30552 - "POST /api/agents/offline HTTP/1.1" 200 OK
+2026-01-11T13:03:36.915806821Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:03:37.063682210Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:03:37.279646154Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:03:37.279653902Z [inf]  INFO:     100.64.0.3:30560 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:04:47.305958760Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:04:47.305968133Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:04:47.305976220Z [inf]  INFO:     100.64.0.4:55228 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:04:47.305983940Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/labels?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.asc "HTTP/2 200 OK"
+2026-01-11T13:04:47.305991575Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bbd3587e2-8262-4919-bcd0-e8cdde076c88%7D "HTTP/2 200 OK"
+2026-01-11T13:04:47.305998918Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bd817da34-6509-44b0-8673-16fbb774eb87%7D "HTTP/2 200 OK"
+2026-01-11T13:04:47.341509182Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B38f2baeb-1aab-4825-905d-67ca0e14b222%7D "HTTP/2 200 OK"
+2026-01-11T13:04:47.554924025Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba189e551-37e1-42db-9c94-cacfbf29c1e3%7D "HTTP/2 200 OK"
+2026-01-11T13:04:47.770058804Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B874ab56a-1799-44fe-b827-8e3e378e7153%7D "HTTP/2 200 OK"
+2026-01-11T13:04:48.153715520Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bc9c53e37-f956-49cc-ac99-e0b7ac6b4d06%7D "HTTP/2 200 OK"
+2026-01-11T13:04:48.209329140Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba3f2f0d1-990f-4d32-95b0-c75c3d7a4d7e%7D "HTTP/2 200 OK"
+2026-01-11T13:04:48.427241449Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bb3d0f346-58a4-4e42-9bc9-83a6276dd620%7D "HTTP/2 200 OK"
+2026-01-11T13:04:48.427250826Z [inf]  INFO:     100.64.0.4:55230 - "GET /api/labels?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:04:48.646994788Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:04:48.647003888Z [inf]  INFO:     100.64.0.4:55250 - "GET /api/connections?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:04:48.886412991Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:04:48.886420844Z [inf]  INFO:     100.64.0.4:55264 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:04:49.233253981Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:04:49.233261681Z [inf]  INFO:     100.64.0.4:55280 - "GET /api/agents?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:04:49.317891716Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:04:49.532950318Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:04:49.532962110Z [inf]  INFO:     100.64.0.4:55228 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:05:09.534329396Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:05:09.534338969Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:09.534363985Z [inf]  INFO:     100.64.0.4:56398 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:05:09.534374203Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:05:09.534383775Z [inf]  INFO:     100.64.0.4:56398 - "POST /api/agents/offline HTTP/1.1" 200 OK
+2026-01-11T13:05:09.534393315Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:09.534401123Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:09.534410332Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:05:09.534421988Z [inf]  INFO:     100.64.0.4:56412 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:09.534431628Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:09.534441163Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:09.535972259Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:05:09.535980678Z [inf]  INFO:     100.64.0.4:56412 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:11.550021683Z [inf]  INFO:     100.64.0.4:58582 - "OPTIONS /api/contacts/purge?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:12.469100470Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:12.694530712Z [err]  INFO:httpx:HTTP Request: DELETE https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:12.911983054Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:05:12.913742396Z [inf]  INFO:     100.64.0.4:58582 - "DELETE /api/contacts/purge?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:13.319641655Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:13.319653044Z [inf]  INFO:     100.64.0.4:58582 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:15.995750757Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:15.995758498Z [inf]  INFO:     100.64.0.4:58582 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:16.287280928Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:05:16.287290019Z [inf]  INFO:     100.64.0.4:58584 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:05:16.440200199Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:16.440208599Z [inf]  INFO:     100.64.0.4:58582 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:19.688073472Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:05:19.901741132Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:19.903441447Z [inf]  INFO:     100.64.0.4:58582 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:05:20.319792176Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:05:20.319796750Z [inf]  INFO:     100.64.0.4:58584 - "GET /api/agents?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:20.350735990Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:05:20.350744175Z [inf]  INFO:     100.64.0.4:21572 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:05:20.584246175Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:05:20.783795427Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:20.785483116Z [inf]  INFO:     100.64.0.4:58582 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:05:21.007598653Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/labels?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.asc "HTTP/2 200 OK"
+2026-01-11T13:05:21.305815805Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bbd3587e2-8262-4919-bcd0-e8cdde076c88%7D "HTTP/2 200 OK"
+2026-01-11T13:05:21.447020801Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bd817da34-6509-44b0-8673-16fbb774eb87%7D "HTTP/2 200 OK"
+2026-01-11T13:05:21.678967476Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B38f2baeb-1aab-4825-905d-67ca0e14b222%7D "HTTP/2 200 OK"
+2026-01-11T13:05:21.893280225Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba189e551-37e1-42db-9c94-cacfbf29c1e3%7D "HTTP/2 200 OK"
+2026-01-11T13:05:22.308335292Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B874ab56a-1799-44fe-b827-8e3e378e7153%7D "HTTP/2 200 OK"
+2026-01-11T13:05:22.327870437Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bc9c53e37-f956-49cc-ac99-e0b7ac6b4d06%7D "HTTP/2 200 OK"
+2026-01-11T13:05:22.543759385Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba3f2f0d1-990f-4d32-95b0-c75c3d7a4d7e%7D "HTTP/2 200 OK"
+2026-01-11T13:05:22.776768352Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bb3d0f346-58a4-4e42-9bc9-83a6276dd620%7D "HTTP/2 200 OK"
+2026-01-11T13:05:22.776779735Z [inf]  INFO:     100.64.0.4:21586 - "GET /api/labels?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:22.995621590Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:22.995627308Z [inf]  INFO:     100.64.0.4:21598 - "GET /api/connections?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:22.995632060Z [inf]  INFO:     100.64.0.4:58582 - "OPTIONS /api/conversations/purge?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:23.394532694Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:23.606736665Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:23.827380213Z [err]  INFO:httpx:HTTP Request: DELETE https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/assignment_history?conversation_id=in.%288664f8b1-602d-4988-ab59-afdec09179bc%2Cb86ede85-55db-4ec7-bade-b5fe4c2f5814%2C01d82698-6213-4b8f-b01f-92ba8ebeac22%2C7a186763-f9e7-46ad-bd3f-12f08fc03c8a%29 "HTTP/2 200 OK"
+2026-01-11T13:05:24.055987097Z [err]  INFO:httpx:HTTP Request: DELETE https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/auto_message_logs?conversation_id=in.%288664f8b1-602d-4988-ab59-afdec09179bc%2Cb86ede85-55db-4ec7-bade-b5fe4c2f5814%2C01d82698-6213-4b8f-b01f-92ba8ebeac22%2C7a186763-f9e7-46ad-bd3f-12f08fc03c8a%29 "HTTP/2 200 OK"
+2026-01-11T13:05:24.309247810Z [err]  INFO:httpx:HTTP Request: DELETE https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/typing_events?conversation_id=in.%288664f8b1-602d-4988-ab59-afdec09179bc%2Cb86ede85-55db-4ec7-bade-b5fe4c2f5814%2C01d82698-6213-4b8f-b01f-92ba8ebeac22%2C7a186763-f9e7-46ad-bd3f-12f08fc03c8a%29 "HTTP/2 200 OK"
+2026-01-11T13:05:24.662870137Z [err]  INFO:httpx:HTTP Request: DELETE https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:24.880635994Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:05:24.880644532Z [inf]  INFO:     100.64.0.4:58582 - "DELETE /api/conversations/purge?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:26.384540326Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:05:26.386117302Z [inf]  INFO:     100.64.0.4:58582 - "POST /api/agents/offline HTTP/1.1" 200 OK
+2026-01-11T13:05:26.603001579Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:26.603008356Z [inf]  INFO:     100.64.0.4:21598 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:27.003817783Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:27.003830142Z [inf]  INFO:     100.64.0.4:21598 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:31.725360700Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:05:31.725368049Z [inf]  INFO:     100.64.0.4:21598 - "DELETE /api/contacts/purge?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:32.365246259Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:05:32.365250490Z [inf]  INFO:     100.64.0.4:21598 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:05:35.411684783Z [inf]  INFO:     100.64.0.4:21598 - "OPTIONS /api/contacts/bc81c508-6d03-4fe5-989e-e0ae72519b09 HTTP/1.1" 200 OK
+2026-01-11T13:05:35.632912528Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id%2Ctenant_id&id=eq.bc81c508-6d03-4fe5-989e-e0ae72519b09 "HTTP/2 200 OK"
+2026-01-11T13:05:35.634723445Z [inf]  INFO:     100.64.0.4:21598 - "DELETE /api/contacts/bc81c508-6d03-4fe5-989e-e0ae72519b09 HTTP/1.1" 404 Not Found
+2026-01-11T13:05:40.355754779Z [inf]  INFO:     100.64.0.4:21598 - "OPTIONS /api/contacts/3f892f71-f045-438d-9887-9610738da712 HTTP/1.1" 200 OK
+2026-01-11T13:05:40.608089303Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id%2Ctenant_id&id=eq.3f892f71-f045-438d-9887-9610738da712 "HTTP/2 200 OK"
+2026-01-11T13:05:40.608097502Z [inf]  INFO:     100.64.0.4:21598 - "DELETE /api/contacts/3f892f71-f045-438d-9887-9610738da712 HTTP/1.1" 404 Not Found
+2026-01-11T13:05:41.879242827Z [inf]  INFO:     100.64.0.4:21598 - "OPTIONS /api/contacts/7b0f8701-c139-4c4c-ba84-e94fe728c9c5 HTTP/1.1" 200 OK
+2026-01-11T13:05:42.318912765Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id%2Ctenant_id&id=eq.7b0f8701-c139-4c4c-ba84-e94fe728c9c5 "HTTP/2 200 OK"
+2026-01-11T13:05:42.318922900Z [inf]  INFO:     100.64.0.4:21598 - "DELETE /api/contacts/7b0f8701-c139-4c4c-ba84-e94fe728c9c5 HTTP/1.1" 404 Not Found
+2026-01-11T13:06:42.176300076Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:06:42.176305111Z [inf]  INFO:     100.64.0.4:42172 - "DELETE /api/contacts/purge?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:06:42.176311218Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.desc&offset=0&limit=20 "HTTP/2 200 OK"
+2026-01-11T13:06:42.176317410Z [inf]  INFO:     100.64.0.4:42172 - "GET /api/contacts?limit=20&offset=0&tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:11:02.670083654Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.670094975Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.670103107Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.670111312Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.670259404Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=status&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:11:02.670265886Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:11:02.670272456Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:11:02.670279157Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:11:02.670286818Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:11:02.670294529Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00 "HTTP/2 200 OK"
+2026-01-11T13:11:02.670302907Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.online "HTTP/2 200 OK"
+2026-01-11T13:11:02.670309467Z [inf]  INFO:     100.64.0.3:28322 - "GET /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:11:02.670315947Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id%2Cname%2Cavatar%2Cstatus&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:11:02.670322170Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:11:02.670508725Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:11:02.670516623Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.670524615Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e "HTTP/2 200 OK"
+2026-01-11T13:11:02.670532933Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:11:02.670540446Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.670547217Z [inf]  INFO:     100.64.0.3:28346 - "GET /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:11:02.671307437Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671317108Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671326398Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671333910Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671340886Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671348334Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671355434Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.671362123Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.672095993Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.672104503Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:11:02.672118453Z [inf]  INFO:     100.64.0.3:28356 - "GET /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:11:02.672125266Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:11:02.672131289Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:11:02.672139605Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:11:02.672147001Z [inf]  INFO:     100.64.0.3:28334 - "GET /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:11:56.000000000Z [inf]  Starting Container
+2026-01-11T13:11:58.816855787Z [err]  Supabase key role=anon; recomendado usar service_role no backend.
+2026-01-11T13:11:58.816864708Z [err]  INFO:     Started server process [1]
+2026-01-11T13:11:58.816872682Z [err]  INFO:     Waiting for application startup.
+2026-01-11T13:11:59.114640912Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:11:59.114646254Z [err]  WARNING:server:Auto messages schema not ensured (exec_sql unavailable?): {'message': 'Could not find the function public.exec_sql(sql) in the schema cache', 'code': 'PGRST202', 'hint': None, 'details': 'Searched for the function public.exec_sql with parameter sql or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.'}
+2026-01-11T13:11:59.343055515Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:11:59.579787407Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:11:59.579791687Z [err]  INFO:server:WhatsApp CRM API v2.0 started successfully
+2026-01-11T13:11:59.579796584Z [err]  INFO:     Application startup complete.
+2026-01-11T13:11:59.579801435Z [err]  INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+2026-01-11T13:12:00.528077004Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:12:00.528082312Z [inf]  INFO:     100.64.0.2:55869 - "GET /health HTTP/1.1" 200 OK
+2026-01-11T13:12:02.431076810Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431084031Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431091441Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431101199Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431109235Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431117603Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431124950Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.431132768Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432311848Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432321319Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432328613Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432333797Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432339372Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432346386Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.432351951Z [inf]  INFO:     100.64.0.3:51334 - "GET /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:12:02.432356858Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:12:02.432362015Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:12:02.433876769Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:12:02.433883077Z [inf]  INFO:     100.64.0.3:51338 - "GET /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:12:02.433888827Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id%2Cname%2Cavatar%2Cstatus&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:12:02.433893989Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:12:02.433898934Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:12:02.433903524Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.433918329Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e "HTTP/2 200 OK"
+2026-01-11T13:12:02.433922843Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:12:02.433927580Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:12:02.433932654Z [inf]  INFO:     100.64.0.3:51370 - "GET /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:12:02.435404683Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=status&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:12:02.435411695Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:12:02.435417029Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:12:02.435422296Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:12:02.435427471Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:12:02.435433194Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00 "HTTP/2 200 OK"
+2026-01-11T13:12:02.435439499Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.online "HTTP/2 200 OK"
+2026-01-11T13:12:02.435444416Z [inf]  INFO:     100.64.0.3:51332 - "GET /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:12:04.000000000Z [inf]  Stopping Container
+2026-01-11T13:12:04.008207518Z [err]  INFO:     Shutting down
+2026-01-11T13:12:04.105794408Z [err]  INFO:     Waiting for application shutdown.
+2026-01-11T13:12:04.105808864Z [err]  INFO:     Application shutdown complete.
+2026-01-11T13:12:04.105818144Z [err]  INFO:     Finished server process [1]
+2026-01-11T13:12:30.602085945Z [err]      "pushName": "Matteus Moreira",
+2026-01-11T13:12:30.602086887Z [err]          "low": 1767705821,
+2026-01-11T13:12:30.602098251Z [err]          "high": 0,
+2026-01-11T13:12:30.602100926Z [err]      "status": "SERVER_ACK",
+2026-01-11T13:12:30.602110059Z [err]          "unsigned": false
+2026-01-11T13:12:30.602111047Z [err]      "message": {
+2026-01-11T13:12:30.602118141Z [err]        },
+2026-01-11T13:12:30.602120791Z [err]        "conversation": "manim.. segunda feira consegue me passar o acesso a api? painel.. tudo certim? eu vou comecar segunda feira integrar a papi aqui no sistema de multatendimento"
+2026-01-11T13:12:30.602127251Z [err]  INFO:server:Webhook received for testenew: messages.upsert
+2026-01-11T13:12:30.602130539Z [err]      },
+2026-01-11T13:12:30.602140141Z [err]      "contextInfo": {
+2026-01-11T13:12:30.602146573Z [err]  INFO:server:Full webhook payload: {
+2026-01-11T13:12:30.602149858Z [err]        "mentionedJid": [],
+2026-01-11T13:12:30.602157578Z [err]    "event": "messages.upsert",
+2026-01-11T13:12:30.602159839Z [err]        "groupMentions": [],
+2026-01-11T13:12:30.602169148Z [err]    "instance": "testenew",
+2026-01-11T13:12:30.602170449Z [err]        "statusAttributions": [],
+2026-01-11T13:12:30.602181124Z [err]    "data": {
+2026-01-11T13:12:30.602182468Z [err]        "ephemeralSettingTimestamp": {
+2026-01-11T13:12:30.602191145Z [err]      "key": {
+2026-01-11T13:12:30.602199812Z [err]        "remoteJid": "5511966701739@s.whatsapp.net",
+2026-01-11T13:12:30.602207182Z [err]        "remoteJidAlt": "245289927631100@lid",
+2026-01-11T13:12:30.602215139Z [err]        "fromMe": true,
+2026-01-11T13:12:30.602222774Z [err]        "id": "3EB0E9E59E59C22F117F57",
+2026-01-11T13:12:30.602229301Z [err]        "participant": "",
+2026-01-11T13:12:30.602237219Z [err]        "addressingMode": "pn"
+2026-01-11T13:12:30.602245857Z [err]      },
+2026-01-11T13:12:30.602921320Z [err]        "disappearingMode": {
+2026-01-11T13:12:30.602929068Z [err]          "initiator": 0,
+2026-01-11T13:12:30.602935887Z [err]          "trigger": 1,
+2026-01-11T13:12:30.602941192Z [err]          "initiatedByMe": true
+2026-01-11T13:12:30.602946946Z [err]        }
+2026-01-11T13:12:30.602952109Z [err]      },
+2026-01-11T13:12:30.602957673Z [err]      "messageType": "conversation",
+2026-01-11T13:12:30.602962647Z [err]      "messageTimestamp": 1768137147,
+2026-01-11T13:12:30.602967723Z [err]      "instanceId": "3fdf9e91-675c-4ea7-8f8e-fc6863047215",
+2026-01-11T13:12:30.602973802Z [err]      "source": "web"
+2026-01-11T13:12:30.602978772Z [err]    },
+2026-01-11T13:12:30.602983537Z [err]    "destination": "https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/testenew",
+2026-01-11T13:12:30.602988969Z [err]    "date_time": "2026-01-11T10:12:27.933Z",
+2026-01-11T13:12:30.602993796Z [err]    "sender": "5522999021889@s.whatsapp.net",
+2026-01-11T13:12:30.602999488Z [err]    "server_url": "https://api.whatpress.pro",
+2026-01-11T13:12:30.603004187Z [err]    "apikey": "63CDE1C1-8BEB-4E07-8197-7166C013BDA1"
+2026-01-11T13:12:30.603008782Z [err]  }
+2026-01-11T13:12:30.603013520Z [err]  INFO:server:DEBUG - Parsed pushName: 'None' | Phone: 5511966701739
+2026-01-11T13:12:30.603018252Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=%2A%2Ctenants%28%2A%29&instance_name=eq.testenew "HTTP/2 200 OK"
+2026-01-11T13:12:30.603023417Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&connection_id=eq.4bf8e9f3-6ce5-41fa-9f52-cf4a7f60aafc&contact_phone=eq.5511966701739 "HTTP/2 200 OK"
+2026-01-11T13:12:30.603027996Z [err]  INFO:httpx:HTTP Request: POST https://api.whatpress.pro/chat/fetchProfilePictureUrl/testenew "HTTP/1.1 200 OK"
+2026-01-11T13:12:30.603950914Z [err]  INFO:server:DEBUG - Creating conversation with contact_name: '5511966701739' | push_name from parsed: 'None' | phone: 5511966701739
+2026-01-11T13:12:30.603958358Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations "HTTP/2 201 Created"
+2026-01-11T13:12:30.603963587Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id%2Cfirst_contact_at%2Cstatus%2Ccustom_fields&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&phone=eq.5511966701739&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:12:30.603968597Z [err]  INFO:server:DEBUG - Auto-creating contact | push_name: 'None' | phone: 5511966701739 | tenant: 0f8cb25f-18cd-4215-9280-6c8eaf674ee0
+2026-01-11T13:12:30.603974735Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts "HTTP/2 201 Created"
+2026-01-11T13:12:30.603978984Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:12:30.791557107Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages "HTTP/2 201 Created"
+2026-01-11T13:12:31.105587179Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:12:31.233154211Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:12:31.471622728Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/auto_messages?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&is_active=eq.True "HTTP/2 200 OK"
+2026-01-11T13:12:31.471622730Z [err]      "status": "DELIVERY_ACK",
+2026-01-11T13:12:31.471632888Z [inf]  INFO:     100.64.0.3:46158 - "POST /api/webhooks/evolution/testenew HTTP/1.1" 200 OK
+2026-01-11T13:12:31.471633483Z [err]      "instanceId": "3fdf9e91-675c-4ea7-8f8e-fc6863047215",
+2026-01-11T13:12:31.471641594Z [err]      "messageId": "cmk9r7eti79cxpd4g8xfpqa8q"
+2026-01-11T13:12:31.471641673Z [err]  INFO:server:Webhook received for testenew: messages.update
+2026-01-11T13:12:31.471649508Z [err]    },
+2026-01-11T13:12:31.471650448Z [err]  INFO:server:Full webhook payload: {
+2026-01-11T13:12:31.471656818Z [err]    "destination": "https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/testenew",
+2026-01-11T13:12:31.471658281Z [err]    "event": "messages.update",
+2026-01-11T13:12:31.471664949Z [err]    "date_time": "2026-01-11T10:12:30.080Z",
+2026-01-11T13:12:31.471665815Z [err]    "instance": "testenew",
+2026-01-11T13:12:31.471673018Z [err]    "data": {
+2026-01-11T13:12:31.471674954Z [err]    "sender": "5522999021889@s.whatsapp.net",
+2026-01-11T13:12:31.471681396Z [err]      "keyId": "3EB0E9E59E59C22F117F57",
+2026-01-11T13:12:31.471682413Z [err]    "server_url": "https://api.whatpress.pro",
+2026-01-11T13:12:31.471688932Z [err]      "remoteJid": "5511966701739@s.whatsapp.net",
+2026-01-11T13:12:31.471689339Z [err]    "apikey": "63CDE1C1-8BEB-4E07-8197-7166C013BDA1"
+2026-01-11T13:12:31.471696852Z [err]  }
+2026-01-11T13:12:31.471696947Z [err]      "fromMe": true,
+2026-01-11T13:12:31.471703578Z [inf]  INFO:     100.64.0.4:22014 - "POST /api/webhooks/evolution/testenew HTTP/1.1" 200 OK
+2026-01-11T13:13:01.474344565Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:13:01.474354087Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00 "HTTP/2 200 OK"
+2026-01-11T13:13:01.474381712Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:13:01.474388900Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:13:01.474394018Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:13:01.474399808Z [inf]  INFO:     100.64.0.5:11636 - "GET /api/analytics/conversations-by-status?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:01.474405009Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=status&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:01.474409668Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.open "HTTP/2 200 OK"
+2026-01-11T13:13:01.474414758Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.pending "HTTP/2 200 OK"
+2026-01-11T13:13:01.474420008Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:13:01.475802459Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.475803252Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.475815640Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-07T00%3A00%3A00&timestamp=lte.2026-01-07T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.475825783Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&status=eq.online "HTTP/2 200 OK"
+2026-01-11T13:13:01.475826184Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.475836850Z [inf]  INFO:     100.64.0.5:11642 - "GET /api/analytics/overview?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:01.475843245Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-05T00%3A00%3A00&timestamp=lte.2026-01-05T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.475854230Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.475862871Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-06T00%3A00%3A00&timestamp=lte.2026-01-06T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477172817Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477183450Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-10T00%3A00%3A00&timestamp=lte.2026-01-10T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477186572Z [inf]  INFO:     100.64.0.5:11656 - "GET /api/analytics/messages-by-day?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&days=7 HTTP/1.1" 200 OK
+2026-01-11T13:13:01.477192755Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477201349Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=id%2Cname%2Cavatar%2Cstatus&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:13:01.477202490Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-11T00%3A00%3A00&timestamp=lte.2026-01-11T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477246494Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-08T00%3A00%3A00&timestamp=lte.2026-01-08T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477255135Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.inbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477261943Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&timestamp=gte.2026-01-09T00%3A00%3A00&timestamp=lte.2026-01-09T23%3A59%3A59.999999&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477956905Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.477965788Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:13:01.477973779Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.aadfe667-7968-490e-8463-52bc78ceb84f&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:13:01.477975111Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e&status=eq.resolved "HTTP/2 200 OK"
+2026-01-11T13:13:01.477980054Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&assigned_to=eq.49273531-68c1-40ec-a02d-d730edcc5d7e "HTTP/2 200 OK"
+2026-01-11T13:13:01.477987840Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages?select=id&direction=eq.outbound "HTTP/2 200 OK"
+2026-01-11T13:13:01.478906573Z [inf]  INFO:     100.64.0.5:11658 - "GET /api/analytics/agent-performance?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:01.478916880Z [inf]  INFO:     100.64.0.5:11642 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
+2026-01-11T13:13:01.478925055Z [err]  INFO:server:Login attempt for: paulo@gmail.com
+2026-01-11T13:13:01.478933038Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&email=eq.paulo%40gmail.com&password_hash=eq.%40moreira2026 "HTTP/2 200 OK"
+2026-01-11T13:13:01.478940337Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/rpc/exec_sql "HTTP/2 404 Not Found"
+2026-01-11T13:13:01.478948171Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/system_settings?select=value_json&key=eq.maintenance "HTTP/2 404 Not Found"
+2026-01-11T13:13:01.479038137Z [inf]  Storage endpoint URL should have a trailing slash.
+2026-01-11T13:13:02.390164322Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/storage/v1/object/uploads/system_settings/maintenance.json "HTTP/2 400 Bad Request"
+2026-01-11T13:13:02.390169552Z [inf]  INFO:     100.64.0.5:11642 - "POST /api/auth/login HTTP/1.1" 200 OK
+2026-01-11T13:13:02.390175488Z [inf]  INFO:     100.64.0.5:11642 - "OPTIONS /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:02.390181084Z [inf]  INFO:     100.64.0.5:11658 - "OPTIONS /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:13:02.390186449Z [inf]  INFO:     100.64.0.5:11656 - "OPTIONS /api/connections?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:02.429688474Z [inf]  INFO:     100.64.0.5:18242 - "OPTIONS /api/agents?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:02.429695946Z [inf]  INFO:     100.64.0.5:18250 - "OPTIONS /api/labels?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:02.429700926Z [inf]  INFO:     100.64.0.5:18252 - "OPTIONS /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:02.647710729Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:13:02.647721402Z [inf]  INFO:     100.64.0.5:18260 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-01-11T13:13:02.866320201Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:13:03.080540118Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:03.080550743Z [inf]  INFO:     100.64.0.5:18252 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:03.407780094Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:13:03.407785290Z [inf]  INFO:     100.64.0.5:18250 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:13:03.503397761Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&role=in.%28admin%2Cagent%29 "HTTP/2 200 OK"
+2026-01-11T13:13:03.503404799Z [inf]  INFO:     100.64.0.5:11656 - "GET /api/agents?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:03.801645684Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:03.801652014Z [inf]  INFO:     100.64.0.5:18242 - "GET /api/connections?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:03.957795479Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/labels?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=created_at.asc "HTTP/2 200 OK"
+2026-01-11T13:13:04.145920060Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bbd3587e2-8262-4919-bcd0-e8cdde076c88%7D "HTTP/2 200 OK"
+2026-01-11T13:13:04.434904712Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bd817da34-6509-44b0-8673-16fbb774eb87%7D "HTTP/2 200 OK"
+2026-01-11T13:13:04.571473993Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B38f2baeb-1aab-4825-905d-67ca0e14b222%7D "HTTP/2 200 OK"
+2026-01-11T13:13:04.802594023Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba189e551-37e1-42db-9c94-cacfbf29c1e3%7D "HTTP/2 200 OK"
+2026-01-11T13:13:04.996614536Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7B874ab56a-1799-44fe-b827-8e3e378e7153%7D "HTTP/2 200 OK"
+2026-01-11T13:13:05.423109937Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bc9c53e37-f956-49cc-ac99-e0b7ac6b4d06%7D "HTTP/2 200 OK"
+2026-01-11T13:13:05.423117966Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Ba3f2f0d1-990f-4d32-95b0-c75c3d7a4d7e%7D "HTTP/2 200 OK"
+2026-01-11T13:13:05.631602762Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=id&labels=cs.%7Bb3d0f346-58a4-4e42-9bc9-83a6276dd620%7D "HTTP/2 200 OK"
+2026-01-11T13:13:05.631609404Z [inf]  INFO:     100.64.0.5:11658 - "GET /api/labels?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0 HTTP/1.1" 200 OK
+2026-01-11T13:13:05.846354103Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:13:06.066404409Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:06.066417758Z [inf]  INFO:     100.64.0.5:18252 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:06.484412565Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:13:06.689562304Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:06.689571728Z [inf]  INFO:     100.64.0.5:18252 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:26.751876229Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:13:26.751881189Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:26.751886098Z [inf]  INFO:     100.64.0.5:62264 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:33.097766835Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:13:33.097776290Z [inf]  INFO:     100.64.0.5:55762 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:13:33.435890943Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:13:33.798732853Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:33.798737492Z [inf]  INFO:     100.64.0.5:55762 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:53.619805235Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:13:53.619813315Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:13:53.619821048Z [inf]  INFO:     100.64.0.5:40224 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:13:58.768981100Z [err]  INFO:server:Webhook received for testenew: messages.upsert
+2026-01-11T13:13:58.769001580Z [err]  INFO:server:Full webhook payload: {
+2026-01-11T13:13:58.769012385Z [err]    "event": "messages.upsert",
+2026-01-11T13:13:58.769020070Z [err]    "instance": "testenew",
+2026-01-11T13:13:58.769028344Z [err]    "data": {
+2026-01-11T13:13:58.769037557Z [err]      "key": {
+2026-01-11T13:13:58.769045598Z [err]        "remoteJid": "5522992904831@s.whatsapp.net",
+2026-01-11T13:13:58.769052969Z [err]        "remoteJidAlt": "5522992904831@s.whatsapp.net",
+2026-01-11T13:13:58.769058417Z [err]        "fromMe": false,
+2026-01-11T13:13:58.769063977Z [err]        "id": "A5B194B5660C47B20F4B2364DA087CAB",
+2026-01-11T13:13:58.769072510Z [err]        "participant": "",
+2026-01-11T13:13:58.769077900Z [err]        "addressingMode": "lid"
+2026-01-11T13:13:58.769082969Z [err]      },
+2026-01-11T13:13:58.769087898Z [err]      "pushName": "One Barber Pro",
+2026-01-11T13:13:58.769092558Z [err]      "status": "DELIVERY_ACK",
+2026-01-11T13:13:58.769097072Z [err]      "message": {
+2026-01-11T13:13:58.769101661Z [err]        "conversation": "Teste de msg via onebarber",
+2026-01-11T13:13:58.769106286Z [err]        "messageContextInfo": {
+2026-01-11T13:13:58.769110960Z [err]          "threadId": [],
+2026-01-11T13:13:58.769115125Z [err]          "deviceListMetadata": {
+2026-01-11T13:13:58.769119325Z [err]            "senderKeyIndexes": [],
+2026-01-11T13:13:58.769123957Z [err]            "recipientKeyIndexes": [],
+2026-01-11T13:13:58.769128469Z [err]            "senderKeyHash": {
+2026-01-11T13:13:58.769132882Z [err]              "0": 18,
+2026-01-11T13:13:58.769137013Z [err]              "1": 176,
+2026-01-11T13:13:58.769141331Z [err]              "2": 232,
+2026-01-11T13:13:58.769145561Z [err]              "3": 227,
+2026-01-11T13:13:58.769149799Z [err]              "4": 123,
+2026-01-11T13:13:58.769704712Z [err]              "high": 0,
+2026-01-11T13:13:58.769704832Z [err]              "5": 76,
+2026-01-11T13:13:58.769714020Z [err]              "unsigned": true
+2026-01-11T13:13:58.769718123Z [err]              "6": 42,
+2026-01-11T13:13:58.769721652Z [err]            }
+2026-01-11T13:13:58.769729634Z [err]              "7": 74,
+2026-01-11T13:13:58.769729788Z [err]          },
+2026-01-11T13:13:58.769736706Z [err]          "deviceListMetadataVersion": 2,
+2026-01-11T13:13:58.769740238Z [err]              "8": 121,
+2026-01-11T13:13:58.769744250Z [err]          "messageSecret": {
+2026-01-11T13:13:58.769749558Z [err]              "9": 113
+2026-01-11T13:13:58.769757775Z [err]            },
+2026-01-11T13:13:58.769765778Z [err]            "senderTimestamp": {
+2026-01-11T13:13:58.769774022Z [err]              "low": 1767611643,
+2026-01-11T13:13:58.769781465Z [err]              "high": 0,
+2026-01-11T13:13:58.769790651Z [err]              "unsigned": true
+2026-01-11T13:13:58.769798345Z [err]            },
+2026-01-11T13:13:58.769806133Z [err]            "recipientKeyHash": {
+2026-01-11T13:13:58.769813138Z [err]              "0": 157,
+2026-01-11T13:13:58.769817835Z [err]              "1": 162,
+2026-01-11T13:13:58.769822261Z [err]              "2": 244,
+2026-01-11T13:13:58.769826815Z [err]              "3": 21,
+2026-01-11T13:13:58.769832328Z [err]              "4": 158,
+2026-01-11T13:13:58.769838187Z [err]              "5": 23,
+2026-01-11T13:13:58.769843076Z [err]              "6": 59,
+2026-01-11T13:13:58.769849934Z [err]              "7": 88,
+2026-01-11T13:13:58.769855096Z [err]              "8": 247,
+2026-01-11T13:13:58.769859629Z [err]              "9": 125
+2026-01-11T13:13:58.769866586Z [err]            },
+2026-01-11T13:13:58.769873135Z [err]            "recipientTimestamp": {
+2026-01-11T13:13:58.769880237Z [err]              "low": 1767637731,
+2026-01-11T13:13:58.770241986Z [err]            "13": 33,
+2026-01-11T13:13:58.770249844Z [err]            "0": 235,
+2026-01-11T13:13:58.770254501Z [err]            "14": 3,
+2026-01-11T13:13:58.770262486Z [err]            "1": 144,
+2026-01-11T13:13:58.770265733Z [err]            "15": 215,
+2026-01-11T13:13:58.770274499Z [err]            "2": 226,
+2026-01-11T13:13:58.770275687Z [err]            "16": 83,
+2026-01-11T13:13:58.770283097Z [err]            "17": 235,
+2026-01-11T13:13:58.770290262Z [err]            "3": 200,
+2026-01-11T13:13:58.770292944Z [err]            "18": 10,
+2026-01-11T13:13:58.770296704Z [err]            "4": 52,
+2026-01-11T13:13:58.770303370Z [err]            "5": 174,
+2026-01-11T13:13:58.770304568Z [err]            "19": 212,
+2026-01-11T13:13:58.770309427Z [err]            "6": 27,
+2026-01-11T13:13:58.770315736Z [err]            "20": 194,
+2026-01-11T13:13:58.770316789Z [err]            "7": 197,
+2026-01-11T13:13:58.770322793Z [err]            "8": 110,
+2026-01-11T13:13:58.770326736Z [err]            "21": 207,
+2026-01-11T13:13:58.770330103Z [err]            "9": 253,
+2026-01-11T13:13:58.770335539Z [err]            "22": 138,
+2026-01-11T13:13:58.770337460Z [err]            "10": 125,
+2026-01-11T13:13:58.770344284Z [err]            "23": 222,
+2026-01-11T13:13:58.770344657Z [err]            "11": 87,
+2026-01-11T13:13:58.770351668Z [err]            "12": 225,
+2026-01-11T13:13:58.770353464Z [err]            "24": 162,
+2026-01-11T13:13:58.770358447Z [err]            "25": 75,
+2026-01-11T13:13:58.770363561Z [err]            "
+2026-01-11T13:13:58.770368093Z [err]  INFO:server:DEBUG - Parsed pushName: 'None' | Phone: 5522992904831
+2026-01-11T13:13:59.139311843Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=%2A%2Ctenants%28%2A%29&instance_name=eq.testenew "HTTP/2 200 OK"
+2026-01-11T13:13:59.278523406Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&connection_id=eq.4bf8e9f3-6ce5-41fa-9f52-cf4a7f60aafc&contact_phone=eq.5522992904831 "HTTP/2 200 OK"
+2026-01-11T13:13:59.854066399Z [err]  INFO:httpx:HTTP Request: POST https://api.whatpress.pro/chat/fetchProfilePictureUrl/testenew "HTTP/1.1 200 OK"
+2026-01-11T13:13:59.854072609Z [err]  INFO:server:DEBUG - Creating conversation with contact_name: '5522992904831' | push_name from parsed: 'None' | phone: 5522992904831
+2026-01-11T13:14:00.193157461Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations "HTTP/2 201 Created"
+2026-01-11T13:14:00.378240523Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts?select=id%2Cfirst_contact_at%2Cstatus%2Ccustom_fields&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&phone=eq.5522992904831&limit=1 "HTTP/2 200 OK"
+2026-01-11T13:14:00.378245301Z [err]  INFO:server:DEBUG - Auto-creating contact | push_name: 'None' | phone: 5522992904831 | tenant: 0f8cb25f-18cd-4215-9280-6c8eaf674ee0
+2026-01-11T13:14:00.581908485Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/contacts "HTTP/2 201 Created"
+2026-01-11T13:14:00.816744342Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/audit_logs "HTTP/2 201 Created"
+2026-01-11T13:14:01.182680321Z [err]  INFO:httpx:HTTP Request: POST https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/messages "HTTP/2 201 Created"
+2026-01-11T13:14:01.261804109Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?select=messages_this_month&id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:14:01.482276697Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/tenants?id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:14:01.738277419Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/auto_messages?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&is_active=eq.True "HTTP/2 200 OK"
+2026-01-11T13:14:01.738285991Z [inf]  INFO:     100.64.0.3:58684 - "POST /api/webhooks/evolution/testenew HTTP/1.1" 200 OK
+2026-01-11T13:14:02.642568406Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:14:02.642575713Z [inf]  INFO:     100.64.0.5:57112 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:14:03.384416214Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/conversations?select=%2A&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0&order=last_message_at.desc&offset=0&limit=200 "HTTP/2 200 OK"
+2026-01-11T13:14:03.630132256Z [err]  INFO:httpx:HTTP Request: GET https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/connections?select=id%2Cinstance_name%2Cprovider&tenant_id=eq.0f8cb25f-18cd-4215-9280-6c8eaf674ee0 "HTTP/2 200 OK"
+2026-01-11T13:14:03.630139446Z [inf]  INFO:     100.64.0.5:57112 - "GET /api/conversations?tenant_id=0f8cb25f-18cd-4215-9280-6c8eaf674ee0&limit=200&offset=0 HTTP/1.1" 200 OK
+2026-01-11T13:14:33.716911913Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:14:33.716967165Z [inf]  INFO:     100.64.0.5:25214 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
+2026-01-11T13:15:13.464441153Z [err]  INFO:httpx:HTTP Request: PATCH https://snaqzbibxafbqxlxusdi.supabase.co/rest/v1/users?id=eq.aadfe667-7968-490e-8463-52bc78ceb84f "HTTP/2 200 OK"
+2026-01-11T13:15:13.464445907Z [inf]  INFO:     100.64.0.5:35518 - "POST /api/agents/heartbeat HTTP/1.1" 200 OK
