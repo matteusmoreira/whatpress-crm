@@ -76,7 +76,6 @@ const Contacts = () => {
     const [formEmail, setFormEmail] = useState('');
     const [formTags, setFormTags] = useState('');
     const [formCustomFields, setFormCustomFields] = useState([]);
-    const [formStatus, setFormStatus] = useState('pending');
     const [saving, setSaving] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
     const [viewMode, setViewMode] = useState('list');
@@ -134,7 +133,6 @@ const Contacts = () => {
         setFormEmail('');
         setFormTags('');
         setFormCustomFields([]);
-        setFormStatus('verified');
         setShowCreateModal(true);
     };
 
@@ -147,7 +145,6 @@ const Contacts = () => {
         setFormCustomFields(
             Object.entries(contact.customFields || {}).map(([key, value]) => ({ key, value }))
         );
-        setFormStatus(String(contact.status || '').trim() || 'pending');
         setShowEditModal(true);
     };
 
@@ -176,8 +173,7 @@ const Contacts = () => {
                 phone: formPhone.trim(),
                 email: formEmail.trim() || null,
                 tags,
-                custom_fields: customFields,
-                status: formStatus
+                custom_fields: customFields
             });
 
             toast.success('Contato criado com sucesso!');
@@ -211,8 +207,7 @@ const Contacts = () => {
                 full_name: formName.trim(),
                 email: formEmail.trim() || null,
                 tags,
-                custom_fields: customFields,
-                status: formStatus
+                custom_fields: customFields
             });
 
             toast.success('Contato atualizado com sucesso!');
@@ -278,6 +273,29 @@ const Contacts = () => {
         }
     };
 
+    const handleDeleteAllContacts = async () => {
+        if (total === 0) {
+            toast.error('Não há contatos para excluir');
+            return;
+        }
+
+        const ok = window.confirm(
+            `Tem certeza que deseja excluir TODOS os ${total} contato(s)?\n\nEsta ação não pode ser desfeita!`
+        );
+        if (!ok) return;
+
+        setLoading(true);
+        try {
+            const result = await ContactsAPI.purgeAll(tenantId);
+            toast.success(`${result.deletedContacts || 0} contato(s) excluído(s) com sucesso!`);
+            loadContacts(searchQuery, 0);
+        } catch (error) {
+            toast.error(error.message || 'Erro ao excluir contatos');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const formatDate = (date) => {
         try {
             return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
@@ -286,12 +304,7 @@ const Contacts = () => {
         }
     };
 
-    const formatContactStatus = (value) => {
-        const s = String(value || '').trim().toLowerCase();
-        if (s === 'verified') return { label: 'Verificado', variant: 'success' };
-        if (s === 'unverified') return { label: 'Não verificado', variant: 'warning' };
-        return { label: 'Pendente', variant: 'warning' };
-    };
+
 
     const totalPages = Math.ceil(total / limit);
     const currentPage = Math.floor(offset / limit) + 1;
@@ -344,6 +357,16 @@ const Contacts = () => {
                         <Plus className="w-4 h-4" />
                         Novo Contato
                     </GlassButton>
+                    {total > 0 && (
+                        <GlassButton
+                            onClick={handleDeleteAllContacts}
+                            variant="secondary"
+                            className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200 border-red-500/20"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            Excluir Todos
+                        </GlassButton>
+                    )}
                 </div>
             </div>
 
@@ -665,21 +688,6 @@ const Contacts = () => {
                                     onChange={(e) => setFormEmail(e.target.value)}
                                     placeholder="email@exemplo.com"
                                 />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-white/70 mb-1.5">
-                                    Status
-                                </label>
-                                <select
-                                    value={formStatus}
-                                    onChange={(e) => setFormStatus(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                                >
-                                    <option value="pending" className="bg-emerald-900">Pendente</option>
-                                    <option value="unverified" className="bg-emerald-900">Não verificado</option>
-                                    <option value="verified" className="bg-emerald-900">Verificado</option>
-                                </select>
                             </div>
 
                             <div>

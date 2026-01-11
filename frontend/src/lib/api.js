@@ -320,6 +320,12 @@ export const ContactsAPI = {
     return response.data;
   },
 
+  async purgeAll(tenantId = null) {
+    const params = tenantId ? { tenant_id: tenantId } : undefined;
+    const response = await apiClient.delete('/contacts/purge', { params });
+    return response.data;
+  },
+
   async history(contactId, limit = 20) {
     const response = await apiClient.get(`/contacts/${contactId}/history`, { params: { limit } });
     return response.data;
