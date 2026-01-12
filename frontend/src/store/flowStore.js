@@ -1,7 +1,21 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const resolveBackendUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  if (envUrl) return envUrl;
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+  }
+
+  return 'https://whatpress-crm-production.up.railway.app';
+};
+
+const API_URL = `${resolveBackendUrl()}/api`;
 
 const useFlowStore = create((set, get) => ({
     // Estado do canvas
