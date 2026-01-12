@@ -86,7 +86,8 @@ const FlowBuilder = () => {
         setCurrentFlow,
         createFlow,
         saveFlow,
-        deleteFlow
+        deleteFlow,
+        error: storeError
     } = useFlowStore();
 
     // Sincronizar nodes e edges do React Flow com o store
@@ -167,8 +168,13 @@ const FlowBuilder = () => {
 
     const handleCreateFlow = async () => {
         const name = `Novo Fluxo ${(flows?.length || 0) + 1}`;
-        await createFlow({ name, description: '' });
-        toast.success('Fluxo criado!');
+        const result = await createFlow({ name, description: '' });
+        if (result) {
+            toast.success('Fluxo criado!');
+        } else {
+            const errorState = useFlowStore.getState().error;
+            toast.error(errorState || 'Erro ao criar fluxo. Verifique o console.');
+        }
     };
 
     const handleSaveFlow = async () => {

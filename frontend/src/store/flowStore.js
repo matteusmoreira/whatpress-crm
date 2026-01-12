@@ -2,17 +2,17 @@ import { create } from 'zustand';
 import axios from 'axios';
 
 const resolveBackendUrl = () => {
-  const envUrl = process.env.REACT_APP_BACKEND_URL;
-  if (envUrl) return envUrl;
+    const envUrl = process.env.REACT_APP_BACKEND_URL;
+    if (envUrl) return envUrl;
 
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8000';
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:8000';
+        }
     }
-  }
 
-  return 'https://whatpress-crm-production.up.railway.app';
+    return 'https://whatpress-crm-production.up.railway.app';
 };
 
 const API_URL = `${resolveBackendUrl()}/api`;
@@ -164,7 +164,9 @@ const useFlowStore = create((set, get) => ({
             return response.data;
         } catch (error) {
             console.error('Error creating flow:', error);
-            set({ error: error.message, loading: false });
+            console.error('Error response:', error.response?.data);
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro desconhecido';
+            set({ error: errorMessage, loading: false });
             return null;
         }
     },
