@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import ReactFlow, {
     MiniMap,
     Controls,
@@ -7,12 +7,12 @@ import ReactFlow, {
     useEdgesState,
     addEdge,
     Panel,
+    ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import './FlowBuilder.css';
-import { Plus, Save, Play, Trash2, Settings, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight } from 'lucide-react';
+import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2 } from 'lucide-react';
 import useFlowStore from '../store/flowStore';
-import { GlassCard } from '../components/GlassCard';
 import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { toast } from '../components/ui/glass-toaster';
@@ -67,12 +67,15 @@ const nodeCategories = [
     }
 ];
 
-const FlowBuilder = () => {
+// Inner component that uses ReactFlow hooks
+const FlowBuilderInner = () => {
     const { theme } = useTheme();
     const isDark = theme !== 'light';
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNode, setSelectedNodeState] = useState(null);
+    const isInitialMount = useRef(true);
+    const lastSyncRef = useRef({ nodes: [], edges: [] });
 
     const {
         nodes: storeNodes,
@@ -87,61 +90,117 @@ const FlowBuilder = () => {
         createFlow,
         saveFlow,
         deleteFlow,
-        error: storeError
+        loading,
+        saving,
+        error,
+        clearError
     } = useFlowStore();
 
-    // Sincronizar nodes e edges do React Flow com o store
-    useEffect(() => {
-        setNodes(storeNodes);
-    }, [storeNodes, setNodes]);
-
-    useEffect(() => {
-        setEdges(storeEdges);
-    }, [storeEdges, setEdges]);
-
+    // Fetch flows on mount
     useEffect(() => {
         fetchFlows();
     }, [fetchFlows]);
 
+    // Sync nodes from store to ReactFlow
+    useEffect(() => {
+        if (storeNodes && Array.isArray(storeNodes)) {
+            // Check if nodes actually changed to avoid infinite loop
+            const nodesChanged = JSON.stringify(storeNodes) !== JSON.stringify(lastSyncRef.current.nodes);
+            if (nodesChanged) {
+                lastSyncRef.current.nodes = storeNodes;
+                setNodes(storeNodes);
+            }
+        }
+    }, [storeNodes, setNodes]);
+
+    // Sync edges from store to ReactFlow
+    useEffect(() => {
+        if (storeEdges && Array.isArray(storeEdges)) {
+            // Check if edges actually changed to avoid infinite loop
+            const edgesChanged = JSON.stringify(storeEdges) !== JSON.stringify(lastSyncRef.current.edges);
+            if (edgesChanged) {
+                lastSyncRef.current.edges = storeEdges;
+                setEdges(storeEdges);
+            }
+        }
+    }, [storeEdges, setEdges]);
+
+    // Show error toast when error changes
+    useEffect(() => {
+        if (error) {
+            toast.error(error);
+            clearError();
+        }
+    }, [error, clearError]);
+
+    // Handle nodes change from ReactFlow
     const handleNodesChange = useCallback(
         (changes) => {
             onNodesChange(changes);
-            const updatedNodes = nodes.map(node => {
-                const change = changes.find(c => c.id === node.id);
-                if (change) {
-                    if (change.type === 'position' && change.position) {
-                        return { ...node, position: change.position };
-                    } else if (change.type === 'select') {
-                        if (change.selected) {
-                            setSelectedNode(node);
-                            setSelectedNodeState(node);
+
+            // Update store after ReactFlow processes changes
+            setTimeout(() => {
+                setNodes((currentNodes) => {
+                    // Apply the changes manually to get updated nodes
+                    let updatedNodes = [...currentNodes];
+
+                    changes.forEach(change => {
+                        if (change.type === 'position' && change.position) {
+                            updatedNodes = updatedNodes.map(node =>
+                                node.id === change.id
+                                    ? { ...node, position: change.position }
+                                    : node
+                            );
+                        } else if (change.type === 'select') {
+                            if (change.selected) {
+                                const selectedNode = updatedNodes.find(n => n.id === change.id);
+                                if (selectedNode) {
+                                    setSelectedNode(selectedNode);
+                                    setSelectedNodeState(selectedNode);
+                                }
+                            }
+                        } else if (change.type === 'remove') {
+                            updatedNodes = updatedNodes.filter(node => node.id !== change.id);
                         }
-                    } else if (change.type === 'remove') {
-                        return null;
-                    }
-                }
-                return node;
-            }).filter(Boolean);
-            setStoreNodes(updatedNodes);
+                    });
+
+                    // Update store
+                    setStoreNodes(updatedNodes);
+                    lastSyncRef.current.nodes = updatedNodes;
+
+                    return updatedNodes;
+                });
+            }, 0);
         },
-        [nodes, onNodesChange, setStoreNodes, setSelectedNode]
+        [onNodesChange, setNodes, setStoreNodes, setSelectedNode]
     );
 
+    // Handle edges change from ReactFlow
     const handleEdgesChange = useCallback(
         (changes) => {
             onEdgesChange(changes);
-            const updatedEdges = edges.map(edge => {
-                const change = changes.find(c => c.id === edge.id);
-                if (change && change.type === 'remove') {
-                    return null;
-                }
-                return edge;
-            }).filter(Boolean);
-            setStoreEdges(updatedEdges);
+
+            setTimeout(() => {
+                setEdges((currentEdges) => {
+                    let updatedEdges = [...currentEdges];
+
+                    changes.forEach(change => {
+                        if (change.type === 'remove') {
+                            updatedEdges = updatedEdges.filter(edge => edge.id !== change.id);
+                        }
+                    });
+
+                    setStoreEdges(updatedEdges);
+                    lastSyncRef.current.edges = updatedEdges;
+
+                    return updatedEdges;
+                });
+            }, 0);
         },
-        [edges, onEdgesChange, setStoreEdges]
+        [onEdgesChange, setEdges, setStoreEdges]
     );
 
+    // Handle new connection
     const onConnect = useCallback(
         (params) => {
             const newEdge = {
@@ -150,59 +209,87 @@ const FlowBuilder = () => {
                 type: 'smoothstep',
                 animated: true
             };
-            setEdges((eds) => addEdge(newEdge, eds));
-            setStoreEdges([...edges, newEdge]);
+
+            setEdges((eds) => {
+                const updated = addEdge(newEdge, eds);
+                setStoreEdges(updated);
+                lastSyncRef.current.edges = updated;
+                return updated;
+            });
         },
-        [setEdges, edges, setStoreEdges]
+        [setEdges, setStoreEdges]
     );
 
+    // Handle node click
     const onNodeClick = useCallback((event, node) => {
         setSelectedNode(node);
         setSelectedNodeState(node);
     }, [setSelectedNode]);
 
+    // Handle pane click (deselect)
     const onPaneClick = useCallback(() => {
         setSelectedNode(null);
         setSelectedNodeState(null);
     }, [setSelectedNode]);
 
+    // Create new flow
     const handleCreateFlow = async () => {
         const name = `Novo Fluxo ${(flows?.length || 0) + 1}`;
         const result = await createFlow({ name, description: '' });
         if (result) {
-            toast.success('Fluxo criado!');
-        } else {
-            const errorState = useFlowStore.getState().error;
-            toast.error(errorState || 'Erro ao criar fluxo. Verifique o console.');
+            toast.success('Fluxo criado com sucesso!');
         }
     };
 
+    // Save current flow
     const handleSaveFlow = async () => {
         if (!currentFlow) {
             toast.error('Selecione um fluxo primeiro');
             return;
         }
-        await saveFlow();
-        toast.success('Fluxo salvo!');
+        const result = await saveFlow();
+        if (result) {
+            toast.success('Fluxo salvo com sucesso!');
+        }
     };
 
-    const handleDeleteFlow = async (flowId) => {
-        await deleteFlow(flowId);
-        toast.success('Fluxo excluído!');
+    // Delete flow
+    const handleDeleteFlow = async (flowId, e) => {
+        e?.stopPropagation();
+        const success = await deleteFlow(flowId);
+        if (success) {
+            toast.success('Fluxo excluído!');
+        }
     };
 
+    // Add node to canvas
     const handleAddNode = (type) => {
         if (!currentFlow) {
             toast.error('Selecione ou crie um fluxo primeiro');
             return;
         }
+
         const newNode = {
             id: `${type}_${Date.now()}`,
             type,
-            position: { x: 250, y: 100 + (nodes.length * 80) },
+            position: {
+                x: 250 + Math.random() * 100,
+                y: 100 + (nodes.length * 100)
+            },
             data: { label: type }
         };
-        setStoreNodes([...nodes, newNode]);
+
+        const updatedNodes = [...nodes, newNode];
+        setNodes(updatedNodes);
+        setStoreNodes(updatedNodes);
+        lastSyncRef.current.nodes = updatedNodes;
+
+        toast.success('Componente adicionado!');
+    };
+
+    // Select flow from list
+    const handleSelectFlow = (flow) => {
+        setCurrentFlow(flow);
     };
 
     return (
@@ -223,19 +310,33 @@ const FlowBuilder = () => {
                     )}>Fluxos</h2>
                     <button
                         onClick={handleCreateFlow}
+                        disabled={saving}
                         className={cn(
                             "flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                            "bg-emerald-500 hover:bg-emerald-600 text-white"
+                            "bg-emerald-500 hover:bg-emerald-600 text-white",
+                            "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
                     >
-                        <Plus className="w-4 h-4" />
+                        {saving ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Plus className="w-4 h-4" />
+                        )}
                         Novo
                     </button>
                 </div>
 
                 {/* Flow List */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {(!flows || flows.length === 0) ? (
+                    {loading && !flows.length ? (
+                        <div className={cn(
+                            "text-center py-8 px-4",
+                            isDark ? "text-white/50" : "text-slate-500"
+                        )}>
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                            <p className="text-sm">Carregando fluxos...</p>
+                        </div>
+                    ) : (!flows || flows.length === 0) ? (
                         <div className={cn(
                             "text-center py-8 px-4",
                             isDark ? "text-white/50" : "text-slate-500"
@@ -247,7 +348,7 @@ const FlowBuilder = () => {
                         flows.map(flow => (
                             <div
                                 key={flow.id}
-                                onClick={() => setCurrentFlow(flow)}
+                                onClick={() => handleSelectFlow(flow)}
                                 className={cn(
                                     "p-3 rounded-lg cursor-pointer transition-all border",
                                     currentFlow?.id === flow.id
@@ -261,16 +362,16 @@ const FlowBuilder = () => {
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <span className={cn(
-                                        "font-medium text-sm",
+                                        "font-medium text-sm truncate flex-1",
                                         isDark ? "text-white" : "text-slate-800"
                                     )}>{flow.name}</span>
                                     <span className={cn(
-                                        "text-xs px-2 py-0.5 rounded-full",
-                                        flow.is_active
+                                        "text-xs px-2 py-0.5 rounded-full ml-2",
+                                        flow.is_active || flow.isActive
                                             ? "bg-emerald-500/20 text-emerald-400"
                                             : isDark ? "bg-white/10 text-white/50" : "bg-slate-200 text-slate-500"
                                     )}>
-                                        {flow.is_active ? 'Ativo' : 'Inativo'}
+                                        {(flow.is_active || flow.isActive) ? 'Ativo' : 'Inativo'}
                                     </span>
                                 </div>
                                 {flow.description && (
@@ -281,9 +382,11 @@ const FlowBuilder = () => {
                                 )}
                                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5">
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteFlow(flow.id); }}
+                                        onClick={(e) => handleDeleteFlow(flow.id, e)}
+                                        disabled={loading || saving}
                                         className={cn(
                                             "p-1.5 rounded transition-colors",
+                                            "disabled:opacity-50",
                                             isDark
                                                 ? "hover:bg-red-500/20 text-white/50 hover:text-red-400"
                                                 : "hover:bg-red-50 text-slate-400 hover:text-red-500"
@@ -356,18 +459,41 @@ const FlowBuilder = () => {
                             {currentFlow && (
                                 <button
                                     onClick={handleSaveFlow}
+                                    disabled={saving}
                                     className={cn(
                                         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                                        "bg-emerald-500 hover:bg-emerald-600 text-white"
+                                        "bg-emerald-500 hover:bg-emerald-600 text-white",
+                                        "disabled:opacity-50 disabled:cursor-not-allowed"
                                     )}
                                 >
-                                    <Save className="w-4 h-4" />
-                                    Salvar
+                                    {saving ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Save className="w-4 h-4" />
+                                    )}
+                                    {saving ? 'Salvando...' : 'Salvar'}
                                 </button>
                             )}
                         </div>
                     </Panel>
                 </ReactFlow>
+
+                {/* Empty State when no flow selected */}
+                {!currentFlow && (
+                    <div className={cn(
+                        "absolute inset-0 flex items-center justify-center pointer-events-none",
+                        isDark ? "bg-slate-900/50" : "bg-slate-50/50"
+                    )}>
+                        <div className={cn(
+                            "text-center p-8 rounded-xl",
+                            isDark ? "bg-slate-800/80 text-white/60" : "bg-white/80 text-slate-500"
+                        )}>
+                            <Play className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                            <h3 className="text-lg font-medium mb-2">Nenhum fluxo selecionado</h3>
+                            <p className="text-sm">Selecione um fluxo na lista à esquerda ou crie um novo</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Node Config Panel (appears when node is selected) */}
                 {selectedNode && (
@@ -451,8 +577,10 @@ const FlowBuilder = () => {
                                         <button
                                             key={item.type}
                                             onClick={() => handleAddNode(item.type)}
+                                            disabled={!currentFlow}
                                             className={cn(
                                                 "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group",
+                                                "disabled:opacity-50 disabled:cursor-not-allowed",
                                                 isDark
                                                     ? "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/50"
                                                     : "bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-emerald-300"
@@ -495,11 +623,22 @@ const FlowBuilder = () => {
                         "text-xs",
                         isDark ? "text-white/40" : "text-slate-500"
                     )}>
-                        Arraste os componentes para o canvas ou clique para adicionar
+                        {currentFlow
+                            ? "Clique nos componentes para adicionar ao canvas"
+                            : "Selecione um fluxo para começar"}
                     </p>
                 </div>
             </div>
         </div>
+    );
+};
+
+// Main component wrapped with ReactFlowProvider
+const FlowBuilder = () => {
+    return (
+        <ReactFlowProvider>
+            <FlowBuilderInner />
+        </ReactFlowProvider>
     );
 };
 

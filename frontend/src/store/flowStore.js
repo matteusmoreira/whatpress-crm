@@ -17,7 +17,7 @@ const resolveBackendUrl = () => {
 
 const API_URL = `${resolveBackendUrl()}/api`;
 
-// Helper function to get auth token from localStorage (same pattern as api.js)
+// Helper function to get auth token from localStorage
 const getAuthToken = () => {
     const authData = localStorage.getItem('whatsapp-crm-auth');
     if (authData) {
@@ -45,6 +45,20 @@ const getAuthTenantId = () => {
     return null;
 };
 
+// Helper to safely parse JSON fields
+const safeParseJson = (value, defaultValue = []) => {
+    if (value === null || value === undefined) return defaultValue;
+    if (Array.isArray(value) || (typeof value === 'object' && !Array.isArray(value))) return value;
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return defaultValue;
+        }
+    }
+    return defaultValue;
+};
+
 const useFlowStore = create((set, get) => ({
     // Estado do canvas
     nodes: [],
@@ -62,11 +76,13 @@ const useFlowStore = create((set, get) => ({
     // Lista de fluxos salvos
     flows: [],
     loading: false,
+    saving: false,
     error: null,
+    initialized: false,
 
     // Ações do canvas
-    setNodes: (nodes) => set({ nodes }),
-    setEdges: (edges) => set({ edges }),
+    setNodes: (nodes) => set({ nodes: safeParseJson(nodes, []) }),
+    setEdges: (edges) => set({ edges: safeParseJson(edges, []) }),
     setSelectedNode: (node) => set({ selectedNode: node }),
     setSelectedEdge: (edge) => set({ selectedEdge: edge }),
 
@@ -97,14 +113,16 @@ const useFlowStore = create((set, get) => ({
     // Ações de fluxo
     setCurrentFlow: (flow) => {
         if (flow) {
+            const parsedNodes = safeParseJson(flow.nodes, []);
+            const parsedEdges = safeParseJson(flow.edges, []);
             set({
                 currentFlow: flow,
                 flowName: flow.name || '',
                 flowDescription: flow.description || '',
                 flowStatus: flow.status || 'draft',
-                isActive: flow.isActive || false,
-                nodes: flow.nodes || [],
-                edges: flow.edges || []
+                isActive: flow.isActive || flow.is_active || false,
+                nodes: parsedNodes,
+                edges: parsedEdges
             });
         } else {
             set({
@@ -122,39 +140,66 @@ const useFlowStore = create((set, get) => ({
     setFlowName: (name) => set({ flowName: name }),
     setFlowDescription: (description) => set({ flowDescription: description }),
     setFlowStatus: (status) => set({ flowStatus: status }),
+    clearError: () => set({ error: null }),
 
     // API Actions
     fetchFlows: async () => {
+        const token = getAuthToken();
+        const tenantId = getAuthTenantId();
+
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.', loading: false });
+            return;
+        }
+
         set({ loading: true, error: null });
         try {
-            const token = getAuthToken();
-            const tenantId = getAuthTenantId();
-
             const response = await axios.get(`${API_URL}/flows`, {
                 headers: { Authorization: `Bearer ${token}` },
                 params: { tenant_id: tenantId }
             });
 
-            set({ flows: response.data, loading: false });
+            const flows = (response.data || []).map(f => ({
+                ...f,
+                nodes: safeParseJson(f.nodes, []),
+                edges: safeParseJson(f.edges, [])
+            }));
+
+            set({ flows, loading: false, initialized: true });
         } catch (error) {
             console.error('Error fetching flows:', error);
-            set({ error: error.message, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao carregar fluxos';
+            set({ error: errorMessage, loading: false, initialized: true });
         }
     },
 
     fetchFlow: async (flowId) => {
+        const token = getAuthToken();
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.' });
+            return null;
+        }
+
         set({ loading: true, error: null });
         try {
-            const token = getAuthToken();
             const response = await axios.get(`${API_URL}/flows/${flowId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            get().setCurrentFlow(response.data);
+            const flow = {
+                ...response.data,
+                nodes: safeParseJson(response.data.nodes, []),
+                edges: safeParseJson(response.data.edges, [])
+            };
+
+            get().setCurrentFlow(flow);
             set({ loading: false });
+            return flow;
         } catch (error) {
             console.error('Error fetching flow:', error);
-            set({ error: error.message, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao carregar fluxo';
+            set({ error: errorMessage, loading: false });
+            return null;
         }
     },
 
@@ -163,38 +208,54 @@ const useFlowStore = create((set, get) => ({
         const name = flowData.name || flowName;
         const description = flowData.description !== undefined ? flowData.description : flowDescription;
 
-        if (!name.trim()) {
+        if (!name || !name.trim()) {
             set({ error: 'Nome do fluxo é obrigatório' });
             return null;
         }
 
-        set({ loading: true, error: null });
-        try {
-            const token = getAuthToken();
-            const tenantId = getAuthTenantId();
+        const token = getAuthToken();
+        const tenantId = getAuthTenantId();
 
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.' });
+            return null;
+        }
+
+        if (!tenantId) {
+            set({ error: 'Tenant não identificado. Faça login novamente.' });
+            return null;
+        }
+
+        set({ saving: true, error: null });
+        try {
             const response = await axios.post(
                 `${API_URL}/flows`,
                 {
-                    name,
-                    description,
-                    nodes,
-                    edges,
-                    status: flowStatus,
+                    name: name.trim(),
+                    description: description || '',
+                    nodes: nodes || [],
+                    edges: edges || [],
+                    status: flowStatus || 'draft',
                     tenant_id: tenantId
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
-            get().setCurrentFlow(response.data);
+            const newFlow = {
+                ...response.data,
+                nodes: safeParseJson(response.data.nodes, []),
+                edges: safeParseJson(response.data.edges, [])
+            };
+
+            get().setCurrentFlow(newFlow);
             await get().fetchFlows();
-            set({ loading: false });
-            return response.data;
+            set({ saving: false });
+            return newFlow;
         } catch (error) {
             console.error('Error creating flow:', error);
             console.error('Error response:', error.response?.data);
-            const errorMessage = error.response?.data?.detail || error.message || 'Erro desconhecido';
-            set({ error: errorMessage, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao criar fluxo';
+            set({ error: errorMessage, saving: false });
             return null;
         }
     },
@@ -207,9 +268,14 @@ const useFlowStore = create((set, get) => ({
             return null;
         }
 
-        set({ loading: true, error: null });
+        const token = getAuthToken();
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.' });
+            return null;
+        }
+
+        set({ saving: true, error: null });
         try {
-            const token = getAuthToken();
             const response = await axios.put(
                 `${API_URL}/flows/${currentFlow.id}`,
                 {
@@ -223,21 +289,33 @@ const useFlowStore = create((set, get) => ({
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
-            get().setCurrentFlow(response.data);
+            const updatedFlow = {
+                ...response.data,
+                nodes: safeParseJson(response.data.nodes, []),
+                edges: safeParseJson(response.data.edges, [])
+            };
+
+            get().setCurrentFlow(updatedFlow);
             await get().fetchFlows();
-            set({ loading: false });
-            return response.data;
+            set({ saving: false });
+            return updatedFlow;
         } catch (error) {
             console.error('Error updating flow:', error);
-            set({ error: error.message, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao atualizar fluxo';
+            set({ error: errorMessage, saving: false });
             return null;
         }
     },
 
     deleteFlow: async (flowId) => {
+        const token = getAuthToken();
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.' });
+            return false;
+        }
+
         set({ loading: true, error: null });
         try {
-            const token = getAuthToken();
             await axios.delete(`${API_URL}/flows/${flowId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -251,40 +329,52 @@ const useFlowStore = create((set, get) => ({
             return true;
         } catch (error) {
             console.error('Error deleting flow:', error);
-            set({ error: error.message, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao deletar fluxo';
+            set({ error: errorMessage, loading: false });
             return false;
         }
     },
 
     duplicateFlow: async (flowId, newName) => {
-        if (!newName.trim()) {
+        if (!newName || !newName.trim()) {
             set({ error: 'Nome do novo fluxo é obrigatório' });
             return null;
         }
 
-        set({ loading: true, error: null });
+        const token = getAuthToken();
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.' });
+            return null;
+        }
+
+        set({ saving: true, error: null });
         try {
-            const token = getAuthToken();
             const response = await axios.post(
                 `${API_URL}/flows/${flowId}/duplicate`,
-                { name: newName },
+                { name: newName.trim() },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
             await get().fetchFlows();
-            set({ loading: false });
+            set({ saving: false });
             return response.data;
         } catch (error) {
             console.error('Error duplicating flow:', error);
-            set({ error: error.message, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao duplicar fluxo';
+            set({ error: errorMessage, saving: false });
             return null;
         }
     },
 
     toggleFlow: async (flowId) => {
-        set({ loading: true, error: null });
+        const token = getAuthToken();
+        if (!token) {
+            set({ error: 'Não autenticado. Faça login novamente.' });
+            return null;
+        }
+
+        set({ saving: true, error: null });
         try {
-            const token = getAuthToken();
             const response = await axios.patch(
                 `${API_URL}/flows/${flowId}/toggle`,
                 {},
@@ -297,11 +387,12 @@ const useFlowStore = create((set, get) => ({
             }
 
             await get().fetchFlows();
-            set({ loading: false });
+            set({ saving: false });
             return response.data;
         } catch (error) {
             console.error('Error toggling flow:', error);
-            set({ error: error.message, loading: false });
+            const errorMessage = error.response?.data?.detail || error.message || 'Erro ao alternar fluxo';
+            set({ error: errorMessage, saving: false });
             return null;
         }
     },
@@ -327,7 +418,28 @@ const useFlowStore = create((set, get) => ({
             flowName: '',
             flowDescription: '',
             flowStatus: 'draft',
-            isActive: false
+            isActive: false,
+            error: null
+        });
+    },
+
+    // Reset store
+    reset: () => {
+        set({
+            nodes: [],
+            edges: [],
+            selectedNode: null,
+            selectedEdge: null,
+            currentFlow: null,
+            flowName: '',
+            flowDescription: '',
+            flowStatus: 'draft',
+            isActive: false,
+            flows: [],
+            loading: false,
+            saving: false,
+            error: null,
+            initialized: false
         });
     }
 }));
