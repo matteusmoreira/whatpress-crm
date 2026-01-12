@@ -17,6 +17,34 @@ const resolveBackendUrl = () => {
 
 const API_URL = `${resolveBackendUrl()}/api`;
 
+// Helper function to get auth token from localStorage (same pattern as api.js)
+const getAuthToken = () => {
+    const authData = localStorage.getItem('whatsapp-crm-auth');
+    if (authData) {
+        try {
+            const { state } = JSON.parse(authData);
+            return state?.token || null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
+
+// Helper function to get tenant ID from localStorage
+const getAuthTenantId = () => {
+    const authData = localStorage.getItem('whatsapp-crm-auth');
+    if (authData) {
+        try {
+            const { state } = JSON.parse(authData);
+            return state?.user?.tenantId || null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+};
+
 const useFlowStore = create((set, get) => ({
     // Estado do canvas
     nodes: [],
@@ -99,8 +127,8 @@ const useFlowStore = create((set, get) => ({
     fetchFlows: async () => {
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
-            const tenantId = JSON.parse(localStorage.getItem('user') || '{}').tenantId;
+            const token = getAuthToken();
+            const tenantId = getAuthTenantId();
 
             const response = await axios.get(`${API_URL}/flows`, {
                 headers: { Authorization: `Bearer ${token}` },
@@ -117,7 +145,7 @@ const useFlowStore = create((set, get) => ({
     fetchFlow: async (flowId) => {
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             const response = await axios.get(`${API_URL}/flows/${flowId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -142,8 +170,8 @@ const useFlowStore = create((set, get) => ({
 
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
-            const tenantId = JSON.parse(localStorage.getItem('user') || '{}').tenantId;
+            const token = getAuthToken();
+            const tenantId = getAuthTenantId();
 
             const response = await axios.post(
                 `${API_URL}/flows`,
@@ -181,7 +209,7 @@ const useFlowStore = create((set, get) => ({
 
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             const response = await axios.put(
                 `${API_URL}/flows/${currentFlow.id}`,
                 {
@@ -209,7 +237,7 @@ const useFlowStore = create((set, get) => ({
     deleteFlow: async (flowId) => {
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             await axios.delete(`${API_URL}/flows/${flowId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -236,7 +264,7 @@ const useFlowStore = create((set, get) => ({
 
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             const response = await axios.post(
                 `${API_URL}/flows/${flowId}/duplicate`,
                 { name: newName },
@@ -256,7 +284,7 @@ const useFlowStore = create((set, get) => ({
     toggleFlow: async (flowId) => {
         set({ loading: true, error: null });
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             const response = await axios.patch(
                 `${API_URL}/flows/${flowId}/toggle`,
                 {},
