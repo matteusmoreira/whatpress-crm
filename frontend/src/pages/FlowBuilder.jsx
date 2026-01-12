@@ -6,6 +6,8 @@ import ReactFlow, {
     useNodesState,
     useEdgesState,
     addEdge,
+    applyNodeChanges,
+    applyEdgeChanges,
     Panel,
     ReactFlowProvider,
 } from 'reactflow';
@@ -16,6 +18,11 @@ import useFlowStore from '../store/flowStore';
 import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { toast } from '../components/ui/glass-toaster';
+import { createNode, DEFAULT_NODE_DATA, validateFlow } from '../lib/flowTypes';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 // Import custom nodes
 import StartNode from '../components/FlowBuilder/nodes/StartNode';
@@ -71,11 +78,13 @@ const nodeCategories = [
 const FlowBuilderInner = () => {
     const { theme } = useTheme();
     const isDark = theme !== 'light';
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [nodes, setNodes] = useNodesState([]);
+    const [edges, setEdges] = useEdgesState([]);
     const [selectedNode, setSelectedNodeState] = useState(null);
-    const isInitialMount = useRef(true);
     const lastSyncRef = useRef({ nodes: [], edges: [] });
+    const reactFlowWrapperRef = useRef(null);
+    const reactFlowInstanceRef = useRef(null);
+    const [nodeConfigDraft, setNodeConfigDraft] = useState({});
 
     const {
         nodes: storeNodes,
@@ -84,6 +93,7 @@ const FlowBuilderInner = () => {
         setEdges: setStoreEdges,
         setSelectedNode,
         fetchFlows,
+        fetchFlow,
         flows,
         currentFlow,
         setCurrentFlow,
@@ -136,73 +146,36 @@ const FlowBuilderInner = () => {
     // Handle nodes change from ReactFlow
     const handleNodesChange = useCallback(
         (changes) => {
-            onNodesChange(changes);
-
-            // Update store after ReactFlow processes changes
-            setTimeout(() => {
-                setNodes((currentNodes) => {
-                    // Apply the changes manually to get updated nodes
-                    let updatedNodes = [...currentNodes];
-
-                    changes.forEach(change => {
-                        if (change.type === 'position' && change.position) {
-                            updatedNodes = updatedNodes.map(node =>
-                                node.id === change.id
-                                    ? { ...node, position: change.position }
-                                    : node
-                            );
-                        } else if (change.type === 'select') {
-                            if (change.selected) {
-                                const selectedNode = updatedNodes.find(n => n.id === change.id);
-                                if (selectedNode) {
-                                    setSelectedNode(selectedNode);
-                                    setSelectedNodeState(selectedNode);
-                                }
-                            }
-                        } else if (change.type === 'remove') {
-                            updatedNodes = updatedNodes.filter(node => node.id !== change.id);
-                        }
-                    });
-
-                    // Update store
-                    setStoreNodes(updatedNodes);
-                    lastSyncRef.current.nodes = updatedNodes;
-
-                    return updatedNodes;
-                });
-            }, 0);
+            setNodes((currentNodes) => {
+                const updatedNodes = applyNodeChanges(changes, currentNodes);
+                const newlySelected = updatedNodes.find(n => n.selected) || null;
+                setSelectedNode(newlySelected);
+                setSelectedNodeState(newlySelected);
+                setStoreNodes(updatedNodes);
+                lastSyncRef.current.nodes = updatedNodes;
+                return updatedNodes;
+            });
         },
-        [onNodesChange, setNodes, setStoreNodes, setSelectedNode]
+        [setNodes, setStoreNodes, setSelectedNode]
     );
 
     // Handle edges change from ReactFlow
     const handleEdgesChange = useCallback(
         (changes) => {
-            onEdgesChange(changes);
-
-            setTimeout(() => {
-                setEdges((currentEdges) => {
-                    let updatedEdges = [...currentEdges];
-
-                    changes.forEach(change => {
-                        if (change.type === 'remove') {
-                            updatedEdges = updatedEdges.filter(edge => edge.id !== change.id);
-                        }
-                    });
-
-                    setStoreEdges(updatedEdges);
-                    lastSyncRef.current.edges = updatedEdges;
-
-                    return updatedEdges;
-                });
-            }, 0);
+            setEdges((currentEdges) => {
+                const updatedEdges = applyEdgeChanges(changes, currentEdges);
+                setStoreEdges(updatedEdges);
+                lastSyncRef.current.edges = updatedEdges;
+                return updatedEdges;
+            });
         },
-        [onEdgesChange, setEdges, setStoreEdges]
+        [setEdges, setStoreEdges]
     );
 
     // Handle new connection
     const onConnect = useCallback(
         (params) => {
+            if (!currentFlow) return;
             const newEdge = {
                 ...params,
                 id: `edge_${params.source}_${params.target}_${Date.now()}`,
@@ -222,19 +195,50 @@ const FlowBuilderInner = () => {
 
     // Handle node click
     const onNodeClick = useCallback((event, node) => {
+        event?.stopPropagation?.();
+        setNodes((currentNodes) => {
+            const updatedNodes = currentNodes.map((n) => ({
+                ...n,
+                selected: n.id === node.id
+            }));
+            setStoreNodes(updatedNodes);
+            lastSyncRef.current.nodes = updatedNodes;
+            return updatedNodes;
+        });
         setSelectedNode(node);
         setSelectedNodeState(node);
-    }, [setSelectedNode]);
+    }, [setNodes, setSelectedNode, setStoreNodes]);
 
     // Handle pane click (deselect)
     const onPaneClick = useCallback(() => {
         setSelectedNode(null);
         setSelectedNodeState(null);
-    }, [setSelectedNode]);
+        setNodes((currentNodes) => {
+            const updatedNodes = currentNodes.map((n) => ({ ...n, selected: false }));
+            setStoreNodes(updatedNodes);
+            lastSyncRef.current.nodes = updatedNodes;
+            return updatedNodes;
+        });
+    }, [setNodes, setSelectedNode, setStoreNodes]);
+
+    useEffect(() => {
+        if (!selectedNode) {
+            setNodeConfigDraft({});
+            return;
+        }
+        setNodeConfigDraft(selectedNode.data?.config || {});
+    }, [selectedNode]);
 
     // Create new flow
     const handleCreateFlow = async () => {
         const name = `Novo Fluxo ${(flows?.length || 0) + 1}`;
+        const start = createNode('start', { x: 250, y: 150 });
+        setStoreNodes([start]);
+        setStoreEdges([]);
+        lastSyncRef.current.nodes = [start];
+        lastSyncRef.current.edges = [];
+        setNodes([start]);
+        setEdges([]);
         const result = await createFlow({ name, description: '' });
         if (result) {
             toast.success('Fluxo criado com sucesso!');
@@ -245,6 +249,11 @@ const FlowBuilderInner = () => {
     const handleSaveFlow = async () => {
         if (!currentFlow) {
             toast.error('Selecione um fluxo primeiro');
+            return;
+        }
+        const validation = validateFlow(nodes, edges);
+        if (!validation.isValid) {
+            validation.errors.slice(0, 5).forEach((err) => toast.error(err));
             return;
         }
         const result = await saveFlow();
@@ -269,15 +278,15 @@ const FlowBuilderInner = () => {
             return;
         }
 
-        const newNode = {
-            id: `${type}_${Date.now()}`,
-            type,
-            position: {
-                x: 250 + Math.random() * 100,
-                y: 100 + (nodes.length * 100)
-            },
-            data: { label: type }
-        };
+        if (type === 'start' && nodes.some(n => n.type === 'start')) {
+            toast.error('O fluxo deve ter apenas um nó de início');
+            return;
+        }
+
+        const newNode = createNode(type, {
+            x: 250 + Math.random() * 100,
+            y: 100 + (nodes.length * 100)
+        });
 
         const updatedNodes = [...nodes, newNode];
         setNodes(updatedNodes);
@@ -288,8 +297,335 @@ const FlowBuilderInner = () => {
     };
 
     // Select flow from list
-    const handleSelectFlow = (flow) => {
-        setCurrentFlow(flow);
+    const handleSelectFlow = async (flow) => {
+        if (!flow?.id) return;
+        const loaded = await fetchFlow(flow.id);
+        if (!loaded) {
+            setCurrentFlow(flow);
+        }
+    };
+
+    const handleDragOver = useCallback((event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+    }, []);
+
+    const handleDrop = useCallback((event) => {
+        event.preventDefault();
+        if (!currentFlow) {
+            toast.error('Selecione ou crie um fluxo primeiro');
+            return;
+        }
+
+        const type = event.dataTransfer.getData('application/reactflow-node-type');
+        if (!type) return;
+
+        if (type === 'start' && nodes.some(n => n.type === 'start')) {
+            toast.error('O fluxo deve ter apenas um nó de início');
+            return;
+        }
+
+        const bounds = reactFlowWrapperRef.current?.getBoundingClientRect();
+        if (!bounds || !reactFlowInstanceRef.current) return;
+
+        const position = typeof reactFlowInstanceRef.current.screenToFlowPosition === 'function'
+            ? reactFlowInstanceRef.current.screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY
+            })
+            : reactFlowInstanceRef.current.project({
+                x: event.clientX - bounds.left,
+                y: event.clientY - bounds.top
+            });
+
+        const newNode = createNode(type, position);
+        const updatedNodes = [...nodes, newNode];
+        setNodes(updatedNodes);
+        setStoreNodes(updatedNodes);
+        lastSyncRef.current.nodes = updatedNodes;
+    }, [currentFlow, nodes, setNodes, setStoreNodes]);
+
+    const updateSelectedNodeConfig = useCallback((nextConfig) => {
+        if (!selectedNode) return;
+        const updatedNodes = nodes.map((n) => (
+            n.id === selectedNode.id
+                ? { ...n, data: { ...(n.data || DEFAULT_NODE_DATA[n.type]), config: nextConfig } }
+                : n
+        ));
+        const updatedSelectedNode = updatedNodes.find(n => n.id === selectedNode.id) || null;
+        setNodes(updatedNodes);
+        setStoreNodes(updatedNodes);
+        lastSyncRef.current.nodes = updatedNodes;
+        setSelectedNode(updatedSelectedNode);
+        setSelectedNodeState(updatedSelectedNode);
+        setNodeConfigDraft(nextConfig);
+    }, [nodes, selectedNode, setNodes, setSelectedNode, setStoreNodes]);
+
+    const handleDeleteSelectedNode = useCallback(() => {
+        if (!selectedNode) return;
+        if (!window.confirm('Tem certeza que deseja deletar este nó?')) return;
+        const updatedNodes = nodes.filter(n => n.id !== selectedNode.id);
+        const updatedEdges = edges.filter(e => e.source !== selectedNode.id && e.target !== selectedNode.id);
+        setNodes(updatedNodes);
+        setEdges(updatedEdges);
+        setStoreNodes(updatedNodes);
+        setStoreEdges(updatedEdges);
+        lastSyncRef.current.nodes = updatedNodes;
+        lastSyncRef.current.edges = updatedEdges;
+        setSelectedNode(null);
+        setSelectedNodeState(null);
+        toast.success('Nó deletado');
+    }, [edges, nodes, selectedNode, setEdges, setNodes, setSelectedNode, setStoreEdges, setStoreNodes]);
+
+    const renderNodeConfigFields = () => {
+        if (!selectedNode) return null;
+
+        switch (selectedNode.type) {
+            case 'start':
+                return (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Tipo de Gatilho</Label>
+                            <Select
+                                value={nodeConfigDraft.trigger || 'manual'}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, trigger: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="manual">Manual</SelectItem>
+                                    <SelectItem value="keyword">Palavra-chave</SelectItem>
+                                    <SelectItem value="schedule">Agendado</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {nodeConfigDraft.trigger === 'keyword' && (
+                            <div className="space-y-2">
+                                <Label>Palavra-chave</Label>
+                                <Input
+                                    value={nodeConfigDraft.keyword || ''}
+                                    onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, keyword: e.target.value })}
+                                    placeholder="Digite a palavra-chave"
+                                />
+                            </div>
+                        )}
+                    </>
+                );
+            case 'textMessage':
+                return (
+                    <div className="space-y-2">
+                        <Label>Mensagem</Label>
+                        <Textarea
+                            value={nodeConfigDraft.message || ''}
+                            onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, message: e.target.value })}
+                            placeholder="Digite a mensagem..."
+                            rows={8}
+                        />
+                        <p className={cn("text-xs", isDark ? "text-white/40" : "text-slate-500")}>
+                            Use variáveis com {'{nome_variavel}'}
+                        </p>
+                    </div>
+                );
+            case 'mediaMessage':
+                return (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Tipo de Mídia</Label>
+                            <Select
+                                value={nodeConfigDraft.mediaType || 'image'}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, mediaType: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="image">Imagem</SelectItem>
+                                    <SelectItem value="video">Vídeo</SelectItem>
+                                    <SelectItem value="document">Documento</SelectItem>
+                                    <SelectItem value="audio">Áudio</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>URL da Mídia</Label>
+                            <Input
+                                value={nodeConfigDraft.mediaUrl || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, mediaUrl: e.target.value })}
+                                placeholder="https://exemplo.com/imagem.jpg"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Legenda (opcional)</Label>
+                            <Textarea
+                                value={nodeConfigDraft.caption || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, caption: e.target.value })}
+                                placeholder="Digite uma legenda..."
+                                rows={4}
+                            />
+                        </div>
+                    </>
+                );
+            case 'wait':
+                return (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Duração</Label>
+                            <Input
+                                type="number"
+                                value={nodeConfigDraft.duration ?? 1}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, duration: parseInt(e.target.value, 10) || 1 })}
+                                min="1"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Unidade</Label>
+                            <Select
+                                value={nodeConfigDraft.unit || 'seconds'}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, unit: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="seconds">Segundos</SelectItem>
+                                    <SelectItem value="minutes">Minutos</SelectItem>
+                                    <SelectItem value="hours">Horas</SelectItem>
+                                    <SelectItem value="days">Dias</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </>
+                );
+            case 'conditional': {
+                const condition = nodeConfigDraft.condition || { variable: '', operator: 'equals', value: '' };
+                return (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Variável</Label>
+                            <Input
+                                value={condition.variable || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, condition: { ...condition, variable: e.target.value } })}
+                                placeholder="nome_da_variavel"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Operador</Label>
+                            <Select
+                                value={condition.operator || 'equals'}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, condition: { ...condition, operator: value } })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="equals">Igual a</SelectItem>
+                                    <SelectItem value="contains">Contém</SelectItem>
+                                    <SelectItem value="greater">Maior que</SelectItem>
+                                    <SelectItem value="less">Menor que</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Valor</Label>
+                            <Input
+                                value={condition.value || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, condition: { ...condition, value: e.target.value } })}
+                                placeholder="Valor para comparar"
+                            />
+                        </div>
+                    </>
+                );
+            }
+            case 'variable':
+                return (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Ação</Label>
+                            <Select
+                                value={nodeConfigDraft.action || 'set'}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, action: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="set">Definir</SelectItem>
+                                    <SelectItem value="get">Obter</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Nome da Variável</Label>
+                            <Input
+                                value={nodeConfigDraft.variableName || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, variableName: e.target.value })}
+                                placeholder="nome_da_variavel"
+                            />
+                        </div>
+
+                        {nodeConfigDraft.action !== 'get' && (
+                            <div className="space-y-2">
+                                <Label>Valor</Label>
+                                <Input
+                                    value={nodeConfigDraft.value || ''}
+                                    onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, value: e.target.value })}
+                                    placeholder="Valor da variável"
+                                />
+                            </div>
+                        )}
+                    </>
+                );
+            case 'webhook':
+                return (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Método</Label>
+                            <Select
+                                value={nodeConfigDraft.method || 'POST'}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, method: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="GET">GET</SelectItem>
+                                    <SelectItem value="POST">POST</SelectItem>
+                                    <SelectItem value="PUT">PUT</SelectItem>
+                                    <SelectItem value="DELETE">DELETE</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>URL</Label>
+                            <Input
+                                value={nodeConfigDraft.url || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, url: e.target.value })}
+                                placeholder="https://api.exemplo.com/endpoint"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Variável de Resposta (opcional)</Label>
+                            <Input
+                                value={nodeConfigDraft.responseVariable || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, responseVariable: e.target.value })}
+                                placeholder="nome_variavel_resposta"
+                            />
+                        </div>
+                    </>
+                );
+            default:
+                return null;
+        }
     };
 
     return (
@@ -402,7 +738,7 @@ const FlowBuilderInner = () => {
             </div>
 
             {/* Main Canvas */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative" ref={reactFlowWrapperRef}>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -412,6 +748,11 @@ const FlowBuilderInner = () => {
                     onNodeClick={onNodeClick}
                     onPaneClick={onPaneClick}
                     nodeTypes={nodeTypes}
+                    onInit={(instance) => {
+                        reactFlowInstanceRef.current = instance;
+                    }}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
                     fitView
                     className={isDark ? "react-flow-dark" : ""}
                     style={{ background: isDark ? '#0f172a' : '#f8fafc' }}
@@ -510,7 +851,7 @@ const FlowBuilderInner = () => {
                                 isDark ? "text-white" : "text-slate-800"
                             )}>Configurar Nó</h3>
                             <button
-                                onClick={() => setSelectedNodeState(null)}
+                                onClick={() => onPaneClick()}
                                 className={cn(
                                     "p-1.5 rounded-lg transition-colors",
                                     isDark ? "hover:bg-white/10 text-white/60" : "hover:bg-slate-100 text-slate-500"
@@ -524,14 +865,24 @@ const FlowBuilderInner = () => {
                                 "inline-block px-3 py-1.5 rounded-lg text-sm font-medium mb-4",
                                 "bg-emerald-500/20 text-emerald-400"
                             )}>
-                                {selectedNode.type}
+                                {selectedNode.data?.label || selectedNode.type}
                             </div>
-                            <p className={cn(
-                                "text-sm",
-                                isDark ? "text-white/60" : "text-slate-600"
-                            )}>
-                                Configurações do nó selecionado aparecerão aqui.
-                            </p>
+                            <div className="space-y-5">
+                                {renderNodeConfigFields()}
+                                <div className="pt-3 border-t border-white/10">
+                                    <button
+                                        onClick={handleDeleteSelectedNode}
+                                        className={cn(
+                                            "w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                            isDark
+                                                ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                                                : "bg-red-50 text-red-600 hover:bg-red-100"
+                                        )}
+                                    >
+                                        Deletar Nó
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -578,6 +929,11 @@ const FlowBuilderInner = () => {
                                             key={item.type}
                                             onClick={() => handleAddNode(item.type)}
                                             disabled={!currentFlow}
+                                            draggable={!!currentFlow}
+                                            onDragStart={(event) => {
+                                                event.dataTransfer.setData('application/reactflow-node-type', item.type);
+                                                event.dataTransfer.effectAllowed = 'move';
+                                            }}
                                             className={cn(
                                                 "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group",
                                                 "disabled:opacity-50 disabled:cursor-not-allowed",

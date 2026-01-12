@@ -205,21 +205,38 @@ export const validateFlow = (nodes, edges) => {
         }
     });
 
-    // Verificar loops infinitos (básico)
-    const hasPath = (from, to, visited = new Set()) => {
-        if (from === to) return true;
-        if (visited.has(from)) return false;
-        visited.add(from);
+    const adjacency = new Map();
+    nodes.forEach((node) => adjacency.set(node.id, []));
+    edges.forEach((edge) => {
+        if (!adjacency.has(edge.source)) adjacency.set(edge.source, []);
+        adjacency.get(edge.source).push(edge.target);
+    });
 
-        const outgoingEdges = edges.filter(e => e.source === from);
-        return outgoingEdges.some(e => hasPath(e.target, to, new Set(visited)));
+    const visited = new Set();
+    const inStack = new Set();
+
+    const hasCycleFrom = (nodeId) => {
+        if (inStack.has(nodeId)) return true;
+        if (visited.has(nodeId)) return false;
+
+        visited.add(nodeId);
+        inStack.add(nodeId);
+
+        const nextNodes = adjacency.get(nodeId) || [];
+        for (const next of nextNodes) {
+            if (hasCycleFrom(next)) return true;
+        }
+
+        inStack.delete(nodeId);
+        return false;
     };
 
-    nodes.forEach(node => {
-        if (hasPath(node.id, node.id)) {
-            errors.push(`Loop infinito detectado no nó "${node.data?.label || node.id}"`);
+    for (const node of nodes) {
+        if (hasCycleFrom(node.id)) {
+            errors.push('Ciclo detectado no fluxo (verifique conexões)');
+            break;
         }
-    });
+    }
 
     return {
         isValid: errors.length === 0,
