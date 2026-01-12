@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ReactFlow, {
     MiniMap,
     Controls,
@@ -13,7 +13,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import './FlowBuilder.css';
-import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2 } from 'lucide-react';
+import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2, Search, Copy, Focus, RotateCcw } from 'lucide-react';
 import useFlowStore from '../store/flowStore';
 import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
@@ -23,6 +23,23 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { ScrollArea } from '../components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
+import { Separator } from '../components/ui/separator';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger
+} from '../components/ui/alert-dialog';
 
 // Import custom nodes
 import StartNode from '../components/FlowBuilder/nodes/StartNode';
@@ -81,6 +98,8 @@ const FlowBuilderInner = () => {
     const [nodes, setNodes] = useNodesState([]);
     const [edges, setEdges] = useEdgesState([]);
     const [selectedNode, setSelectedNodeState] = useState(null);
+    const [rightPanelTab, setRightPanelTab] = useState('components');
+    const [componentSearch, setComponentSearch] = useState('');
     const lastSyncRef = useRef({ nodes: [], edges: [] });
     const reactFlowWrapperRef = useRef(null);
     const reactFlowInstanceRef = useRef(null);
@@ -207,6 +226,7 @@ const FlowBuilderInner = () => {
         });
         setSelectedNode(node);
         setSelectedNodeState(node);
+        setRightPanelTab('config');
     }, [setNodes, setSelectedNode, setStoreNodes]);
 
     // Handle pane click (deselect)
@@ -219,6 +239,7 @@ const FlowBuilderInner = () => {
             lastSyncRef.current.nodes = updatedNodes;
             return updatedNodes;
         });
+        setRightPanelTab('components');
     }, [setNodes, setSelectedNode, setStoreNodes]);
 
     useEffect(() => {
@@ -361,9 +382,8 @@ const FlowBuilderInner = () => {
         setNodeConfigDraft(nextConfig);
     }, [nodes, selectedNode, setNodes, setSelectedNode, setStoreNodes]);
 
-    const handleDeleteSelectedNode = useCallback(() => {
+    const performDeleteSelectedNode = useCallback(() => {
         if (!selectedNode) return;
-        if (!window.confirm('Tem certeza que deseja deletar este nó?')) return;
         const updatedNodes = nodes.filter(n => n.id !== selectedNode.id);
         const updatedEdges = edges.filter(e => e.source !== selectedNode.id && e.target !== selectedNode.id);
         setNodes(updatedNodes);
@@ -375,7 +395,70 @@ const FlowBuilderInner = () => {
         setSelectedNode(null);
         setSelectedNodeState(null);
         toast.success('Nó deletado');
+        setRightPanelTab('components');
     }, [edges, nodes, selectedNode, setEdges, setNodes, setSelectedNode, setStoreEdges, setStoreNodes]);
+
+    const resetSelectedNodeConfig = useCallback(() => {
+        if (!selectedNode) return;
+        const nextConfig = DEFAULT_NODE_DATA[selectedNode.type]?.config || {};
+        updateSelectedNodeConfig(nextConfig);
+        toast.success('Configuração restaurada');
+    }, [selectedNode, updateSelectedNodeConfig]);
+
+    const duplicateSelectedNode = useCallback(() => {
+        if (!selectedNode) return;
+        const sourceNode = nodes.find(n => n.id === selectedNode.id) || selectedNode;
+        const newNode = createNode(sourceNode.type, {
+            x: (sourceNode.position?.x || 0) + 40,
+            y: (sourceNode.position?.y || 0) + 40
+        });
+        newNode.data = { ...(sourceNode.data || DEFAULT_NODE_DATA[sourceNode.type]), config: nodeConfigDraft };
+        const updatedNodes = [
+            ...nodes.map((n) => ({ ...n, selected: false })),
+            { ...newNode, selected: true }
+        ];
+        setNodes(updatedNodes);
+        setStoreNodes(updatedNodes);
+        lastSyncRef.current.nodes = updatedNodes;
+        setSelectedNode(newNode);
+        setSelectedNodeState(newNode);
+        setRightPanelTab('config');
+        toast.success('Nó duplicado');
+    }, [nodeConfigDraft, nodes, selectedNode, setNodes, setSelectedNode, setStoreNodes]);
+
+    const focusSelectedNode = useCallback(() => {
+        if (!selectedNode) return;
+        const nodeToFocus = nodes.find(n => n.id === selectedNode.id) || selectedNode;
+        const instance = reactFlowInstanceRef.current;
+        if (!instance?.fitView) return;
+        try {
+            instance.fitView({ nodes: [nodeToFocus], padding: 0.35, duration: 250 });
+        } catch {
+            try {
+                instance.fitView({ padding: 0.35, duration: 250 });
+            } catch { }
+        }
+    }, [nodes, selectedNode]);
+
+    const filteredNodeCategories = useMemo(() => {
+        const q = componentSearch.trim().toLowerCase();
+        if (!q) return nodeCategories;
+        return nodeCategories
+            .map((category) => ({
+                ...category,
+                items: category.items.filter((item) => {
+                    const hay = `${item.label} ${item.description} ${item.type}`.toLowerCase();
+                    return hay.includes(q);
+                })
+            }))
+            .filter((category) => category.items.length > 0);
+    }, [componentSearch]);
+
+    const quickAddItems = useMemo(() => {
+        const preferredTypes = ['textMessage', 'wait', 'conditional', 'webhook'];
+        const allItems = nodeCategories.flatMap(c => c.items);
+        return preferredTypes.map(t => allItems.find(i => i.type === t)).filter(Boolean);
+    }, []);
 
     const renderNodeConfigFields = () => {
         if (!selectedNode) return null;
@@ -784,15 +867,15 @@ const FlowBuilderInner = () => {
                     />
 
                     {/* Top Panel */}
-                    <Panel position="top-center">
+                    <Panel position="top-left">
                         <div className={cn(
-                            "flex items-center gap-3 px-4 py-2 rounded-xl border backdrop-blur-sm",
+                            "flex items-center gap-3 px-3 py-2 rounded-xl border backdrop-blur-sm",
                             isDark
                                 ? "bg-slate-800/90 border-white/10"
                                 : "bg-white/90 border-slate-200 shadow-lg"
                         )}>
                             <h2 className={cn(
-                                "font-semibold",
+                                "font-semibold text-sm",
                                 isDark ? "text-white" : "text-slate-800"
                             )}>
                                 {currentFlow ? currentFlow.name : 'Selecione um fluxo'}
@@ -835,62 +918,11 @@ const FlowBuilderInner = () => {
                         </div>
                     </div>
                 )}
-
-                {/* Node Config Panel (appears when node is selected) */}
-                {selectedNode && (
-                    <div className={cn(
-                        "absolute right-72 top-0 bottom-0 w-80 border-l flex flex-col z-10",
-                        isDark ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"
-                    )}>
-                        <div className={cn(
-                            "p-4 border-b flex items-center justify-between",
-                            isDark ? "border-white/10" : "border-slate-200"
-                        )}>
-                            <h3 className={cn(
-                                "font-semibold",
-                                isDark ? "text-white" : "text-slate-800"
-                            )}>Configurar Nó</h3>
-                            <button
-                                onClick={() => onPaneClick()}
-                                className={cn(
-                                    "p-1.5 rounded-lg transition-colors",
-                                    isDark ? "hover:bg-white/10 text-white/60" : "hover:bg-slate-100 text-slate-500"
-                                )}
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <div className={cn(
-                                "inline-block px-3 py-1.5 rounded-lg text-sm font-medium mb-4",
-                                "bg-emerald-500/20 text-emerald-400"
-                            )}>
-                                {selectedNode.data?.label || selectedNode.type}
-                            </div>
-                            <div className="space-y-5">
-                                {renderNodeConfigFields()}
-                                <div className="pt-3 border-t border-white/10">
-                                    <button
-                                        onClick={handleDeleteSelectedNode}
-                                        className={cn(
-                                            "w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                                            isDark
-                                                ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
-                                                : "bg-red-50 text-red-600 hover:bg-red-100"
-                                        )}
-                                    >
-                                        Deletar Nó
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Right Panel - Components Toolbar */}
             <div className={cn(
-                "w-72 flex-shrink-0 border-l flex flex-col",
+                "w-80 flex-shrink-0 border-l flex flex-col",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
@@ -898,77 +930,246 @@ const FlowBuilderInner = () => {
                     "p-4 border-b",
                     isDark ? "border-white/10" : "border-slate-200"
                 )}>
-                    <h2 className={cn(
-                        "font-semibold",
-                        isDark ? "text-white" : "text-slate-800"
-                    )}>Componentes</h2>
+                    <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="w-full">
+                        <TabsList className="w-full grid grid-cols-2">
+                            <TabsTrigger value="components">Componentes</TabsTrigger>
+                            <TabsTrigger value="config" disabled={!selectedNode}>Configurar</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
 
-                {/* Node Categories */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                    {nodeCategories.map(category => (
-                        <div key={category.title}>
-                            <h3 className={cn(
-                                "text-xs font-semibold uppercase tracking-wider mb-2 px-1",
-                                isDark ? "text-white/40" : "text-slate-500"
-                            )}>{category.title}</h3>
-                            <div className="space-y-1">
-                                {category.items.map(item => {
-                                    const Icon = item.icon;
-                                    const colorClasses = {
-                                        emerald: isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600',
-                                        blue: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600',
-                                        purple: isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600',
-                                        amber: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-100 text-amber-600',
-                                        pink: isDark ? 'bg-pink-500/20 text-pink-400' : 'bg-pink-100 text-pink-600',
-                                        cyan: isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-100 text-cyan-600',
-                                        indigo: isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600',
-                                    };
-                                    return (
-                                        <button
-                                            key={item.type}
-                                            onClick={() => handleAddNode(item.type)}
-                                            disabled={!currentFlow}
-                                            draggable={!!currentFlow}
-                                            onDragStart={(event) => {
-                                                event.dataTransfer.setData('application/reactflow-node-type', item.type);
-                                                event.dataTransfer.effectAllowed = 'move';
-                                            }}
-                                            className={cn(
-                                                "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group",
-                                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                                                isDark
-                                                    ? "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/50"
-                                                    : "bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-emerald-300"
-                                            )}
-                                        >
-                                            <div className={cn(
-                                                "p-2 rounded-lg",
-                                                colorClasses[item.color]
-                                            )}>
-                                                <Icon className="w-4 h-4" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <span className={cn(
-                                                    "block text-sm font-medium",
-                                                    isDark ? "text-white" : "text-slate-800"
-                                                )}>{item.label}</span>
-                                                <span className={cn(
-                                                    "block text-xs truncate",
-                                                    isDark ? "text-white/50" : "text-slate-500"
-                                                )}>{item.description}</span>
-                                            </div>
-                                            <ChevronRight className={cn(
-                                                "w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity",
-                                                isDark ? "text-white/50" : "text-slate-400"
-                                            )} />
-                                        </button>
-                                    );
-                                })}
+                <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 flex flex-col">
+                    <ScrollArea className="flex-1">
+                        <TabsContent value="components" className="m-0">
+                            <div className="p-3 space-y-3">
+                                <div className={cn(
+                                    "relative",
+                                    !currentFlow && "opacity-60"
+                                )}>
+                                    <Search className={cn(
+                                        "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4",
+                                        isDark ? "text-white/40" : "text-slate-400"
+                                    )} />
+                                    <Input
+                                        value={componentSearch}
+                                        onChange={(e) => setComponentSearch(e.target.value)}
+                                        placeholder="Buscar componentes..."
+                                        disabled={!currentFlow}
+                                        className="pl-9"
+                                    />
+                                </div>
+
+                                {currentFlow && !componentSearch.trim() && (
+                                    <div className="space-y-2">
+                                        <div className={cn(
+                                            "text-xs font-semibold uppercase tracking-wider px-1",
+                                            isDark ? "text-white/40" : "text-slate-500"
+                                        )}>
+                                            Atalhos
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {quickAddItems.map((item) => {
+                                                const Icon = item.icon;
+                                                return (
+                                                    <Button
+                                                        key={item.type}
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleAddNode(item.type)}
+                                                        className={cn(
+                                                            isDark ? "border-white/10 bg-white/5 hover:bg-white/10" : "bg-white"
+                                                        )}
+                                                    >
+                                                        <Icon className="w-4 h-4" />
+                                                        {item.label}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {filteredNodeCategories.length === 0 ? (
+                                    <div className={cn(
+                                        "rounded-xl border p-4 text-center",
+                                        isDark ? "border-white/10 bg-white/5 text-white/60" : "border-slate-200 bg-slate-50 text-slate-600"
+                                    )}>
+                                        <p className="text-sm font-medium">Nenhum componente encontrado</p>
+                                        <p className={cn("text-xs mt-1", isDark ? "text-white/40" : "text-slate-500")}>
+                                            Tente outro termo de busca.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <Accordion type="multiple" defaultValue={filteredNodeCategories.map(c => c.title)} className="w-full">
+                                        {filteredNodeCategories.map(category => (
+                                            <AccordionItem key={category.title} value={category.title} className={cn(isDark ? "border-white/10" : "border-slate-200")}>
+                                                <AccordionTrigger className={cn(
+                                                    "py-3 px-1 text-xs font-semibold uppercase tracking-wider",
+                                                    isDark ? "text-white/50 hover:text-white/70" : "text-slate-500 hover:text-slate-700"
+                                                )}>
+                                                    {category.title}
+                                                </AccordionTrigger>
+                                                <AccordionContent className="pb-3">
+                                                    <div className="space-y-1">
+                                                        {category.items.map(item => {
+                                                            const Icon = item.icon;
+                                                            const colorClasses = {
+                                                                emerald: isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600',
+                                                                blue: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600',
+                                                                purple: isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600',
+                                                                amber: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-100 text-amber-600',
+                                                                pink: isDark ? 'bg-pink-500/20 text-pink-400' : 'bg-pink-100 text-pink-600',
+                                                                cyan: isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-100 text-cyan-600',
+                                                                indigo: isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600',
+                                                            };
+                                                            return (
+                                                                <button
+                                                                    key={item.type}
+                                                                    onClick={() => handleAddNode(item.type)}
+                                                                    disabled={!currentFlow}
+                                                                    draggable={!!currentFlow}
+                                                                    onDragStart={(event) => {
+                                                                        event.dataTransfer.setData('application/reactflow-node-type', item.type);
+                                                                        event.dataTransfer.effectAllowed = 'move';
+                                                                    }}
+                                                                    className={cn(
+                                                                        "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group",
+                                                                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                                                                        isDark
+                                                                            ? "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40"
+                                                                            : "bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-emerald-300"
+                                                                    )}
+                                                                >
+                                                                    <div className={cn("p-2 rounded-lg", colorClasses[item.color])}>
+                                                                        <Icon className="w-4 h-4" />
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <span className={cn(
+                                                                            "block text-sm font-medium",
+                                                                            isDark ? "text-white" : "text-slate-800"
+                                                                        )}>{item.label}</span>
+                                                                        <span className={cn(
+                                                                            "block text-xs truncate",
+                                                                            isDark ? "text-white/50" : "text-slate-500"
+                                                                        )}>{item.description}</span>
+                                                                    </div>
+                                                                    <ChevronRight className={cn(
+                                                                        "w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity",
+                                                                        isDark ? "text-white/50" : "text-slate-400"
+                                                                    )} />
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        ))}
+                                    </Accordion>
+                                )}
                             </div>
+                        </TabsContent>
+
+                        <TabsContent value="config" className="m-0">
+                            <div className="p-4">
+                            {!selectedNode ? (
+                                <div className={cn(
+                                    "rounded-xl border p-4",
+                                    isDark ? "border-white/10 bg-white/5 text-white/60" : "border-slate-200 bg-slate-50 text-slate-600"
+                                )}>
+                                    <p className="text-sm font-medium">Selecione um nó no canvas</p>
+                                    <p className={cn("text-xs mt-1", isDark ? "text-white/40" : "text-slate-500")}>
+                                        As configurações aparecem aqui para edição rápida.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className={cn(
+                                    "rounded-xl border",
+                                    isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white"
+                                )}>
+                                    <div className={cn(
+                                        "p-4 border-b",
+                                        isDark ? "border-white/10" : "border-slate-200"
+                                    )}>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/20">
+                                                    {selectedNode.data?.label || selectedNode.type}
+                                                </Badge>
+                                                <div className={cn("text-xs mt-2 truncate", isDark ? "text-white/40" : "text-slate-500")}>
+                                                    {selectedNode.id}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button variant="outline" size="icon" onClick={focusSelectedNode}>
+                                                    <Focus className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="outline" size="icon" onClick={duplicateSelectedNode}>
+                                                    <Copy className="w-4 h-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className={cn("text-xs mt-3", isDark ? "text-white/40" : "text-slate-500")}>
+                                            Alterações aplicadas automaticamente
+                                        </div>
+                                    </div>
+                                    <div className="p-4 space-y-5">
+                                        {renderNodeConfigFields()}
+                                    </div>
+                                    <div className={cn(
+                                        "p-4 border-t space-y-2",
+                                        isDark ? "border-white/10" : "border-slate-200"
+                                    )}>
+                                        <div className="flex gap-2">
+                                            <Button variant="outline" className="flex-1" onClick={resetSelectedNodeConfig}>
+                                                <RotateCcw className="w-4 h-4" />
+                                                Restaurar
+                                            </Button>
+                                            <Button variant="outline" className="flex-1" onClick={onPaneClick}>
+                                                <X className="w-4 h-4" />
+                                                Fechar
+                                            </Button>
+                                        </div>
+
+                                        {currentFlow && (
+                                            <Button
+                                                onClick={handleSaveFlow}
+                                                disabled={saving}
+                                                className="w-full"
+                                            >
+                                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                {saving ? 'Salvando...' : 'Salvar Fluxo'}
+                                            </Button>
+                                        )}
+
+                                        <Separator className={cn(isDark ? "bg-white/10" : "bg-slate-200")} />
+
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive" className="w-full">
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Deletar Nó
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Deletar nó?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Isso removerá o nó e suas conexões. Esta ação não pode ser desfeita.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={performDeleteSelectedNode}>Deletar</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    ))}
-                </div>
+                        </TabsContent>
+                    </ScrollArea>
+                </Tabs>
 
                 {/* Footer */}
                 <div className={cn(
@@ -979,9 +1180,9 @@ const FlowBuilderInner = () => {
                         "text-xs",
                         isDark ? "text-white/40" : "text-slate-500"
                     )}>
-                        {currentFlow
-                            ? "Clique nos componentes para adicionar ao canvas"
-                            : "Selecione um fluxo para começar"}
+                        {rightPanelTab === 'config'
+                            ? (selectedNode ? "Dica: duplique e centralize pelo topo do painel" : "Selecione um nó para configurar")
+                            : (currentFlow ? "Dica: use a busca para encontrar ações rápido" : "Selecione um fluxo para começar")}
                     </p>
                 </div>
             </div>
