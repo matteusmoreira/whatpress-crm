@@ -720,7 +720,7 @@ const FlowBuilderInner = () => {
     };
 
     return (
-        <div className="flex flex-col lg:flex-row h-full overflow-hidden min-w-0">
+        <div className="flex flex-col lg:flex-row h-full min-h-0 overflow-hidden min-w-0">
             {/* Left Panel - Flow List */}
             <div className={cn(
                 "w-full lg:w-64 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r max-h-[320px] lg:max-h-none",
@@ -968,7 +968,7 @@ const FlowBuilderInner = () => {
 
             {/* Right Panel - Components Toolbar */}
             <div className={cn(
-                "w-full lg:w-80 flex-shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l max-h-[45vh] lg:max-h-none",
+                "w-full lg:w-80 flex-shrink-0 flex flex-col min-h-0 border-t lg:border-t-0 lg:border-l max-h-[45vh] lg:max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
@@ -984,8 +984,8 @@ const FlowBuilderInner = () => {
                     </Tabs>
                 </div>
 
-                <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 flex flex-col">
-                    <ScrollArea className="flex-1">
+                <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 min-h-0 flex flex-col">
+                    <ScrollArea className="flex-1 min-h-0">
                         <TabsContent value="components" className="m-0">
                             <div className="p-3 space-y-3">
                                 <div className={cn(
