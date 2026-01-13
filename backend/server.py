@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Set
 import uuid
 from datetime import datetime, timedelta
 try:
@@ -498,6 +498,7 @@ _DB_WRITE_QUEUE: "deque[dict]" = deque(maxlen=max(100, _DB_WRITE_QUEUE_MAX))
 _CONTACTS_CACHE_BY_TENANT: Dict[str, dict] = {}
 _CONTACT_CACHE_BY_ID: Dict[str, dict] = {}
 _CONTACT_CACHE_BY_TENANT_PHONE: Dict[str, dict] = {}
+_TENANT_USER_NAMES_CACHE: Dict[str, Set[str]] = {}
 _OFFLINE_FLUSH_TASK_STARTED = False
 
 def _is_transient_db_error(exc: Exception) -> bool:
@@ -631,6 +632,39 @@ def _cache_contact_row(contact_row: dict) -> None:
         _CONTACT_CACHE_BY_ID[str(cid)] = contact_row
     if tenant_id and phone:
         _CONTACT_CACHE_BY_TENANT_PHONE[f"{tenant_id}:{phone}"] = contact_row
+
+def _normalize_person_name(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip().casefold()
+
+def _get_tenant_user_names(tenant_id: Optional[str]) -> Set[str]:
+    tid = str(tenant_id or "").strip()
+    if not tid:
+        return set()
+    cached = _TENANT_USER_NAMES_CACHE.get(tid)
+    if isinstance(cached, set):
+        return cached
+    try:
+        result = _db_call_with_retry(
+            "users.list_names",
+            lambda: supabase.table("users").select("name").eq("tenant_id", tid).limit(250).execute(),
+        )
+        names: Set[str] = set()
+        for row in (getattr(result, "data", None) or []):
+            if isinstance(row, dict):
+                n = _normalize_person_name(row.get("name"))
+                if n:
+                    names.add(n)
+        _TENANT_USER_NAMES_CACHE[tid] = names
+        return names
+    except Exception:
+        _TENANT_USER_NAMES_CACHE[tid] = set()
+        return set()
+
+def _looks_like_system_user_name(value: Any, tenant_id: Optional[str]) -> bool:
+    n = _normalize_person_name(value)
+    if not n:
+        return False
+    return n in _get_tenant_user_names(tenant_id)
 
 def _postgrest_error_code(exc: Exception) -> Optional[str]:
     code = getattr(exc, "code", None)
@@ -4934,6 +4968,8 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
 
         if parsed['event'] == 'message':
             is_from_me = parsed.get('from_me', False)
+            push_name_raw = (parsed.get('push_name') or '').strip()
+            contact_push_name = push_name_raw if (push_name_raw and not is_from_me) else None
 
             raw_jid = parsed.get('remote_jid_raw') or payload.get('data', {}).get('key', {}).get('remoteJid', '')
             if '@g.us' in raw_jid:
@@ -5065,6 +5101,10 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                     }
                     if not is_from_me:
                         update_data['unread_count'] = conversation['unread_count'] + 1
+                        if contact_push_name:
+                            existing_name = (conversation.get('contact_name') or '').strip()
+                            if (not existing_name) or existing_name == phone or _looks_like_system_user_name(existing_name, tenant_id):
+                                update_data['contact_name'] = contact_push_name
                     
                     try:
                         _db_call_with_retry(
@@ -5091,7 +5131,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         avatar_url = None
                     
                     # DEBUG: Log contact name being used
-                    contact_name_to_use = parsed.get('push_name') or phone
+                    contact_name_to_use = contact_push_name or phone
                     logger.info(f"DEBUG - Creating conversation with contact_name: '{contact_name_to_use}' | push_name from parsed: '{parsed.get('push_name')}' | phone: {phone}")
                     
                     conv_data = {
@@ -5123,23 +5163,43 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                     try:
                         cached_contact = _CONTACT_CACHE_BY_TENANT_PHONE.get(f"{tenant_id}:{phone}")
                         existing_contact_rows: List[dict] = []
-                        if isinstance(cached_contact, dict) and cached_contact.get('phone'):
+                        if isinstance(cached_contact, dict) and cached_contact.get('id') and cached_contact.get('phone'):
                             existing_contact_rows = [cached_contact]
                         else:
                             existing_contact = _db_call_with_retry(
                                 "contacts.auto.exists",
-                                lambda: supabase.table('contacts').select('id, first_contact_at, status, custom_fields').eq('tenant_id', tenant_id).eq('phone', phone).limit(1).execute()
+                                lambda: supabase.table('contacts').select('id, phone, name, full_name, first_contact_at, status, custom_fields').eq('tenant_id', tenant_id).eq('phone', phone).limit(1).execute()
                             )
                             existing_contact_rows = existing_contact.data or []
                             if (not existing_contact_rows) and raw_phone and str(raw_phone).strip() and str(raw_phone).strip() != phone:
                                 existing_contact = _db_call_with_retry(
                                     "contacts.auto.exists_raw",
-                                    lambda: supabase.table('contacts').select('id, first_contact_at, status, custom_fields').eq('tenant_id', tenant_id).eq('phone', str(raw_phone).strip()).limit(1).execute()
+                                    lambda: supabase.table('contacts').select('id, phone, name, full_name, first_contact_at, status, custom_fields').eq('tenant_id', tenant_id).eq('phone', str(raw_phone).strip()).limit(1).execute()
                                 )
                                 existing_contact_rows = existing_contact.data or []
 
                         if existing_contact_rows:
                             row = existing_contact_rows[0]
+                            if contact_push_name and row.get('id'):
+                                current_name = (row.get('name') or row.get('full_name') or '').strip()
+                                if (not current_name) or current_name == phone or _looks_like_system_user_name(current_name, tenant_id):
+                                    name_payload = {'updated_at': datetime.utcnow().isoformat(), 'name': contact_push_name}
+                                    try:
+                                        _db_call_with_retry(
+                                            "contacts.auto.set_name",
+                                            lambda: supabase.table('contacts').update(name_payload).eq('id', row.get('id')).execute()
+                                        )
+                                        _cache_contact_row({**row, **name_payload})
+                                    except Exception:
+                                        alt_payload = {'updated_at': datetime.utcnow().isoformat(), 'full_name': contact_push_name}
+                                        try:
+                                            _db_call_with_retry(
+                                                "contacts.auto.set_full_name",
+                                                lambda: supabase.table('contacts').update(alt_payload).eq('id', row.get('id')).execute()
+                                            )
+                                            _cache_contact_row({**row, **alt_payload})
+                                        except Exception:
+                                            pass
                             if not row.get('first_contact_at'):
                                 touch_data = {'first_contact_at': first_contact_at_iso, 'updated_at': datetime.utcnow().isoformat()}
                                 try:
@@ -5180,7 +5240,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                             except Exception:
                                 pass
                         else:
-                            push_name = (parsed.get('push_name') or '').strip() or None
+                            push_name = (contact_push_name or '').strip() or None
                             
                             # DEBUG: Log auto-contact creation
                             logger.info(f"DEBUG - Auto-creating contact | push_name: '{push_name}' | phone: {phone} | tenant: {tenant_id}")

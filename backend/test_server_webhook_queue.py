@@ -101,6 +101,7 @@ async def test_webhook_creates_contact_when_from_me_true(monkeypatch):
     import backend.server as server
 
     inserted_contacts = []
+    inserted_conversations = []
 
     def parse_stub(_payload):
         return {
@@ -112,6 +113,7 @@ async def test_webhook_creates_contact_when_from_me_true(monkeypatch):
             "timestamp": "1700000000",
             "message_id": "MSG1",
             "type": "text",
+            "push_name": "Matteus Moreira",
         }
 
     async def get_profile_picture_stub(_instance_name, _phone):
@@ -146,6 +148,7 @@ async def test_webhook_creates_contact_when_from_me_true(monkeypatch):
                     return _Result(data=[])
                 if op[0] == "insert":
                     conv = dict(op[1])
+                    inserted_conversations.append(conv)
                     return _Result(
                         data=[
                             {
@@ -202,8 +205,11 @@ async def test_webhook_creates_contact_when_from_me_true(monkeypatch):
 
     assert resp.get("success") is True
     assert len(inserted_contacts) == 1
+    assert len(inserted_conversations) == 1
+    assert inserted_conversations[0].get("contact_name") == "5521999998888"
     assert inserted_contacts[0].get("phone") == "5521999998888"
     assert inserted_contacts[0].get("source") == "whatsapp"
+    assert inserted_contacts[0].get("name") is None
 
 
 def test_normalize_phone_number_variants():

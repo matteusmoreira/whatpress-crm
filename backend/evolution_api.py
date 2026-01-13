@@ -917,8 +917,6 @@ class EvolutionAPI:
                             payload_msg_key = (payload_messages[0].get('key') or {})
                             if isinstance(payload_msg_key, dict):
                                 from_me_candidates.extend([payload_msg_key.get('fromMe'), payload_msg_key.get('from_me')])
-
-
                 for candidate in from_me_candidates:
                     if candidate is None:
                         continue
@@ -953,7 +951,6 @@ class EvolutionAPI:
                     'push_name': push_name
                 }
 
-        
         elif normalized_event == 'connection.update':
             # Evolution API v2 pode retornar o estado em diferentes formatos
             state = data.get('state', '')
