@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './FlowBuilder.css';
-import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2, Search, Copy, Focus, RotateCcw, Pencil } from 'lucide-react';
+import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Pause, Loader2, Search, Copy, Focus, RotateCcw, Pencil } from 'lucide-react';
 import useFlowStore from '../store/flowStore';
 import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
@@ -122,9 +122,11 @@ const FlowBuilderInner = () => {
         setCurrentFlow,
         createFlow,
         saveFlow,
+        toggleFlow,
         deleteFlow,
         loading,
         saving,
+        isActive,
         error,
         clearError
     } = useFlowStore();
@@ -297,6 +299,15 @@ const FlowBuilderInner = () => {
         const success = await deleteFlow(flowId);
         if (success) {
             toast.success('Fluxo excluído!');
+        }
+    };
+
+    const handleToggleFlow = async (flowId, e) => {
+        e?.stopPropagation();
+        const result = await toggleFlow(flowId);
+        const nextActive = !!(result?.isActive ?? result?.is_active ?? result?.active);
+        if (result) {
+            toast.success(nextActive ? 'Fluxo ativado' : 'Fluxo desativado');
         }
     };
 
@@ -809,6 +820,28 @@ const FlowBuilderInner = () => {
                                 )}
                                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5">
                                     <button
+                                        onClick={(e) => handleToggleFlow(flow.id, e)}
+                                        disabled={loading || saving}
+                                        className={cn(
+                                            "p-1.5 rounded transition-colors",
+                                            "disabled:opacity-50",
+                                            (flow.is_active || flow.isActive)
+                                                ? (isDark
+                                                    ? "hover:bg-white/10 text-white/60 hover:text-white"
+                                                    : "hover:bg-slate-100 text-slate-500 hover:text-slate-800")
+                                                : (isDark
+                                                    ? "hover:bg-emerald-500/20 text-white/60 hover:text-emerald-400"
+                                                    : "hover:bg-emerald-50 text-slate-500 hover:text-emerald-700")
+                                        )}
+                                        title={(flow.is_active || flow.isActive) ? "Desativar" : "Ativar"}
+                                    >
+                                        {(flow.is_active || flow.isActive) ? (
+                                            <Pause className="w-3.5 h-3.5" />
+                                        ) : (
+                                            <Play className="w-3.5 h-3.5" />
+                                        )}
+                                    </button>
+                                    <button
                                         onClick={(e) => handleDeleteFlow(flow.id, e)}
                                         disabled={loading || saving}
                                         className={cn(
@@ -927,22 +960,36 @@ const FlowBuilderInner = () => {
                                 </h2>
                             )}
                             {currentFlow && (
-                                <button
-                                    onClick={handleSaveFlow}
-                                    disabled={saving}
-                                    className={cn(
-                                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                                        "bg-emerald-500 hover:bg-emerald-600 text-white",
-                                        "disabled:opacity-50 disabled:cursor-not-allowed"
-                                    )}
-                                >
-                                    {saving ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                        <Save className="w-4 h-4" />
-                                    )}
-                                    {saving ? 'Salvando...' : 'Salvar'}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={(e) => handleToggleFlow(currentFlow.id, e)}
+                                        disabled={saving}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                                            isActive ? "bg-white/10 hover:bg-white/15 text-white" : "bg-emerald-500 hover:bg-emerald-600 text-white",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                                        )}
+                                    >
+                                        {isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                                        {isActive ? 'Desativar' : 'Ativar'}
+                                    </button>
+                                    <button
+                                        onClick={handleSaveFlow}
+                                        disabled={saving}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                                            "bg-emerald-500 hover:bg-emerald-600 text-white",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                                        )}
+                                    >
+                                        {saving ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <Save className="w-4 h-4" />
+                                        )}
+                                        {saving ? 'Salvando...' : 'Salvar'}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </Panel>

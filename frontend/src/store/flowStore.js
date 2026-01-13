@@ -381,9 +381,13 @@ const useFlowStore = create((set, get) => ({
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
-            // Atualizar o fluxo atual se for o que foi alterado
+            const nextActive = !!(response.data?.isActive ?? response.data?.is_active ?? response.data?.active);
             if (get().currentFlow?.id === flowId) {
-                set({ isActive: response.data.isActive });
+                const current = get().currentFlow;
+                set({
+                    isActive: nextActive,
+                    currentFlow: current ? { ...current, isActive: nextActive, is_active: nextActive } : current
+                });
             }
 
             await get().fetchFlows();
