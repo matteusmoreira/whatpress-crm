@@ -272,6 +272,15 @@ export const useAppStore = create((set, get) => ({
           }
           return { messages: merged, messagesLoading: false };
         });
+      } else if (options.prepend) {
+        set(state => {
+          const existingById = new Set((state.messages || []).map(m => m.id));
+          const prefix = [];
+          for (const m of nextMessages || []) {
+            if (m?.id && !existingById.has(m.id)) prefix.push(m);
+          }
+          return { messages: [...prefix, ...(state.messages || [])], messagesLoading: false };
+        });
       } else {
         set({ messages: nextMessages, messagesLoading: false });
       }

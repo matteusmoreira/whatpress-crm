@@ -1066,9 +1066,16 @@ const Inbox = () => {
   const [showPurgeAllDialog, setShowPurgeAllDialog] = useState(false);
   const [purgingAll, setPurgingAll] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const isAtBottomRef = useRef(true);
+  const lastTailTsRef = useRef(null);
   const inputRef = useRef(null);
   const urlSearchHandledRef = useRef(null);
   const urlSearchInFlightRef = useRef(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [pendingNewMessages, setPendingNewMessages] = useState(0);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [hasMoreOlderMessages, setHasMoreOlderMessages] = useState(true);
 
   const tenantId = user?.tenantId || 'tenant-1';
 
@@ -1165,6 +1172,7 @@ const Inbox = () => {
     const pollMessages = () => {
       if (!selectedConversation?.id) return;
       if (typeof document !== 'undefined' && document.hidden) return;
+      if (!isAtBottomRef.current) return;
       const state = useAppStore.getState();
       const currentMessages = state.messages || [];
       const last = currentMessages[currentMessages.length - 1];
@@ -1179,8 +1187,8 @@ const Inbox = () => {
     pollConversations();
     pollMessages();
 
-    const conversationsInterval = setInterval(pollConversations, realtimeConnected ? 15000 : 5000);
-    const messagesInterval = setInterval(pollMessages, realtimeConnected ? 8000 : 3000);
+    const conversationsInterval = setInterval(pollConversations, realtimeConnected ? 15000 : 8000);
+    const messagesInterval = setInterval(pollMessages, realtimeConnected ? 8000 : 6000);
 
     return () => {
       clearInterval(conversationsInterval);
@@ -1190,10 +1198,94 @@ const Inbox = () => {
 
   // Auto-scroll to bottom
   useEffect(() => {
+    const list = Array.isArray(messages) ? messages : [];
+    const last = list[list.length - 1];
+    const tailTs = last?.timestamp ?? null;
+
+    if (isAtBottomRef.current) {
+      setPendingNewMessages(0);
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+      }
+    } else {
+      if (tailTs && lastTailTsRef.current && tailTs !== lastTailTsRef.current) {
+        setPendingNewMessages((n) => n + 1);
+      }
+    }
+
+    lastTailTsRef.current = tailTs;
+  }, [messages]);
+
+  useEffect(() => {
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setPendingNewMessages(0);
+    setHasMoreOlderMessages(true);
+    lastTailTsRef.current = null;
+  }, [selectedConversation?.id]);
+
+  const scrollToBottom = useCallback(() => {
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setPendingNewMessages(0);
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
     }
-  }, [messages]);
+  }, []);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!selectedConversation?.id) return;
+    if (loadingOlderMessages) return;
+    if (!hasMoreOlderMessages) return;
+
+    const list = Array.isArray(messages) ? messages : [];
+    const before = list[0]?.timestamp;
+    if (!before) return;
+
+    const el = messagesContainerRef.current;
+    const prevScrollHeight = el?.scrollHeight ?? 0;
+    const prevScrollTop = el?.scrollTop ?? 0;
+
+    setLoadingOlderMessages(true);
+    const prevError = useAppStore.getState().error;
+    const limit = 50;
+    const older = await fetchMessages(selectedConversation.id, { silent: true, before, limit, prepend: true });
+    setLoadingOlderMessages(false);
+
+    const nextError = useAppStore.getState().error;
+    const hasRequestError = Boolean(nextError && nextError !== prevError && (!Array.isArray(older) || older.length === 0));
+    if (hasRequestError) {
+      toast.error('Erro ao carregar mensagens antigas');
+      return;
+    }
+
+    if (!Array.isArray(older) || older.length < limit) setHasMoreOlderMessages(false);
+
+    if (Array.isArray(older) && older.length > 0) {
+      requestAnimationFrame(() => {
+        const nextEl = messagesContainerRef.current;
+        if (!nextEl) return;
+        const nextScrollHeight = nextEl.scrollHeight ?? 0;
+        const delta = nextScrollHeight - prevScrollHeight;
+        nextEl.scrollTop = prevScrollTop + delta;
+      });
+    }
+  }, [selectedConversation?.id, loadingOlderMessages, hasMoreOlderMessages, messages, fetchMessages]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const threshold = 80;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceToBottom <= threshold;
+    isAtBottomRef.current = atBottom;
+    setIsAtBottom(atBottom);
+    if (atBottom) setPendingNewMessages(0);
+
+    if (el.scrollTop <= 40 && hasMoreOlderMessages && !loadingOlderMessages) {
+      handleLoadOlderMessages();
+    }
+  }, [hasMoreOlderMessages, loadingOlderMessages, handleLoadOlderMessages]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -2260,6 +2352,8 @@ const Inbox = () => {
 
               {/* Messages */}
               <div
+                ref={messagesContainerRef}
+                onScroll={handleMessagesScroll}
                 className={cn(
                   'flex-1 min-h-0 overflow-y-auto wa-chat-messages',
                   isDark ? 'p-4 space-y-4' : 'p-4 space-y-0'
@@ -2271,6 +2365,23 @@ const Inbox = () => {
                   </div>
                 ) : (
                   <>
+                    {(hasMoreOlderMessages || loadingOlderMessages) && (
+                      <div className="flex items-center justify-center py-2">
+                        <button
+                          type="button"
+                          disabled={loadingOlderMessages || !hasMoreOlderMessages}
+                          onClick={handleLoadOlderMessages}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs border transition-colors',
+                            isDark
+                              ? 'bg-white/5 hover:bg-white/10 border-white/15 text-white/80 disabled:opacity-50 disabled:hover:bg-white/5'
+                              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 disabled:opacity-50'
+                          )}
+                        >
+                          {loadingOlderMessages ? 'Carregando…' : hasMoreOlderMessages ? 'Carregar mensagens antigas' : 'Sem mais mensagens'}
+                        </button>
+                      </div>
+                    )}
                     {messages.map((msg, index) => {
                       const prev = index > 0 ? messages[index - 1] : null;
                       const sameDirection = Boolean(prev && prev.direction === msg.direction);
@@ -2574,6 +2685,22 @@ const Inbox = () => {
                       );
                     })}
                     <div ref={messagesEndRef} />
+                    {!isAtBottom && pendingNewMessages > 0 && (
+                      <div className="sticky bottom-3 flex justify-center pointer-events-none">
+                        <button
+                          type="button"
+                          onClick={scrollToBottom}
+                          className={cn(
+                            'pointer-events-auto px-3 py-1.5 rounded-full text-xs border shadow-lg backdrop-blur-sm transition-colors',
+                            isDark
+                              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-50'
+                              : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800'
+                          )}
+                        >
+                          {pendingNewMessages} nova{pendingNewMessages > 1 ? 's' : ''} mensagem{pendingNewMessages > 1 ? 's' : ''} • Ir para o fim
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
