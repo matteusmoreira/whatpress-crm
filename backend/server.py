@@ -4650,206 +4650,6 @@ async def send_whatsapp_message(instance_name: str, phone: str, content: str, ms
         logger.error(f"Failed to send WhatsApp message: {e}")
         supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
 
-# ==================== UPLOAD ROUTES ====================
-
-@api_router.post("/upload")
-async def upload_file(
-    file: UploadFile = File(...),
-    conversation_id: str = Form(...),
-    payload: dict = Depends(verify_token)
-):
-    """Upload a file and return its URL"""
-    try:
-        # Validate conversation access
-        _require_conversation_access(conversation_id, payload)
-        
-        # Validate file
-        if not file:
-            raise HTTPException(status_code=400, detail="Nenhum arquivo enviado")
-        
-        # Validate file size (10MB max)
-        MAX_SIZE = 10 * 1024 * 1024  # 10MB
-        content = await file.read()
-        if len(content) > MAX_SIZE:
-            raise HTTPException(status_code=400, detail="Arquivo muito grande (máx. 10MB)")
-        
-        # Create uploads directory if it doesn't exist
-        uploads_dir = ROOT_DIR / "uploads"
-        uploads_dir.mkdir(exist_ok=True)
-        
-        # Generate unique filename
-        file_ext = Path(file.filename).suffix if file.filename else ''
-        unique_filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = uploads_dir / unique_filename
-        
-        # Save file
-        with open(file_path, "wb") as f:
-            f.write(content)
-        
-        # Generate URL (use backend URL)
-        backend_url = os.getenv('BACKEND_URL', 'http://localhost:8000')
-        file_url = f"{backend_url}/uploads/{unique_filename}"
-        
-        return {
-            "url": file_url,
-            "filename": file.filename,
-            "size": len(content),
-            "path": str(file_path)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao fazer upload: {str(e)}")
-
-@api_router.post("/messages/media")
-async def send_media_message(
-    conversation_id: str = Form(...),
-    media_type: str = Form(...),
-    media_url: str = Form(...),
-    media_name: str = Form(...),
-    content: str = Form(""),
-    background_tasks: BackgroundTasks = None,
-    payload: dict = Depends(verify_token)
-):
-    """Send a media message (image, video, audio, document)"""
-    try:
-        # Validate conversation access
-        _require_conversation_access(conversation_id, payload)
-        
-        # Get conversation details
-        conv = supabase.table('conversations').select('*, connections(*)').eq('id', conversation_id).execute()
-        if not conv.data:
-            raise HTTPException(status_code=404, detail="Conversa não encontrada")
-        
-        conversation = conv.data[0]
-        connection = conversation.get('connections')
-        
-        # Enforce message limits
-        _enforce_messages_limit(conversation.get('tenant_id'))
-        
-        # Prepare caption (with user signature if applicable)
-        caption = (content or '').strip()
-        if media_type != 'system':
-            try:
-                user_row = supabase.table('users').select('name, job_title, department, signature_enabled, signature_include_title, signature_include_department').eq('id', payload.get('user_id')).execute()
-                if user_row.data:
-                    prefix = build_user_signature_prefix(user_row.data[0])
-                    if prefix and caption and not caption.startswith(prefix):
-                        caption = prefix + caption
-            except Exception:
-                pass
-        
-        # Save message to database
-        message_data = {
-            'conversation_id': conversation_id,
-            'content': caption or f"[{media_type}]",
-            'type': media_type,
-            'direction': 'outbound',
-            'status': 'sent',
-            'media_url': media_url
-        }
-        
-        result = supabase.table('messages').insert(message_data).execute()
-        
-        # Update conversation
-        preview = caption[:50] if caption else f"[{media_type.capitalize()}]"
-        supabase.table('conversations').update({
-            'last_message_at': datetime.utcnow().isoformat(),
-            'last_message_preview': preview
-        }).eq('id', conversation_id).execute()
-        
-        # Update tenant message count
-        if conversation.get('tenant_id'):
-            tenant = supabase.table('tenants').select('messages_this_month').eq('id', conversation['tenant_id']).execute()
-            if tenant.data:
-                new_count = tenant.data[0]['messages_this_month'] + 1
-                supabase.table('tenants').update({'messages_this_month': new_count}).eq('id', conversation['tenant_id']).execute()
-        
-        # Audit log
-        safe_insert_audit_log(
-            tenant_id=conversation.get('tenant_id'),
-            actor_user_id=payload.get('user_id'),
-            action='message.media_sent',
-            entity_type='message',
-            entity_id=(result.data[0]['id'] if result.data else None),
-            metadata={'conversation_id': conversation_id, 'media_type': media_type}
-        )
-        
-        connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
-        connection_status = (connection.get('status') if isinstance(connection, dict) else None)
-        is_evolution = str(connection_provider or '').lower() == 'evolution'
-        is_connected = str(connection_status or '').lower() in ['connected', 'open']
-        
-        status = 'sent'
-        
-        # Send via WhatsApp if Evolution API connection
-        if connection and is_evolution and is_connected:
-            if background_tasks:
-                background_tasks.add_task(
-                    send_whatsapp_media,
-                    connection['instance_name'],
-                    conversation['contact_phone'],
-                    media_type,
-                    media_url,
-                    caption,
-                    media_name,
-                    result.data[0]['id']
-                )
-            else:
-                # If no background tasks, send synchronously
-                await send_whatsapp_media(
-                    connection['instance_name'],
-                    conversation['contact_phone'],
-                    media_type,
-                    media_url,
-                    caption,
-                    media_name,
-                    result.data[0]['id']
-                )
-        else:
-            supabase.table('messages').update({'status': 'failed'}).eq('id', result.data[0]['id']).execute()
-            status = 'failed'
-        
-        m = result.data[0]
-        return {
-            'id': m['id'],
-            'conversationId': m['conversation_id'],
-            'content': m['content'],
-            'type': m['type'],
-            'direction': m['direction'],
-            'status': status,
-            'mediaUrl': m['media_url'],
-            'timestamp': m['timestamp']
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Media message error: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao enviar mídia: {str(e)}")
-
-async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, filename: str, message_id: str):
-    """Background task to send WhatsApp media message"""
-    try:
-        if media_type == 'image':
-            await evolution_api.send_media(instance_name, phone, 'image', media_url=media_url, caption=caption)
-        elif media_type == 'video':
-            await evolution_api.send_media(instance_name, phone, 'video', media_url=media_url, caption=caption)
-        elif media_type == 'audio':
-            await evolution_api.send_audio(instance_name, phone, media_url)
-        elif media_type == 'document':
-            await evolution_api.send_media(instance_name, phone, 'document', media_url=media_url, caption=caption, filename=filename)
-        else:
-            # Default to document
-            await evolution_api.send_media(instance_name, phone, 'document', media_url=media_url, caption=caption, filename=filename)
-        
-        # Update message status to delivered
-        supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
-    except Exception as e:
-        logger.error(f"Failed to send WhatsApp media: {e}")
-        supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
-
-
 # ==================== WHATSAPP DIRECT ROUTES ====================
 
 @api_router.post("/whatsapp/send")
@@ -7712,8 +7512,13 @@ async def send_media_message(
         metadata={'conversation_id': conversation_id, 'type': media_type, 'media_url': media_url}
     )
     
-    # Send via WhatsApp if Evolution API connection
-    if connection and connection.get('provider') == 'evolution' and connection.get('status') == 'connected':
+    connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
+    connection_status = (connection.get('status') if isinstance(connection, dict) else None)
+    is_evolution = str(connection_provider or '').lower() == 'evolution'
+    is_connected = str(connection_status or '').lower() in ['connected', 'open']
+
+    status = 'sent'
+    if connection and is_evolution and is_connected and connection.get('instance_name'):
         if background_tasks:
             background_tasks.add_task(
                 send_whatsapp_media,
@@ -7721,9 +7526,23 @@ async def send_media_message(
                 conversation['contact_phone'],
                 media_type,
                 media_url,
-                content,
+                message_content,
+                media_name,
                 result.data[0]['id']
             )
+        else:
+            await send_whatsapp_media(
+                connection['instance_name'],
+                conversation['contact_phone'],
+                media_type,
+                media_url,
+                message_content,
+                media_name,
+                result.data[0]['id']
+            )
+    else:
+        supabase.table('messages').update({'status': 'failed'}).eq('id', result.data[0]['id']).execute()
+        status = 'failed'
     
     m = result.data[0]
     return {
@@ -7732,30 +7551,69 @@ async def send_media_message(
         'content': m['content'],
         'type': m['type'],
         'direction': m['direction'],
-        'status': m['status'],
+        'status': status,
         'mediaUrl': m['media_url'],
         'timestamp': m['timestamp']
     }
 
-async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, message_id: str):
+async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, *rest):
     """Background task to send WhatsApp media"""
     try:
-        if (media_type or '').lower() == 'sticker':
-            await evolution_api.send_sticker(instance_name, phone, media_url)
-        elif (media_type or '').lower() == 'audio':
-            await evolution_api.send_audio(instance_name, phone, media_url)
+        filename = None
+        message_id = None
+        if len(rest) == 1:
+            message_id = rest[0]
+        elif len(rest) == 2:
+            filename, message_id = rest
         else:
-            await evolution_api.send_media(
-                instance_name,
-                phone,
-                media_type,
-                media_url=media_url,
-                caption=caption
-            )
-        supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
+            raise TypeError("send_whatsapp_media recebeu argumentos inválidos")
+
+        mt = (media_type or '').lower()
+        media_str = str(media_url or '').strip()
+
+        base64_payload = None
+        if media_str.startswith('data:') and ';base64,' in media_str:
+            try:
+                base64_payload = media_str.split(';base64,', 1)[1].strip()
+            except Exception:
+                base64_payload = None
+
+        if mt == 'sticker':
+            await evolution_api.send_sticker(instance_name, phone, base64_payload or media_str)
+        elif mt == 'audio':
+            if base64_payload:
+                await evolution_api.send_media(instance_name, phone, 'audio', media_base64=base64_payload, caption=caption or '', filename=filename)
+            else:
+                await evolution_api.send_audio(instance_name, phone, media_str)
+        else:
+            send_kwargs = {
+                "instance_name": instance_name,
+                "phone": phone,
+                "media_type": mt or 'document',
+                "caption": caption or '',
+            }
+            if base64_payload:
+                send_kwargs["media_base64"] = base64_payload
+            else:
+                send_kwargs["media_url"] = media_str
+            if filename:
+                send_kwargs["filename"] = filename
+            await evolution_api.send_media(**send_kwargs)
+
+        if message_id:
+            supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
     except Exception as e:
         logger.error(f"Failed to send WhatsApp media: {e}")
-        supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+        try:
+            message_id = None
+            if len(rest) == 1:
+                message_id = rest[0]
+            elif len(rest) == 2:
+                message_id = rest[1]
+            if message_id:
+                supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+        except Exception:
+            pass
 
 # ==================== MEDIA PROXY ====================
 
