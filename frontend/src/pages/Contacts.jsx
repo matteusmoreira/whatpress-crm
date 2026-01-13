@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
     Search,
     Plus,
@@ -120,6 +120,24 @@ const getKanbanColorClasses = (color) => {
 
 const makeId = () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
+const normalizeText = (value) => String(value || '').trim();
+
+const parseDragPayload = (dataTransfer) => {
+    try {
+        const rawJson = normalizeText(dataTransfer?.getData('application/json'));
+        if (rawJson) {
+            const parsed = JSON.parse(rawJson);
+            if (parsed && parsed.contactId) return parsed;
+        }
+    } catch {
+        null;
+    }
+
+    const contactId = normalizeText(dataTransfer?.getData('text/plain'));
+    if (contactId) return { contactId };
+    return null;
+};
+
 const Contacts = () => {
     const { user } = useAuthStore();
     const { selectedTenant, tenants, fetchTenants, setSelectedTenant } = useAppStore();
@@ -155,6 +173,9 @@ const Contacts = () => {
     const [kanbanContacts, setKanbanContacts] = useState([]);
     const [kanbanLoading, setKanbanLoading] = useState(false);
     const [dragOverColumnId, setDragOverColumnId] = useState(null);
+    const [kanbanOrderByColumn, setKanbanOrderByColumn] = useState({});
+    const [draggingContactId, setDraggingContactId] = useState(null);
+    const [dragOverCard, setDragOverCard] = useState(null);
 
     // Load contacts
     const loadContacts = useCallback(async (search = '', pageOffset = 0) => {
@@ -201,20 +222,23 @@ const Contacts = () => {
         return dedup;
     }, []);
 
-    const loadKanbanConfig = useCallback(() => {
+    const loadKanbanState = useCallback(() => {
         try {
             const raw = localStorage.getItem(kanbanStorageKey);
-            if (!raw) return normalizeColumns(DEFAULT_KANBAN_COLUMNS);
+            if (!raw) return { columns: normalizeColumns(DEFAULT_KANBAN_COLUMNS), orderByColumn: {} };
             const parsed = JSON.parse(raw);
-            return normalizeColumns(parsed?.columns);
+            return {
+                columns: normalizeColumns(parsed?.columns),
+                orderByColumn: parsed?.orderByColumn && typeof parsed.orderByColumn === 'object' ? parsed.orderByColumn : {}
+            };
         } catch {
-            return normalizeColumns(DEFAULT_KANBAN_COLUMNS);
+            return { columns: normalizeColumns(DEFAULT_KANBAN_COLUMNS), orderByColumn: {} };
         }
     }, [kanbanStorageKey, normalizeColumns]);
 
-    const saveKanbanConfig = useCallback((columns) => {
+    const saveKanbanState = useCallback((payload) => {
         try {
-            localStorage.setItem(kanbanStorageKey, JSON.stringify({ columns }));
+            localStorage.setItem(kanbanStorageKey, JSON.stringify(payload));
         } catch {
             null;
         }
@@ -236,6 +260,11 @@ const Contacts = () => {
         if (desired && isKnownColumnId(desired)) return desired;
         return KANBAN_UNASSIGNED_COLUMN_ID;
     }, [isKnownColumnId]);
+
+    const getContactRawColumnId = useCallback((contact) => {
+        const raw = contact?.customFields?.[KANBAN_CUSTOM_FIELD_KEY];
+        return normalizeText(raw) || KANBAN_UNASSIGNED_COLUMN_ID;
+    }, []);
 
     const loadKanbanContacts = useCallback(async (search = '') => {
         if (!tenantId) {
@@ -273,38 +302,133 @@ const Contacts = () => {
         }
     }, [tenantId]);
 
-    const moveContactToColumn = useCallback(async (contactId, toColumnId) => {
+    const validateKanbanColumns = useCallback((columns) => {
+        const cols = Array.isArray(columns) ? columns : [];
+        const errors = [];
+        const normalizedTitles = new Set();
+        for (const col of cols) {
+            const title = normalizeText(col?.title);
+            if (!title) errors.push('Todas as colunas precisam de um nome');
+            if (title.length > 40) errors.push('Nome da coluna deve ter no máximo 40 caracteres');
+            const key = title.toLowerCase();
+            if (title && normalizedTitles.has(key)) errors.push('Nomes de colunas não podem se repetir');
+            if (title) normalizedTitles.add(key);
+        }
+        return { ok: errors.length === 0, errors: [...new Set(errors)] };
+    }, []);
+
+    const reorderInArray = (arr, item, toIndex) => {
+        const list = Array.isArray(arr) ? [...arr] : [];
+        const fromIndex = list.indexOf(item);
+        if (fromIndex >= 0) list.splice(fromIndex, 1);
+        const safeIndex = Math.max(0, Math.min(Number.isFinite(toIndex) ? toIndex : list.length, list.length));
+        list.splice(safeIndex, 0, item);
+        return list;
+    };
+
+    const reconcileOrderByColumn = useCallback((prevOrder, contacts, columnIdsForBoard) => {
+        const order = prevOrder && typeof prevOrder === 'object' ? prevOrder : {};
+        const next = {};
+        const byColumn = {};
+        for (const c of contacts || []) {
+            const colId = getContactColumnId(c);
+            if (!byColumn[colId]) byColumn[colId] = [];
+            byColumn[colId].push(String(c?.id || '').trim());
+        }
+        for (const colIdRaw of columnIdsForBoard || []) {
+            const colId = String(colIdRaw || '').trim();
+            if (!colId) continue;
+            const existing = Array.isArray(order[colId]) ? order[colId].map((x) => String(x || '').trim()).filter(Boolean) : [];
+            const currentIds = (byColumn[colId] || []).filter(Boolean);
+            const currentSet = new Set(currentIds);
+            const kept = existing.filter((id) => currentSet.has(id));
+            const missing = currentIds.filter((id) => !kept.includes(id));
+            next[colId] = [...kept, ...missing];
+        }
+        return next;
+    }, [getContactColumnId]);
+
+    const areOrdersEqual = (a, b, columnIdsForBoard) => {
+        const ao = a && typeof a === 'object' ? a : {};
+        const bo = b && typeof b === 'object' ? b : {};
+        for (const colIdRaw of columnIdsForBoard || []) {
+            const colId = String(colIdRaw || '').trim();
+            if (!colId) continue;
+            const al = Array.isArray(ao[colId]) ? ao[colId] : [];
+            const bl = Array.isArray(bo[colId]) ? bo[colId] : [];
+            if (al.length !== bl.length) return false;
+            for (let i = 0; i < al.length; i += 1) {
+                if (String(al[i]) !== String(bl[i])) return false;
+            }
+        }
+        return true;
+    };
+
+    const persistKanbanState = useCallback((nextColumns, nextOrderByColumn) => {
+        saveKanbanState({ columns: nextColumns, orderByColumn: nextOrderByColumn });
+    }, [saveKanbanState]);
+
+    const moveContactToColumn = useCallback(async (contactId, toColumnId, toIndex = null) => {
         const id = String(contactId || '');
         const toId = String(toColumnId || '');
         if (!id || !toId) return;
+        if (!isKnownColumnId(toId)) {
+            toast.error('Coluna inválida');
+            return;
+        }
 
         const target = (kanbanContacts || []).find((c) => String(c?.id || '') === id);
         if (!target) return;
 
         const fromId = getContactColumnId(target);
-        if (fromId === toId) return;
+        const prevOrderSnapshot = kanbanOrderByColumn;
+        const prevColumnsSnapshot = kanbanColumns;
 
         const prevCustomFields = target?.customFields || {};
-        const nextCustomFields = { ...prevCustomFields, [KANBAN_CUSTOM_FIELD_KEY]: toId };
+        const nextCustomFields = fromId === toId
+            ? prevCustomFields
+            : { ...prevCustomFields, [KANBAN_CUSTOM_FIELD_KEY]: toId };
 
-        setKanbanContacts((prev) =>
-            (prev || []).map((c) =>
-                String(c?.id || '') === id
-                    ? { ...c, customFields: nextCustomFields }
-                    : c
-            )
-        );
-        setContacts((prev) =>
-            (prev || []).map((c) =>
-                String(c?.id || '') === id
-                    ? { ...c, customFields: nextCustomFields }
-                    : c
-            )
-        );
+        const nextOrder = (() => {
+            const fromList = Array.isArray(kanbanOrderByColumn?.[fromId]) ? kanbanOrderByColumn[fromId] : [];
+            const toList = Array.isArray(kanbanOrderByColumn?.[toId]) ? kanbanOrderByColumn[toId] : [];
+            if (fromId === toId) {
+                const desiredIndex = typeof toIndex === 'number' ? toIndex : fromList.indexOf(id);
+                return { ...kanbanOrderByColumn, [fromId]: reorderInArray(fromList, id, desiredIndex) };
+            }
+            const nextFrom = fromList.filter((x) => String(x) !== id);
+            const desiredIndex = typeof toIndex === 'number' ? toIndex : toList.length;
+            const nextTo = reorderInArray(toList, id, desiredIndex);
+            return { ...kanbanOrderByColumn, [fromId]: nextFrom, [toId]: nextTo };
+        })();
+
+        setKanbanOrderByColumn(nextOrder);
+        persistKanbanState(kanbanColumns, nextOrder);
+
+        if (fromId !== toId) {
+            setKanbanContacts((prev) =>
+                (prev || []).map((c) =>
+                    String(c?.id || '') === id
+                        ? { ...c, customFields: nextCustomFields }
+                        : c
+                )
+            );
+            setContacts((prev) =>
+                (prev || []).map((c) =>
+                    String(c?.id || '') === id
+                        ? { ...c, customFields: nextCustomFields }
+                        : c
+                )
+            );
+        }
 
         try {
-            await ContactsAPI.update(id, { custom_fields: nextCustomFields });
+            if (fromId !== toId) {
+                await ContactsAPI.update(id, { custom_fields: nextCustomFields });
+            }
         } catch (error) {
+            setKanbanOrderByColumn(prevOrderSnapshot);
+            persistKanbanState(prevColumnsSnapshot, prevOrderSnapshot);
             setKanbanContacts((prev) =>
                 (prev || []).map((c) =>
                     String(c?.id || '') === id
@@ -321,7 +445,7 @@ const Contacts = () => {
             );
             toast.error(error?.message || 'Erro ao mover contato');
         }
-    }, [getContactColumnId, kanbanContacts]);
+    }, [getContactColumnId, isKnownColumnId, kanbanColumns, kanbanContacts, kanbanOrderByColumn, persistKanbanState]);
 
     useEffect(() => {
         if (user?.role !== 'superadmin') return;
@@ -337,13 +461,14 @@ const Contacts = () => {
 
     useEffect(() => {
         if (viewMode === 'kanban') {
-            const cols = loadKanbanConfig();
-            setKanbanColumns(cols);
+            const state = loadKanbanState();
+            setKanbanColumns(state.columns);
+            setKanbanOrderByColumn(state.orderByColumn || {});
             loadKanbanContacts(searchQuery);
         } else {
             loadContacts(searchQuery, 0);
         }
-    }, [loadContacts, loadKanbanConfig, loadKanbanContacts, searchQuery, viewMode]);
+    }, [loadContacts, loadKanbanState, loadKanbanContacts, searchQuery, viewMode]);
 
     // Debounced search
     useEffect(() => {
@@ -364,11 +489,87 @@ const Contacts = () => {
         setNewKanbanColumnColor('emerald');
     }, [showKanbanSettings, kanbanColumns]);
 
-    const applyKanbanSettings = () => {
-        const next = normalizeColumns(draftKanbanColumns);
-        setKanbanColumns(next);
-        saveKanbanConfig(next);
+    const applyKanbanSettings = async () => {
+        const validation = validateKanbanColumns(draftKanbanColumns);
+        if (!validation.ok) {
+            validation.errors.forEach((msg) => toast.error(msg));
+            return;
+        }
+
+        const nextColumns = normalizeColumns(draftKanbanColumns);
+        const prevIds = new Set((kanbanColumns || []).map((c) => String(c?.id || '').trim()).filter(Boolean));
+        const nextIds = new Set((nextColumns || []).map((c) => String(c?.id || '').trim()).filter(Boolean));
+        const removedIds = [...prevIds].filter((id) => !nextIds.has(id));
+
+        const affected = removedIds.length === 0
+            ? []
+            : (kanbanContacts || []).filter((c) => removedIds.includes(getContactRawColumnId(c)));
+
+        if (affected.length > 0) {
+            const ok = window.confirm(
+                `A remoção das colunas fará ${affected.length} contato(s) irem para "Sem Coluna".\n\nDeseja continuar?`
+            );
+            if (!ok) return;
+        }
+
+        const columnIdsForBoard = [
+            KANBAN_UNASSIGNED_COLUMN_ID,
+            ...nextColumns.map((c) => String(c?.id || '').trim()).filter(Boolean)
+        ];
+        const nextOrder = reconcileOrderByColumn(kanbanOrderByColumn, kanbanContacts, columnIdsForBoard);
+
+        setKanbanColumns(nextColumns);
+        setKanbanOrderByColumn(nextOrder);
+        persistKanbanState(nextColumns, nextOrder);
         setShowKanbanSettings(false);
+
+        if (affected.length > 0) {
+            const toastId = toast.loading(`Atualizando ${affected.length} contato(s)...`);
+            let okCount = 0;
+            let failCount = 0;
+
+            const concurrency = 5;
+            const queue = [...affected];
+            const workers = Array.from({ length: concurrency }).map(async () => {
+                while (queue.length > 0) {
+                    const contact = queue.shift();
+                    const id = String(contact?.id || '').trim();
+                    if (!id) continue;
+                    const prevCustomFields = contact?.customFields || {};
+                    const nextCustomFields = { ...prevCustomFields, [KANBAN_CUSTOM_FIELD_KEY]: KANBAN_UNASSIGNED_COLUMN_ID };
+                    try {
+                        await ContactsAPI.update(id, { custom_fields: nextCustomFields });
+                        okCount += 1;
+                    } catch {
+                        failCount += 1;
+                    }
+                }
+            });
+
+            await Promise.all(workers);
+            toast.dismiss(toastId);
+
+            if (failCount > 0) {
+                toast.error(`Falha ao atualizar ${failCount} contato(s).`);
+            } else {
+                toast.success(`${okCount} contato(s) atualizado(s).`);
+            }
+
+            setKanbanContacts((prev) =>
+                (prev || []).map((c) =>
+                    removedIds.includes(getContactRawColumnId(c))
+                        ? { ...c, customFields: { ...(c?.customFields || {}), [KANBAN_CUSTOM_FIELD_KEY]: KANBAN_UNASSIGNED_COLUMN_ID } }
+                        : c
+                )
+            );
+            setContacts((prev) =>
+                (prev || []).map((c) =>
+                    removedIds.includes(getContactRawColumnId(c))
+                        ? { ...c, customFields: { ...(c?.customFields || {}), [KANBAN_CUSTOM_FIELD_KEY]: KANBAN_UNASSIGNED_COLUMN_ID } }
+                        : c
+                )
+            );
+        }
     };
 
     const resetKanbanSettings = () => {
@@ -380,6 +581,15 @@ const Contacts = () => {
         const title = String(newKanbanColumnTitle || '').trim();
         if (!title) {
             toast.error('Nome da coluna é obrigatório');
+            return;
+        }
+        if (title.length > 40) {
+            toast.error('Nome da coluna deve ter no máximo 40 caracteres');
+            return;
+        }
+        const exists = (draftKanbanColumns || []).some((c) => String(c?.title || '').trim().toLowerCase() === title.toLowerCase());
+        if (exists) {
+            toast.error('Já existe uma coluna com esse nome');
             return;
         }
         const next = [
@@ -412,6 +622,10 @@ const Contacts = () => {
     };
 
     const removeDraftColumn = (id) => {
+        const column = (draftKanbanColumns || []).find((c) => c.id === id);
+        const title = String(column?.title || '').trim() || 'esta coluna';
+        const ok = window.confirm(`Remover "${title}"?`);
+        if (!ok) return;
         setDraftKanbanColumns((prev) => (prev || []).filter((c) => c.id !== id));
     };
 
@@ -619,6 +833,50 @@ const Contacts = () => {
     const currentPage = Math.floor(offset / limit) + 1;
     const headerTotal = viewMode === 'kanban' ? (kanbanContacts || []).length : total;
 
+    const columnIdsForBoard = useMemo(() => {
+        return [
+            KANBAN_UNASSIGNED_COLUMN_ID,
+            ...(kanbanColumns || []).map((c) => String(c?.id || '').trim()).filter(Boolean)
+        ];
+    }, [kanbanColumns]);
+
+    const kanbanContactsByColumn = useMemo(() => {
+        const map = {};
+        for (const c of kanbanContacts || []) {
+            const colId = getContactColumnId(c);
+            if (!map[colId]) map[colId] = [];
+            map[colId].push(c);
+        }
+        return map;
+    }, [kanbanContacts, getContactColumnId]);
+
+    const getOrderedColumnContacts = useCallback((columnId) => {
+        const colId = String(columnId || '').trim();
+        const list = kanbanContactsByColumn[colId] || [];
+        const order = Array.isArray(kanbanOrderByColumn?.[colId]) ? kanbanOrderByColumn[colId] : [];
+        if (order.length === 0) return list;
+        const indexById = new Map(order.map((id, idx) => [String(id), idx]));
+        return [...list].sort((a, b) => {
+            const ai = indexById.get(String(a?.id || ''));
+            const bi = indexById.get(String(b?.id || ''));
+            const aRank = typeof ai === 'number' ? ai : Number.MAX_SAFE_INTEGER;
+            const bRank = typeof bi === 'number' ? bi : Number.MAX_SAFE_INTEGER;
+            if (aRank !== bRank) return aRank - bRank;
+            const an = String(a?.name || '').toLowerCase();
+            const bn = String(b?.name || '').toLowerCase();
+            return an.localeCompare(bn);
+        });
+    }, [kanbanContactsByColumn, kanbanOrderByColumn]);
+
+    useEffect(() => {
+        if (viewMode !== 'kanban') return;
+        const next = reconcileOrderByColumn(kanbanOrderByColumn, kanbanContacts, columnIdsForBoard);
+        if (!areOrdersEqual(next, kanbanOrderByColumn, columnIdsForBoard)) {
+            setKanbanOrderByColumn(next);
+            persistKanbanState(kanbanColumns, next);
+        }
+    }, [columnIdsForBoard, kanbanColumns, kanbanContacts, kanbanOrderByColumn, persistKanbanState, reconcileOrderByColumn, viewMode]);
+
     return (
         <div className="h-full min-h-0 flex flex-col p-4 lg:p-6">
             {/* Header */}
@@ -629,7 +887,7 @@ const Contacts = () => {
                         {headerTotal} contato{headerTotal !== 1 ? 's' : ''} encontrado{headerTotal !== 1 ? 's' : ''}
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center rounded-xl bg-white/5 p-1">
                         <button
                             type="button"
@@ -731,19 +989,19 @@ const Contacts = () => {
                         </div>
                     ) : (
                         <div className="h-full min-h-0">
-                            <div className="h-full min-h-0 overflow-x-auto overflow-y-hidden">
-                                <div className="min-h-full flex gap-4 pr-2">
+                            <div className="h-full min-h-0 overflow-x-auto overflow-y-hidden scroll-smooth overscroll-x-contain">
+                                <div className="min-h-full flex gap-4 pr-2 pb-2 px-1 sm:px-2 snap-x snap-mandatory scroll-px-4">
                                     {allColumnsForBoard.map((col) => {
                                         const color = getKanbanColorClasses(col.color);
-                                        const columnContacts = (kanbanContacts || []).filter((c) => getContactColumnId(c) === col.id);
+                                        const columnContacts = getOrderedColumnContacts(col.id);
 
                                         return (
                                             <div
                                                 key={col.id}
                                                 className={cn(
-                                                    'w-[320px] min-w-[320px] h-full min-h-0 flex flex-col rounded-2xl border bg-white/5 backdrop-blur-sm',
+                                                    'w-[280px] min-w-[280px] sm:w-[320px] sm:min-w-[320px] h-full min-h-0 flex flex-col rounded-2xl border bg-white/5 backdrop-blur-sm transition-[box-shadow,transform] duration-150 shrink-0 snap-start',
                                                     color.border,
-                                                    dragOverColumnId === col.id ? 'ring-2 ring-emerald-500/30' : 'ring-0'
+                                                    dragOverColumnId === col.id ? 'ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10 scale-[1.01]' : 'ring-0'
                                                 )}
                                                 onDragOver={(e) => {
                                                     e.preventDefault();
@@ -755,10 +1013,11 @@ const Contacts = () => {
                                                 }}
                                                 onDrop={(e) => {
                                                     e.preventDefault();
-                                                    const droppedId = String(e.dataTransfer.getData('text/plain') || '').trim();
+                                                    const payload = parseDragPayload(e.dataTransfer);
                                                     setDragOverColumnId(null);
-                                                    if (!droppedId) return;
-                                                    moveContactToColumn(droppedId, col.id);
+                                                    setDragOverCard(null);
+                                                    if (!payload?.contactId) return;
+                                                    moveContactToColumn(payload.contactId, col.id, null);
                                                 }}
                                             >
                                                 <div className="px-4 py-3 border-b border-white/10">
@@ -781,16 +1040,74 @@ const Contacts = () => {
                                                             key={contact.id}
                                                             draggable
                                                             onDragStart={(e) => {
+                                                                const payload = {
+                                                                    contactId: String(contact.id),
+                                                                    fromColumnId: getContactColumnId(contact)
+                                                                };
+                                                                e.dataTransfer.setData('application/json', JSON.stringify(payload));
                                                                 e.dataTransfer.setData('text/plain', String(contact.id));
                                                                 e.dataTransfer.effectAllowed = 'move';
+                                                                setDraggingContactId(String(contact.id));
+                                                            }}
+                                                            onDragEnd={() => {
+                                                                setDraggingContactId(null);
+                                                                setDragOverColumnId(null);
+                                                                setDragOverCard(null);
+                                                            }}
+                                                            onDragOver={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                const middleY = rect.top + rect.height / 2;
+                                                                const position = e.clientY >= middleY ? 'after' : 'before';
+                                                                setDragOverColumnId(col.id);
+                                                                setDragOverCard({
+                                                                    columnId: col.id,
+                                                                    contactId: String(contact.id),
+                                                                    position
+                                                                });
+                                                            }}
+                                                            onDrop={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                const payload = parseDragPayload(e.dataTransfer);
+                                                                setDragOverColumnId(null);
+                                                                const over = dragOverCard;
+                                                                setDragOverCard(null);
+                                                                if (!payload?.contactId) return;
+                                                                if (!over || over.columnId !== col.id || over.contactId !== String(contact.id)) {
+                                                                    moveContactToColumn(payload.contactId, col.id, null);
+                                                                    return;
+                                                                }
+                                                                const baseIndex = columnContacts.findIndex((c) => String(c?.id || '') === over.contactId);
+                                                                if (baseIndex < 0) {
+                                                                    moveContactToColumn(payload.contactId, col.id, null);
+                                                                    return;
+                                                                }
+                                                                const desiredIndex = over.position === 'after' ? baseIndex + 1 : baseIndex;
+                                                                moveContactToColumn(payload.contactId, col.id, desiredIndex);
                                                             }}
                                                             onClick={() => handleEditContact(contact)}
                                                             className={cn(
                                                                 'rounded-xl border bg-white/5 hover:bg-white/10 transition-colors cursor-pointer p-3 select-none',
                                                                 'border-white/10 border-l-2',
-                                                                color.leftBorder
+                                                                color.leftBorder,
+                                                                draggingContactId === String(contact.id) ? 'opacity-60 scale-[0.98] shadow-none' : 'transition-[transform,box-shadow] duration-150',
+                                                                dragOverCard?.columnId === col.id && dragOverCard?.contactId === String(contact.id)
+                                                                    ? (dragOverCard.position === 'before'
+                                                                        ? 'ring-2 ring-emerald-500/20'
+                                                                        : 'ring-2 ring-emerald-500/20')
+                                                                    : null
                                                             )}
                                                         >
+                                                            {dragOverCard?.columnId === col.id && dragOverCard?.contactId === String(contact.id) && (
+                                                                <div
+                                                                    className={cn(
+                                                                        'h-0.5 bg-emerald-400/70 rounded-full',
+                                                                        dragOverCard.position === 'before' ? '-mt-2 mb-2' : 'mt-2 -mb-2'
+                                                                    )}
+                                                                />
+                                                            )}
                                                             <div className="flex items-start justify-between gap-3">
                                                                 <div className="flex items-center gap-3 min-w-0">
                                                                     <ContactAvatar name={contact.name} className="w-9 h-9 text-sm" />
