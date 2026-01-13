@@ -4946,6 +4946,349 @@ async def remove_message_reaction(message_id: str, reaction_id: str, payload: di
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+def _safe_parse_json_value(value: Any, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return default
+        try:
+            return json.loads(s)
+        except Exception:
+            return default
+    return default
+
+
+def _extract_keyword_trigger_from_flow_nodes(nodes: Any) -> Optional[str]:
+    parsed_nodes = _safe_parse_json_value(nodes, [])
+    if not isinstance(parsed_nodes, list):
+        return None
+    for node in parsed_nodes:
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") != "start":
+            continue
+        data = node.get("data") or {}
+        if not isinstance(data, dict):
+            continue
+        cfg = (data.get("config") or {}) if isinstance(data.get("config") or {}, dict) else {}
+        trigger = str(cfg.get("trigger") or "").strip().lower()
+        if trigger != "keyword":
+            continue
+        keyword = str(cfg.get("keyword") or "").strip()
+        if keyword:
+            return keyword
+    return None
+
+
+def _build_edges_from_map(edges: Any) -> Dict[str, List[dict]]:
+    parsed_edges = _safe_parse_json_value(edges, [])
+    if not isinstance(parsed_edges, list):
+        return {}
+    edges_from: Dict[str, List[dict]] = {}
+    for edge in parsed_edges:
+        if not isinstance(edge, dict):
+            continue
+        src = edge.get("source")
+        if not isinstance(src, str) or not src:
+            continue
+        edges_from.setdefault(src, []).append(edge)
+    return edges_from
+
+
+def _get_start_node_id(nodes: Any) -> Optional[str]:
+    parsed_nodes = _safe_parse_json_value(nodes, [])
+    if not isinstance(parsed_nodes, list):
+        return None
+    for node in parsed_nodes:
+        if isinstance(node, dict) and node.get("type") == "start" and isinstance(node.get("id"), str):
+            return node["id"]
+    return None
+
+
+def _render_template_text(template: str, ctx: Dict[str, Any]) -> str:
+    s = str(template or "")
+    if not s:
+        return ""
+
+    def repl(match: "re.Match[str]") -> str:
+        key = (match.group(1) or "").strip()
+        if not key:
+            return ""
+        val = ctx.get(key)
+        if val is None:
+            return ""
+        return str(val)
+    return re.sub(r"\{([^{}]+)\}", repl, s)
+
+
+def _wait_seconds(duration: Any, unit: Any) -> int:
+    try:
+        d = float(duration)
+    except Exception:
+        d = 0
+    if d <= 0:
+        return 0
+    u = str(unit or "seconds").strip().lower()
+    mult = 1
+    if u in {"minute", "minutes"}:
+        mult = 60
+    elif u in {"hour", "hours"}:
+        mult = 60 * 60
+    elif u in {"day", "days"}:
+        mult = 60 * 60 * 24
+    return int(d * mult)
+
+
+def _eval_condition(condition: Any, ctx: Dict[str, Any]) -> bool:
+    if not isinstance(condition, dict):
+        return False
+    var_name = str(condition.get("variable") or "").strip()
+    operator = str(condition.get("operator") or "equals").strip().lower()
+    expected_raw = condition.get("value")
+    actual = ctx.get(var_name) if var_name else None
+    expected = expected_raw
+    if operator in {"greater", "less"}:
+        try:
+            a = float(actual)
+            b = float(expected)
+        except Exception:
+            return False
+        return a > b if operator == "greater" else a < b
+    actual_s = str(actual or "")
+    expected_s = str(expected or "")
+    if operator == "contains":
+        return expected_s.lower() in actual_s.lower()
+    return actual_s.strip().lower() == expected_s.strip().lower()
+
+
+async def _execute_flow_for_conversation(
+    flow_row: dict,
+    *,
+    tenant_id: str,
+    conversation: dict,
+    connection: dict,
+    phone: str,
+    incoming_text: str,
+):
+    nodes = _safe_parse_json_value(flow_row.get("nodes"), [])
+    if not isinstance(nodes, list) or not nodes:
+        return
+    edges_from = _build_edges_from_map(flow_row.get("edges"))
+    nodes_by_id: Dict[str, dict] = {
+        n.get("id"): n for n in nodes
+        if isinstance(n, dict) and isinstance(n.get("id"), str)
+    }
+    start_id = _get_start_node_id(nodes)
+    if not start_id or start_id not in nodes_by_id:
+        return
+
+    ctx: Dict[str, Any] = {}
+    vars_from_flow = _safe_parse_json_value(flow_row.get("variables"), {})
+    if isinstance(vars_from_flow, dict):
+        ctx.update(vars_from_flow)
+    ctx.setdefault("telefone", phone)
+    ctx.setdefault("phone", phone)
+    ctx.setdefault("mensagem", incoming_text)
+    ctx.setdefault("message", incoming_text)
+    contact_name = (conversation.get("contact_name") or "").strip()
+    if contact_name:
+        ctx.setdefault("contato_nome", contact_name)
+        ctx.setdefault("contact_name", contact_name)
+
+    execution_id = None
+    try:
+        exec_row = supabase.table("flow_executions").insert({
+            "flow_id": flow_row.get("id"),
+            "tenant_id": tenant_id,
+            "conversation_id": conversation.get("id"),
+            "status": "running",
+            "current_node_id": start_id,
+            "context": ctx,
+        }).execute()
+        if exec_row.data and isinstance(exec_row.data[0], dict):
+            execution_id = exec_row.data[0].get("id")
+    except Exception:
+        execution_id = None
+
+    async def log_node(node_id: str, node_type: str, status: str, *, error_message: Optional[str] = None):
+        if not execution_id:
+            return
+        try:
+            supabase.table("flow_logs").insert({
+                "execution_id": execution_id,
+                "node_id": node_id,
+                "node_type": node_type,
+                "status": status,
+                "error_message": error_message,
+            }).execute()
+        except Exception:
+            pass
+
+    def next_from(node_id: str, *, handle: Optional[str] = None) -> Optional[str]:
+        outs = edges_from.get(node_id) or []
+        if handle:
+            for e in outs:
+                if str(e.get("sourceHandle") or "").strip() == handle:
+                    tgt = e.get("target")
+                    if isinstance(tgt, str) and tgt:
+                        return tgt
+        for e in outs:
+            tgt = e.get("target")
+            if isinstance(tgt, str) and tgt:
+                return tgt
+        return None
+
+    current_id: Optional[str] = next_from(start_id)
+    steps = 0
+    while current_id and steps < 200:
+        steps += 1
+        node = nodes_by_id.get(current_id)
+        if not isinstance(node, dict):
+            break
+        node_type = str(node.get("type") or "").strip()
+        data = node.get("data") or {}
+        cfg = (data.get("config") or {}) if isinstance(data, dict) else {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+
+        try:
+            if node_type == "textMessage":
+                raw = str(cfg.get("message") or "")
+                content = _render_template_text(raw, ctx).strip()
+                if content:
+                    now = datetime.utcnow().isoformat()
+                    msg_row = supabase.table("messages").insert({
+                        "conversation_id": conversation["id"],
+                        "content": content,
+                        "type": "text",
+                        "direction": "outbound",
+                        "status": "sent",
+                    }).execute()
+                    if msg_row.data and isinstance(msg_row.data[0], dict):
+                        msg_id = msg_row.data[0]["id"]
+                        try:
+                            supabase.table("conversations").update({
+                                "last_message_at": now,
+                                "last_message_preview": content[:50],
+                            }).eq("id", conversation["id"]).execute()
+                        except Exception:
+                            pass
+                        try:
+                            tenant_row = supabase.table("tenants").select("messages_this_month").eq("id", tenant_id).execute()
+                            if tenant_row.data:
+                                supabase.table("tenants").update({
+                                    "messages_this_month": tenant_row.data[0]["messages_this_month"] + 1
+                                }).eq("id", tenant_id).execute()
+                        except Exception:
+                            pass
+                        connection_provider = (connection.get("provider") if isinstance(connection, dict) else None)
+                        connection_status = (connection.get("status") if isinstance(connection, dict) else None)
+                        is_evolution = str(connection_provider or "").lower() == "evolution"
+                        is_connected = str(connection_status or "").lower() in ["connected", "open"]
+                        if is_evolution and is_connected and connection.get("instance_name"):
+                            asyncio.create_task(send_whatsapp_message(connection["instance_name"], phone, content, "text", msg_id))
+                await log_node(current_id, node_type, "success")
+                current_id = next_from(current_id)
+                continue
+
+            if node_type == "mediaMessage":
+                media_type = str(cfg.get("mediaType") or "").strip().lower() or "image"
+                media_url = str(cfg.get("mediaUrl") or "").strip()
+                caption_raw = str(cfg.get("caption") or "")
+                caption = _render_template_text(caption_raw, ctx).strip()
+                if media_url:
+                    now = datetime.utcnow().isoformat()
+                    msg_row = supabase.table("messages").insert({
+                        "conversation_id": conversation["id"],
+                        "content": caption or f"[{media_type}]",
+                        "type": media_type,
+                        "direction": "outbound",
+                        "status": "sent",
+                        "media_url": media_url,
+                    }).execute()
+                    if msg_row.data and isinstance(msg_row.data[0], dict):
+                        msg_id = msg_row.data[0]["id"]
+                        preview = caption[:50] if caption else f"[{media_type.capitalize()}]"
+                        try:
+                            supabase.table("conversations").update({
+                                "last_message_at": now,
+                                "last_message_preview": preview,
+                            }).eq("id", conversation["id"]).execute()
+                        except Exception:
+                            pass
+                        try:
+                            tenant_row = supabase.table("tenants").select("messages_this_month").eq("id", tenant_id).execute()
+                            if tenant_row.data:
+                                supabase.table("tenants").update({
+                                    "messages_this_month": tenant_row.data[0]["messages_this_month"] + 1
+                                }).eq("id", tenant_id).execute()
+                        except Exception:
+                            pass
+                        connection_provider = (connection.get("provider") if isinstance(connection, dict) else None)
+                        connection_status = (connection.get("status") if isinstance(connection, dict) else None)
+                        is_evolution = str(connection_provider or "").lower() == "evolution"
+                        is_connected = str(connection_status or "").lower() in ["connected", "open"]
+                        if is_evolution and is_connected and connection.get("instance_name"):
+                            asyncio.create_task(send_whatsapp_media(
+                                connection["instance_name"],
+                                phone,
+                                media_type,
+                                media_url,
+                                caption,
+                                "flow_media",
+                                msg_id,
+                            ))
+                await log_node(current_id, node_type, "success")
+                current_id = next_from(current_id)
+                continue
+
+            if node_type == "wait":
+                seconds = _wait_seconds(cfg.get("duration"), cfg.get("unit"))
+                await log_node(current_id, node_type, "success")
+                if seconds > 0:
+                    await asyncio.sleep(seconds)
+                current_id = next_from(current_id)
+                continue
+
+            if node_type == "variable":
+                action = str(cfg.get("action") or "set").strip().lower()
+                var_name = str(cfg.get("variableName") or "").strip()
+                if action == "set" and var_name:
+                    value_raw = str(cfg.get("value") or "")
+                    ctx[var_name] = _render_template_text(value_raw, ctx)
+                await log_node(current_id, node_type, "success")
+                current_id = next_from(current_id)
+                continue
+
+            if node_type == "conditional":
+                condition = cfg.get("condition")
+                ok = _eval_condition(condition, ctx)
+                await log_node(current_id, node_type, "success")
+                current_id = next_from(current_id, handle=("true" if ok else "false"))
+                continue
+
+            await log_node(current_id, node_type or "unknown", "skipped")
+            current_id = next_from(current_id)
+        except Exception as e:
+            await log_node(current_id, node_type or "unknown", "error", error_message=str(e))
+            break
+
+    if execution_id:
+        try:
+            supabase.table("flow_executions").update({
+                "status": "completed",
+                "completed_at": datetime.utcnow().isoformat(),
+                "context": ctx,
+                "current_node_id": current_id,
+            }).eq("id", execution_id).execute()
+        except Exception:
+            pass
+
+
 # ==================== WEBHOOKS ====================
 
 @api_router.post("/webhooks/evolution/{instance_name}")
@@ -5471,80 +5814,67 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         else:
                             raise
 
-                try:
-                    auto_messages_result = supabase.table('auto_messages').select('*').eq('tenant_id', tenant_id).eq('is_active', True).execute()
-                except Exception as e:
-                    if _is_missing_table_error(e, "auto_messages"):
-                        logger.warning(f"Missing table auto_messages in Supabase (tenant={tenant_id}): {e}")
-                    else:
-                        logger.error(f"Error loading auto messages for tenant {tenant_id}: {e}")
-                    auto_messages_result = None
+                incoming_text = (parsed.get('content') or '').strip()
+                should_process_inbound_text = (not is_from_me) and (not is_placeholder_text(incoming_text)) and bool(incoming_text.strip())
 
-                if auto_messages_result and auto_messages_result.data:
-                    incoming_text = (parsed.get('content') or '').strip()
-                    if not is_placeholder_text(incoming_text):
-                        now_utc = datetime.utcnow()
-                        local_offset = timedelta(hours=-3)
-                        local_now = now_utc + local_offset
-                        day_index = (local_now.weekday() + 1) % 7
+                auto_messages_result = None
+                if should_process_inbound_text:
+                    try:
+                        auto_messages_result = supabase.table('auto_messages').select('*').eq('tenant_id', tenant_id).eq('is_active', True).execute()
+                    except Exception as e:
+                        if _is_missing_table_error(e, "auto_messages"):
+                            logger.warning(f"Missing table auto_messages in Supabase (tenant={tenant_id}): {e}")
+                        else:
+                            logger.error(f"Error loading auto messages for tenant {tenant_id}: {e}")
+                        auto_messages_result = None
 
-                        def parse_time_to_minutes(value):
-                            s = str(value or '').strip()
+                if auto_messages_result and auto_messages_result.data and should_process_inbound_text:
+                    now_utc = datetime.utcnow()
+                    local_offset = timedelta(hours=-3)
+                    local_now = now_utc + local_offset
+                    day_index = (local_now.weekday() + 1) % 7
+
+                    def parse_time_to_minutes(value):
+                        s = str(value or '').strip()
+                        if not s:
+                            return None
+                        if len(s) >= 5 and s[2] == ':':
+                            s = s[:5]
+                        parts = s.split(':')
+                        if len(parts) < 2:
+                            return None
+                        try:
+                            hour = int(parts[0])
+                            minute = int(parts[1])
+                            if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                                return None
+                            return hour * 60 + minute
+                        except Exception:
+                            return None
+
+                    now_minutes = local_now.hour * 60 + local_now.minute
+
+                    def normalize_schedule_days(value: Any) -> List[int]:
+                        if value is None:
+                            return []
+                        if isinstance(value, (list, tuple)):
+                            out: List[int] = []
+                            for item in value:
+                                try:
+                                    out.append(int(item))
+                                except Exception:
+                                    continue
+                            return out
+                        if isinstance(value, str):
+                            s = value.strip()
                             if not s:
-                                return None
-                            if len(s) >= 5 and s[2] == ':':
-                                s = s[:5]
-                            parts = s.split(':')
-                            if len(parts) < 2:
-                                return None
-                            try:
-                                hour = int(parts[0])
-                                minute = int(parts[1])
-                                if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-                                    return None
-                                return hour * 60 + minute
-                            except Exception:
-                                return None
-
-                        now_minutes = local_now.hour * 60 + local_now.minute
-
-                        def normalize_schedule_days(value: Any) -> List[int]:
-                            if value is None:
                                 return []
-                            if isinstance(value, (list, tuple)):
-                                out: List[int] = []
-                                for item in value:
-                                    try:
-                                        out.append(int(item))
-                                    except Exception:
-                                        continue
-                                return out
-                            if isinstance(value, str):
-                                s = value.strip()
-                                if not s:
+                            if s.startswith("{") and s.endswith("}"):
+                                inner = s[1:-1].strip()
+                                if not inner:
                                     return []
-                                if s.startswith("{") and s.endswith("}"):
-                                    inner = s[1:-1].strip()
-                                    if not inner:
-                                        return []
-                                    out: List[int] = []
-                                    for part in inner.split(","):
-                                        part = part.strip()
-                                        if not part:
-                                            continue
-                                        try:
-                                            out.append(int(part))
-                                        except Exception:
-                                            continue
-                                    return out
-                                if s.startswith("[") and s.endswith("]"):
-                                    try:
-                                        parsed_days = json.loads(s)
-                                    except Exception:
-                                        parsed_days = None
-                                    return normalize_schedule_days(parsed_days)
                                 out: List[int] = []
-                                for part in re.split(r"[,\s]+", s):
+                                for part in inner.split(","):
                                     part = part.strip()
                                     if not part:
                                         continue
@@ -5553,142 +5883,182 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                     except Exception:
                                         continue
                                 return out
-                            return []
-
-                        def minutes_to_hm(value: int) -> Tuple[int, int]:
-                            h = value // 60
-                            m = value % 60
-                            return h, m
-
-                        def away_window_bounds_utc(auto_msg: Dict[str, Any]) -> Tuple[datetime, datetime]:
-                            start_min = parse_time_to_minutes(auto_msg.get("schedule_start"))
-                            end_min = parse_time_to_minutes(auto_msg.get("schedule_end"))
-                            if start_min is None or end_min is None:
-                                day_start_local = datetime(local_now.year, local_now.month, local_now.day)
-                                day_end_local = day_start_local + timedelta(days=1)
-                                return day_start_local - local_offset, day_end_local - local_offset
-
-                            spans_midnight = start_min > end_min
-                            start_date = local_now.date()
-                            if spans_midnight and now_minutes <= end_min:
-                                start_date = (local_now - timedelta(days=1)).date()
-
-                            sh, sm = minutes_to_hm(start_min)
-                            eh, em = minutes_to_hm(end_min)
-                            start_local = datetime(start_date.year, start_date.month, start_date.day, sh, sm)
-                            end_date = start_date + timedelta(days=1) if spans_midnight else start_date
-                            end_local = datetime(end_date.year, end_date.month, end_date.day, eh, em)
-                            return start_local - local_offset, end_local - local_offset
-                        connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
-                        connection_status = (connection.get('status') if isinstance(connection, dict) else None)
-                        is_evolution = str(connection_provider or '').lower() == 'evolution'
-                        is_connected = str(connection_status or '').lower() in ['connected', 'open']
-
-                        async def send_auto_message(auto_msg, delay_seconds: int):
-                            try:
-                                msg_type_inner = str(auto_msg.get('type') or '').lower()
-                                log_query = supabase.table('auto_message_logs').select('id').eq('auto_message_id', auto_msg['id']).eq('conversation_id', conversation['id'])
-
-                                if msg_type_inner == 'away':
-                                    window_start_utc, window_end_utc = away_window_bounds_utc(auto_msg)
-                                    log_query = log_query.gte('sent_at', window_start_utc.isoformat()).lt('sent_at', window_end_utc.isoformat())
-
-                                log_exists = log_query.limit(1).execute()
-                                if log_exists.data:
-                                    return
-
-                                supabase.table('auto_message_logs').insert({
-                                    'auto_message_id': auto_msg['id'],
-                                    'conversation_id': conversation['id']
-                                }).execute()
-
-                                content = (auto_msg.get('message') or '').strip()
-                                if not content:
-                                    return
-
-                                msg_row = supabase.table('messages').insert({
-                                    'conversation_id': conversation['id'],
-                                    'content': content,
-                                    'type': 'system',
-                                    'direction': 'outbound',
-                                    'status': 'sent'
-                                }).execute()
-                                if not msg_row.data:
-                                    return
-                                msg = msg_row.data[0]
-
-                                supabase.table('conversations').update({
-                                    'last_message_at': now_utc.isoformat(),
-                                    'last_message_preview': content[:50]
-                                }).eq('id', conversation['id']).execute()
-
-                                if tenant_id:
-                                    tenant_row = supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
-                                    if tenant_row.data:
-                                        supabase.table('tenants').update({
-                                            'messages_this_month': tenant_row.data[0]['messages_this_month'] + 1
-                                        }).eq('id', tenant_id).execute()
-
-                                if is_evolution and is_connected:
-                                    if delay_seconds and delay_seconds > 0:
-                                        await asyncio.sleep(delay_seconds)
-                                    await send_whatsapp_message(
-                                        connection['instance_name'],
-                                        phone,
-                                        content,
-                                        'text',
-                                        msg['id']
-                                    )
-                            except Exception as e:
-                                logger.error(f"Error sending auto message: {e}")
-
-                        for auto_msg in auto_messages_result.data:
-                            msg_type = str(auto_msg.get('type') or '').lower()
-                            delay_seconds = auto_msg.get('delay_seconds') or 0
-                            try:
-                                delay_seconds = int(delay_seconds)
-                            except Exception:
-                                delay_seconds = 0
-                            if delay_seconds < 0:
-                                delay_seconds = 0
-
-                            if msg_type == 'welcome':
-                                if not is_new_conversation:
+                            if s.startswith("[") and s.endswith("]"):
+                                try:
+                                    parsed_days = json.loads(s)
+                                except Exception:
+                                    parsed_days = None
+                                return normalize_schedule_days(parsed_days)
+                            out: List[int] = []
+                            for part in re.split(r"[,\s]+", s):
+                                part = part.strip()
+                                if not part:
                                     continue
-                            elif msg_type == 'away':
-                                start_min = parse_time_to_minutes(auto_msg.get('schedule_start'))
-                                end_min = parse_time_to_minutes(auto_msg.get('schedule_end'))
-                                spans_midnight = (
-                                    start_min is not None
-                                    and end_min is not None
-                                    and start_min > end_min
+                                try:
+                                    out.append(int(part))
+                                except Exception:
+                                    continue
+                            return out
+                        return []
+
+                    def minutes_to_hm(value: int) -> Tuple[int, int]:
+                        h = value // 60
+                        m = value % 60
+                        return h, m
+
+                    def away_window_bounds_utc(auto_msg: Dict[str, Any]) -> Tuple[datetime, datetime]:
+                        start_min = parse_time_to_minutes(auto_msg.get("schedule_start"))
+                        end_min = parse_time_to_minutes(auto_msg.get("schedule_end"))
+                        if start_min is None or end_min is None:
+                            day_start_local = datetime(local_now.year, local_now.month, local_now.day)
+                            day_end_local = day_start_local + timedelta(days=1)
+                            return day_start_local - local_offset, day_end_local - local_offset
+
+                        spans_midnight = start_min > end_min
+                        start_date = local_now.date()
+                        if spans_midnight and now_minutes <= end_min:
+                            start_date = (local_now - timedelta(days=1)).date()
+
+                        sh, sm = minutes_to_hm(start_min)
+                        eh, em = minutes_to_hm(end_min)
+                        start_local = datetime(start_date.year, start_date.month, start_date.day, sh, sm)
+                        end_date = start_date + timedelta(days=1) if spans_midnight else start_date
+                        end_local = datetime(end_date.year, end_date.month, end_date.day, eh, em)
+                        return start_local - local_offset, end_local - local_offset
+                    connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
+                    connection_status = (connection.get('status') if isinstance(connection, dict) else None)
+                    is_evolution = str(connection_provider or '').lower() == 'evolution'
+                    is_connected = str(connection_status or '').lower() in ['connected', 'open']
+
+                    async def send_auto_message(auto_msg, delay_seconds: int):
+                        try:
+                            msg_type_inner = str(auto_msg.get('type') or '').lower()
+                            log_query = supabase.table('auto_message_logs').select('id').eq('auto_message_id', auto_msg['id']).eq('conversation_id', conversation['id'])
+
+                            if msg_type_inner == 'away':
+                                window_start_utc, window_end_utc = away_window_bounds_utc(auto_msg)
+                                log_query = log_query.gte('sent_at', window_start_utc.isoformat()).lt('sent_at', window_end_utc.isoformat())
+
+                            log_exists = log_query.limit(1).execute()
+                            if log_exists.data:
+                                return
+
+                            supabase.table('auto_message_logs').insert({
+                                'auto_message_id': auto_msg['id'],
+                                'conversation_id': conversation['id']
+                            }).execute()
+
+                            content = (auto_msg.get('message') or '').strip()
+                            if not content:
+                                return
+
+                            msg_row = supabase.table('messages').insert({
+                                'conversation_id': conversation['id'],
+                                'content': content,
+                                'type': 'system',
+                                'direction': 'outbound',
+                                'status': 'sent'
+                            }).execute()
+                            if not msg_row.data:
+                                return
+                            msg = msg_row.data[0]
+
+                            supabase.table('conversations').update({
+                                'last_message_at': now_utc.isoformat(),
+                                'last_message_preview': content[:50]
+                            }).eq('id', conversation['id']).execute()
+
+                            if tenant_id:
+                                tenant_row = supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
+                                if tenant_row.data:
+                                    supabase.table('tenants').update({
+                                        'messages_this_month': tenant_row.data[0]['messages_this_month'] + 1
+                                    }).eq('id', tenant_id).execute()
+
+                            if is_evolution and is_connected:
+                                if delay_seconds and delay_seconds > 0:
+                                    await asyncio.sleep(delay_seconds)
+                                await send_whatsapp_message(
+                                    connection['instance_name'],
+                                    phone,
+                                    content,
+                                    'text',
+                                    msg['id']
                                 )
-                                effective_day_index = day_index
-                                if spans_midnight and end_min is not None and now_minutes <= end_min:
-                                    effective_day_index = (day_index - 1) % 7
+                        except Exception as e:
+                            logger.error(f"Error sending auto message: {e}")
 
-                                days = normalize_schedule_days(auto_msg.get('schedule_days'))
-                                if days and effective_day_index not in days:
-                                    continue
-                                active = False
-                                if start_min is None or end_min is None:
-                                    active = True
-                                elif start_min <= end_min:
-                                    active = start_min <= now_minutes <= end_min
-                                else:
-                                    active = now_minutes >= start_min or now_minutes <= end_min
-                                if not active:
-                                    continue
-                            elif msg_type == 'keyword':
-                                keyword = (auto_msg.get('trigger_keyword') or '').strip()
-                                if not keyword:
-                                    continue
-                                if keyword.lower() not in incoming_text.lower():
-                                    continue
-                            else:
+                    for auto_msg in auto_messages_result.data:
+                        msg_type = str(auto_msg.get('type') or '').lower()
+                        delay_seconds = auto_msg.get('delay_seconds') or 0
+                        try:
+                            delay_seconds = int(delay_seconds)
+                        except Exception:
+                            delay_seconds = 0
+                        if delay_seconds < 0:
+                            delay_seconds = 0
+
+                        if msg_type == 'welcome':
+                            if not is_new_conversation:
                                 continue
+                        elif msg_type == 'away':
+                            start_min = parse_time_to_minutes(auto_msg.get('schedule_start'))
+                            end_min = parse_time_to_minutes(auto_msg.get('schedule_end'))
+                            spans_midnight = (
+                                start_min is not None
+                                and end_min is not None
+                                and start_min > end_min
+                            )
+                            effective_day_index = day_index
+                            if spans_midnight and end_min is not None and now_minutes <= end_min:
+                                effective_day_index = (day_index - 1) % 7
 
-                            asyncio.create_task(send_auto_message(auto_msg, delay_seconds))
+                            days = normalize_schedule_days(auto_msg.get('schedule_days'))
+                            if days and effective_day_index not in days:
+                                continue
+                            active = False
+                            if start_min is None or end_min is None:
+                                active = True
+                            elif start_min <= end_min:
+                                active = start_min <= now_minutes <= end_min
+                            else:
+                                active = now_minutes >= start_min or now_minutes <= end_min
+                            if not active:
+                                continue
+                        elif msg_type == 'keyword':
+                            keyword = (auto_msg.get('trigger_keyword') or '').strip()
+                            if not keyword:
+                                continue
+                            if keyword.lower() not in incoming_text.lower():
+                                continue
+                        else:
+                            continue
+
+                        asyncio.create_task(send_auto_message(auto_msg, delay_seconds))
+
+                if should_process_inbound_text:
+                    try:
+                        flows_result = supabase.table("flows").select("id, tenant_id, nodes, edges, variables, is_active, status").eq("tenant_id", tenant_id).eq("is_active", True).execute()
+                    except Exception:
+                        flows_result = None
+
+                    if flows_result and flows_result.data:
+                        for flow_row in flows_result.data:
+                            if not isinstance(flow_row, dict):
+                                continue
+                            keyword = _extract_keyword_trigger_from_flow_nodes(flow_row.get("nodes"))
+                            if not keyword:
+                                continue
+                            if keyword.lower() not in incoming_text.lower():
+                                continue
+                            asyncio.create_task(_execute_flow_for_conversation(
+                                flow_row,
+                                tenant_id=tenant_id,
+                                conversation=conversation,
+                                connection=connection,
+                                phone=phone,
+                                incoming_text=incoming_text,
+                            ))
         
         elif parsed['event'] == 'connection':
             # Update connection status

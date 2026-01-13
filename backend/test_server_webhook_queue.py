@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 
@@ -210,6 +211,177 @@ async def test_webhook_creates_contact_when_from_me_true(monkeypatch):
     assert inserted_contacts[0].get("phone") == "5521999998888"
     assert inserted_contacts[0].get("source") == "whatsapp"
     assert inserted_contacts[0].get("name") is None
+
+
+@pytest.mark.anyio
+async def test_webhook_triggers_flow_keyword_and_sends_text(monkeypatch):
+    import backend.server as server
+
+    server._DB_WRITE_QUEUE.clear()
+
+    def parse_stub(_payload):
+        return {
+            "event": "message",
+            "from_me": False,
+            "remote_jid": "5521999998888",
+            "remote_jid_raw": "5521999998888@s.whatsapp.net",
+            "content": "teste",
+            "timestamp": "1700000000",
+            "message_id": "MSG_FLOW_1",
+            "type": "text",
+            "push_name": "Contato Teste",
+        }
+
+    monkeypatch.setattr(server.evolution_api, "parse_webhook_message", parse_stub)
+
+    tasks = []
+    real_create_task = asyncio.create_task
+
+    def create_task_stub(coro):
+        task = real_create_task(coro)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(server.asyncio, "create_task", create_task_stub)
+
+    sent = {"calls": []}
+
+    async def send_whatsapp_message_stub(instance_name, phone, content, msg_type, message_id):
+        sent["calls"].append(
+            {
+                "instance_name": instance_name,
+                "phone": phone,
+                "content": content,
+                "msg_type": msg_type,
+                "message_id": message_id,
+            }
+        )
+
+    monkeypatch.setattr(server, "send_whatsapp_message", send_whatsapp_message_stub)
+
+    inserted_messages = []
+
+    flow_nodes = [
+        {
+            "id": "start_1",
+            "type": "start",
+            "data": {"config": {"trigger": "keyword", "keyword": "teste"}},
+        },
+        {
+            "id": "text_1",
+            "type": "textMessage",
+            "data": {"config": {"message": "Olá"}},
+        },
+    ]
+    flow_edges = [{"id": "e1", "source": "start_1", "target": "text_1"}]
+
+    def table_handler(name, ops):
+        if name == "connections":
+            return _Result(
+                data=[
+                    {
+                        "id": "conn1",
+                        "tenant_id": "tenant1",
+                        "provider": "evolution",
+                        "status": "connected",
+                        "instance_name": "inst1",
+                        "tenants": {},
+                    }
+                ]
+            )
+
+        if name == "conversations":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[])
+                if op[0] == "insert":
+                    conv = dict(op[1])
+                    return _Result(data=[{"id": "conv1", "unread_count": conv.get("unread_count", 0), **conv}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "contacts":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[])
+                if op[0] == "insert":
+                    payload = dict(op[1])
+                    return _Result(data=[{"id": "contact1", **payload}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "messages":
+            for op in ops:
+                if op[0] == "insert":
+                    payload = dict(op[1])
+                    msg = {"id": f"msg{len(inserted_messages)+1}", **payload}
+                    inserted_messages.append(msg)
+                    return _Result(data=[msg])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "tenants":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[{"messages_this_month": 0}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "auto_messages":
+            return _Result(data=[])
+
+        if name == "flows":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(
+                        data=[
+                            {
+                                "id": "flow1",
+                                "tenant_id": "tenant1",
+                                "is_active": True,
+                                "nodes": flow_nodes,
+                                "edges": flow_edges,
+                                "variables": {},
+                                "status": "active",
+                            }
+                        ]
+                    )
+            return _Result(data=[])
+
+        if name in {"flow_executions", "flow_logs"}:
+            for op in ops:
+                if op[0] == "insert":
+                    return _Result(data=[{"id": "exec1"}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+
+    resp = await server._process_evolution_webhook(
+        "inst1",
+        {"event": "MESSAGES_UPSERT"},
+        from_queue=False,
+    )
+
+    assert resp.get("success") is True
+
+    await asyncio.sleep(0)
+    for _ in range(10):
+        pending = [t for t in tasks if not t.done()]
+        if not pending:
+            break
+        await asyncio.gather(*pending)
+
+    assert any(m.get("direction") == "outbound" and m.get("type") == "text" for m in inserted_messages)
+    assert sent["calls"]
+    assert sent["calls"][0]["content"] == "Olá"
 
 
 def test_normalize_phone_number_variants():
