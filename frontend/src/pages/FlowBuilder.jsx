@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './FlowBuilder.css';
-import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2, Search, Copy, Focus, RotateCcw } from 'lucide-react';
+import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2, Search, Copy, Focus, RotateCcw, Pencil } from 'lucide-react';
 import useFlowStore from '../store/flowStore';
 import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
@@ -105,6 +105,7 @@ const FlowBuilderInner = () => {
     const reactFlowWrapperRef = useRef(null);
     const reactFlowInstanceRef = useRef(null);
     const [nodeConfigDraft, setNodeConfigDraft] = useState({});
+    const [isRenamingFlow, setIsRenamingFlow] = useState(false);
 
     const {
         nodes: storeNodes,
@@ -116,6 +117,8 @@ const FlowBuilderInner = () => {
         fetchFlow,
         flows,
         currentFlow,
+        flowName,
+        setFlowName,
         setCurrentFlow,
         createFlow,
         saveFlow,
@@ -130,6 +133,10 @@ const FlowBuilderInner = () => {
     useEffect(() => {
         fetchFlows();
     }, [fetchFlows]);
+
+    useEffect(() => {
+        setIsRenamingFlow(false);
+    }, [currentFlow?.id]);
 
     // Sync nodes from store to ReactFlow
     useEffect(() => {
@@ -210,7 +217,7 @@ const FlowBuilderInner = () => {
                 return updated;
             });
         },
-        [setEdges, setStoreEdges]
+        [currentFlow, setEdges, setStoreEdges]
     );
 
     // Handle node click
@@ -875,12 +882,50 @@ const FlowBuilderInner = () => {
                                 ? "bg-slate-800/90 border-white/10"
                                 : "bg-white/90 border-slate-200 shadow-lg"
                         )}>
-                            <h2 className={cn(
-                                "font-semibold text-sm",
-                                isDark ? "text-white" : "text-slate-800"
-                            )}>
-                                {currentFlow ? currentFlow.name : 'Selecione um fluxo'}
-                            </h2>
+                            {currentFlow ? (
+                                <div className="flex items-center gap-2">
+                                    {isRenamingFlow ? (
+                                        <Input
+                                            value={flowName}
+                                            onChange={(e) => setFlowName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') setIsRenamingFlow(false);
+                                                if (e.key === 'Escape') setIsRenamingFlow(false);
+                                            }}
+                                            onBlur={() => setIsRenamingFlow(false)}
+                                            autoFocus
+                                            className={cn(
+                                                "h-8 w-[220px] text-sm",
+                                                isDark ? "bg-white/5 border-white/10 text-white" : "bg-white"
+                                            )}
+                                        />
+                                    ) : (
+                                        <h2 className={cn(
+                                            "font-semibold text-sm max-w-[220px] truncate",
+                                            isDark ? "text-white" : "text-slate-800"
+                                        )}>
+                                            {flowName || currentFlow.name || 'Sem nome'}
+                                        </h2>
+                                    )}
+                                    <button
+                                        onClick={() => setIsRenamingFlow((v) => !v)}
+                                        className={cn(
+                                            "p-1.5 rounded-lg transition-colors",
+                                            isDark ? "hover:bg-white/10 text-white/60 hover:text-white" : "hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+                                        )}
+                                        title="Renomear fluxo"
+                                    >
+                                        <Pencil className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <h2 className={cn(
+                                    "font-semibold text-sm",
+                                    isDark ? "text-white" : "text-slate-800"
+                                )}>
+                                    Selecione um fluxo
+                                </h2>
+                            )}
                             {currentFlow && (
                                 <button
                                     onClick={handleSaveFlow}
