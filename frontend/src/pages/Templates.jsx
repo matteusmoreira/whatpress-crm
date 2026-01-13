@@ -372,15 +372,15 @@ const Templates = () => {
     });
 
     return (
-        <div className="p-6 overflow-y-auto h-full">
+        <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto h-full">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 pl-16 lg:pl-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <h1 className="wa-page-title flex items-center gap-2">
                         <FileText className="w-8 h-8 text-emerald-400" />
                         Templates
                     </h1>
-                    <p className="text-white/50 mt-1">Modelos de mensagem reutilizáveis</p>
+                    <p className="wa-page-subtitle">Modelos de mensagem reutilizáveis</p>
                 </div>
                 <GlassButton onClick={() => setShowForm(true)}>
                     <Plus className="w-4 h-4 mr-2" />
@@ -404,7 +404,7 @@ const Templates = () => {
                     <button
                         onClick={() => setSelectedCategory('all')}
                         className={cn(
-                            'px-4 py-2 rounded-lg text-sm transition-colors',
+                            'px-4 py-2 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                             selectedCategory === 'all'
                                 ? 'bg-white/20 text-white'
                                 : 'bg-white/5 text-white/60 hover:bg-white/10'
@@ -417,7 +417,7 @@ const Templates = () => {
                             key={cat.id}
                             onClick={() => setSelectedCategory(cat.id)}
                             className={cn(
-                                'px-4 py-2 rounded-lg text-sm transition-colors',
+                                'px-4 py-2 rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                                 selectedCategory === cat.id
                                     ? 'bg-white/20 text-white'
                                     : 'bg-white/5 text-white/60 hover:bg-white/10'

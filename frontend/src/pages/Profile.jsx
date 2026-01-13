@@ -177,11 +177,11 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen p-6 lg:p-8 overflow-auto">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Meu Perfil</h1>
-        <p className="text-white/60">Gerencie suas informações pessoais e preferências</p>
+      <div className="mb-8 pl-16 lg:pl-0">
+        <h1 className="wa-page-title">Meu Perfil</h1>
+        <p className="wa-page-subtitle">Gerencie suas informações pessoais e preferências</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -205,7 +205,8 @@ const Profile = () => {
               <button
                 onClick={handleAvatarChange}
                 disabled={isAvatarUploading}
-                className="absolute bottom-0 right-0 p-2 rounded-full bg-emerald-500 text-white shadow-lg hover:bg-emerald-600 transition-all hover:scale-110 active:scale-95"
+                aria-label="Alterar avatar"
+                className="absolute bottom-0 right-0 p-2 rounded-full bg-emerald-500 text-white shadow-lg hover:bg-emerald-600 transition-all hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {isAvatarUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </button>
@@ -229,7 +230,7 @@ const Profile = () => {
         {/* Info Card */}
         <GlassCard className="lg:col-span-2 p-6" hover={false}>
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-white">Informações Pessoais</h3>
+            <h3 className="wa-section-title">Informações Pessoais</h3>
             {isEditing ? (
               <GlassButton onClick={handleSave} className="flex items-center gap-2" disabled={isSaving}>
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -311,7 +312,7 @@ const Profile = () => {
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                   disabled={isSaving}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+                  className="w-full min-h-[96px] px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
                 />
               ) : (
                 <p className="text-white/80 py-3">{formData.bio}</p>

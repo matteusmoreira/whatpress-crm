@@ -138,21 +138,21 @@ const MaintenancePage = () => {
   };
 
   return (
-    <div className="min-h-screen p-6 lg:p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+      <div className="mb-8 pl-16 lg:pl-0">
+        <h1 className="wa-page-title flex items-center gap-2">
           <AlertTriangle className="w-8 h-8 text-amber-400" />
           Modo Manutenção
         </h1>
-        <p className="text-white/60">Ative um aviso global exibido no login</p>
+        <p className="wa-page-subtitle">Ative um aviso global exibido no login</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <GlassCard className="lg:col-span-1" hover={false}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">Status</h2>
-              <p className="text-white/60 text-sm mt-1">Controla o aviso para todos os usuários</p>
+              <h2 className="wa-section-title">Status</h2>
+              <p className="wa-page-subtitle">Controla o aviso para todos os usuários</p>
             </div>
             <GlassBadge variant={enabled ? 'warning' : 'success'}>
               {enabled ? 'Ativo' : 'Desativado'}
@@ -285,4 +285,3 @@ const MaintenancePage = () => {
 };
 
 export default MaintenancePage;
-

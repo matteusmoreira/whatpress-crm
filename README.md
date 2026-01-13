@@ -102,6 +102,8 @@ frontend/src/
 - Ao limpar localStorage, dados mock são restaurados
 - API fake simula delays realistas (300-800ms)
 - Design segue paleta verde: #10B981, #059669, #047857
+- Tipografia padronizada com utilitários globais (títulos/subtítulos/sections)
+- Botões e filtros com foco visível consistente (melhor navegação por teclado)
 
 ---
 

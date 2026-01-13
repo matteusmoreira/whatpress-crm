@@ -731,7 +731,7 @@ const FlowBuilderInner = () => {
     };
 
     return (
-        <div className="p-4 lg:p-6 h-full min-h-0 min-w-0">
+        <div className="p-4 sm:p-5 lg:p-6 h-full min-h-0 min-w-0">
             <div
                 className={cn(
                     "flex flex-col lg:flex-row h-full min-h-0 overflow-hidden min-w-0 rounded-2xl border",

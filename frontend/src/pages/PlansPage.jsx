@@ -160,11 +160,11 @@ const PlansPage = () => {
     };
 
     return (
-        <div className="min-h-screen p-6 lg:p-8">
+        <div className="min-h-screen p-4 sm:p-6 lg:p-8">
             {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-white mb-2">Gerenciar Planos</h1>
-                <p className="text-white/60">Configure os planos disponíveis para os tenants</p>
+            <div className="mb-8 pl-16 lg:pl-0">
+                <h1 className="wa-page-title">Gerenciar Planos</h1>
+                <p className="wa-page-subtitle">Configure os planos disponíveis para os tenants</p>
             </div>
 
             {/* Filters and Actions */}

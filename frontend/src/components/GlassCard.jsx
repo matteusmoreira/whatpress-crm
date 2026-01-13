@@ -10,7 +10,7 @@ export const GlassCard = ({ children, className, hover = true, ...props }) => {
     <div
       className={cn(
         isDark
-          ? 'backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 shadow-2xl shadow-emerald-500/10 rounded-3xl'
+          ? 'backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 shadow-2xl shadow-emerald-500/10 rounded-2xl'
           : 'bg-white border border-slate-200 shadow-sm rounded-2xl',
         'p-6',
         hover && (isDark
@@ -33,7 +33,7 @@ export const GlassInput = React.forwardRef(({ className, ...props }, ref) => {
     <input
       ref={ref}
       className={cn(
-        'w-full px-4 py-3 rounded-xl',
+        'w-full h-11 px-4 rounded-xl text-sm',
         isDark
           ? 'bg-white/10 backdrop-blur-sm border border-white/20 text-foreground placeholder:text-muted-foreground'
           : 'bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400',
@@ -49,7 +49,7 @@ export const GlassInput = React.forwardRef(({ className, ...props }, ref) => {
 });
 GlassInput.displayName = 'GlassInput';
 
-export const GlassButton = ({ children, className, variant = 'primary', loading = false, ...props }) => {
+export const GlassButton = ({ children, className, variant = 'primary', loading = false, disabled = false, ...props }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -71,18 +71,20 @@ export const GlassButton = ({ children, className, variant = 'primary', loading 
   return (
     <button
       className={cn(
-        'px-6 py-3 rounded-xl font-medium',
+        'h-11 px-4 rounded-xl text-sm font-medium inline-flex items-center justify-center gap-2',
         'transition-all duration-200 transform',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         'active:scale-95',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         variants[variant],
         className
       )}
-      disabled={loading}
+      aria-busy={loading}
+      disabled={loading || disabled}
       {...props}
     >
       {loading ? (
-        <span className="flex items-center justify-center gap-2">
+        <span className="inline-flex items-center justify-center gap-2">
           <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -111,7 +113,7 @@ export const GlassBadge = ({ children, variant = 'default', className }) => {
   return (
     <span
       className={cn(
-        'px-3 py-1 rounded-full text-sm font-medium',
+        'px-3 py-1 rounded-full text-xs font-medium inline-flex items-center',
         variants[variant],
         className
       )}

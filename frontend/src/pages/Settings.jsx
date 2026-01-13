@@ -10,7 +10,7 @@ import {
   Tag
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { GlassBadge, GlassCard } from '../components/GlassCard';
+import { GlassBadge, GlassButton, GlassCard, GlassInput } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { cn } from '../lib/utils';
@@ -189,11 +189,11 @@ const Settings = () => {
   ];
 
   return (
-    <div className="min-h-screen p-6 lg:p-8">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Configurações</h1>
-        <p className="text-white/60">Gerencie suas preferências e configurações da conta</p>
+      <div className="mb-8 pl-16 lg:pl-0">
+        <h1 className="wa-page-title">Configurações</h1>
+        <p className="wa-page-subtitle">Gerencie suas preferências e configurações da conta</p>
       </div>
 
       {/* User Card */}
@@ -228,26 +228,24 @@ const Settings = () => {
         <div className="space-y-3">
           <div>
             <label className="text-white/80 text-sm font-medium block mb-2">Nome do sistema</label>
-            <input
+            <GlassInput
               type="text"
               value={brandNameInput}
               onChange={(e) => setBrandNameInput(e.target.value)}
               placeholder="WhatsApp CRM"
-              className="w-full px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
             />
           </div>
 
           <div className="flex justify-end">
-            <button
+            <GlassButton
               type="button"
               onClick={() => {
                 setBrandName(brandNameInput);
                 toast.success('Nome atualizado');
               }}
-              className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors"
             >
               Aplicar
-            </button>
+            </GlassButton>
           </div>
         </div>
       </GlassCard>
@@ -332,7 +330,7 @@ const Settings = () => {
       <div className="space-y-6">
         {settingsSections.map((section) => (
           <GlassCard key={section.title} hover={false}>
-            <h3 className="text-lg font-semibold text-white px-4 pt-4 pb-2">{section.title}</h3>
+            <h3 className="wa-section-title px-4 pt-4 pb-2">{section.title}</h3>
             <div className="divide-y divide-white/5">
               {section.items.map((item) => (
                 <SettingItem key={item.title} {...item} />

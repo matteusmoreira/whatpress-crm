@@ -60,11 +60,11 @@ const SuperAdminDashboard = () => {
   }, [fetchTenants]);
 
   return (
-    <div className="min-h-screen p-6 lg:p-8">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard SuperAdmin</h1>
-        <p className="text-muted-foreground">Visão geral do sistema e acesso rápido às funcionalidades</p>
+      <div className="mb-8 pl-16 lg:pl-0">
+        <h1 className="wa-page-title">Dashboard SuperAdmin</h1>
+        <p className="wa-page-subtitle">Visão geral do sistema e acesso rápido às funcionalidades</p>
       </div>
 
       {/* KPIs */}
@@ -98,7 +98,7 @@ const SuperAdminDashboard = () => {
 
       {/* Quick Access */}
       <div className="mb-8">
-        <h2 className="text-xl font-semibold text-foreground mb-4">Acesso Rápido</h2>
+        <h2 className="wa-section-title mb-4">Acesso Rápido</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <QuickAccessCard
             to="/superadmin/tenants"

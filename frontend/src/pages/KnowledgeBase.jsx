@@ -214,7 +214,7 @@ const ArticleFormModal = ({ isOpen, onClose, onSave, editingArticle, categories 
                     <h2 className="text-lg font-semibold text-white">
                         {editingArticle ? 'Editar Artigo' : 'Novo Artigo'}
                     </h2>
-                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-white/60">
+                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -428,15 +428,15 @@ const KnowledgeBase = () => {
     };
 
     return (
-        <div className="p-6 overflow-y-auto h-full">
+        <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto h-full">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 pl-16 lg:pl-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <h1 className="wa-page-title flex items-center gap-2">
                         <BookOpen className="w-8 h-8 text-emerald-400" />
                         Base de Conhecimento
                     </h1>
-                    <p className="text-white/50 mt-1">Artigos, FAQs e documentação</p>
+                    <p className="wa-page-subtitle">Artigos, FAQs e documentação</p>
                 </div>
                 {activeTab === 'articles' && (
                     <GlassButton onClick={() => { setEditingArticle(null); setShowArticleForm(true); }}>

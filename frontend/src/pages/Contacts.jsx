@@ -878,12 +878,12 @@ const Contacts = () => {
     }, [columnIdsForBoard, kanbanColumns, kanbanContacts, kanbanOrderByColumn, persistKanbanState, reconcileOrderByColumn, viewMode]);
 
     return (
-        <div className="h-full min-h-0 flex flex-col p-4 lg:p-6">
+        <div className="h-full min-h-0 flex flex-col p-4 sm:p-5 lg:p-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pl-16 lg:pl-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Contatos</h1>
-                    <p className="text-white/60 text-sm mt-1">
+                    <h1 className="wa-page-title">Contatos</h1>
+                    <p className="wa-page-subtitle">
                         {headerTotal} contato{headerTotal !== 1 ? 's' : ''} encontrado{headerTotal !== 1 ? 's' : ''}
                     </p>
                 </div>
@@ -894,7 +894,7 @@ const Contacts = () => {
                             onClick={() => setViewMode('list')}
                             aria-pressed={viewMode === 'list'}
                             className={cn(
-                                'p-2 rounded-lg transition-colors',
+                                'p-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                                 viewMode === 'list'
                                     ? 'bg-white/10 text-white'
                                     : 'text-white/60 hover:bg-white/10 hover:text-white'
@@ -908,7 +908,7 @@ const Contacts = () => {
                             onClick={() => setViewMode('grid')}
                             aria-pressed={viewMode === 'grid'}
                             className={cn(
-                                'p-2 rounded-lg transition-colors',
+                                'p-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                                 viewMode === 'grid'
                                     ? 'bg-white/10 text-white'
                                     : 'text-white/60 hover:bg-white/10 hover:text-white'
@@ -922,7 +922,7 @@ const Contacts = () => {
                             onClick={() => setViewMode('kanban')}
                             aria-pressed={viewMode === 'kanban'}
                             className={cn(
-                                'p-2 rounded-lg transition-colors',
+                                'p-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                                 viewMode === 'kanban'
                                     ? 'bg-white/10 text-white'
                                     : 'text-white/60 hover:bg-white/10 hover:text-white'

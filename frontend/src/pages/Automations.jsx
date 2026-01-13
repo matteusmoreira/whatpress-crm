@@ -421,15 +421,15 @@ const Automations = () => {
     };
 
     return (
-        <div className="p-6 overflow-y-auto h-full">
+        <div className="p-4 sm:p-5 lg:p-6 overflow-y-auto h-full">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 pl-16 lg:pl-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <h1 className="wa-page-title flex items-center gap-2">
                         <Bot className="w-8 h-8 text-emerald-400" />
                         Automações
                     </h1>
-                    <p className="text-white/50 mt-1">Configure mensagens automáticas para seu atendimento</p>
+                    <p className="wa-page-subtitle">Configure mensagens automáticas para seu atendimento</p>
                 </div>
                 <GlassButton onClick={() => setShowForm(true)}>
                     <Plus className="w-4 h-4 mr-2" />

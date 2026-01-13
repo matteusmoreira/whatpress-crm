@@ -1944,14 +1944,14 @@ const Inbox = () => {
       >
         {/* Header */}
         <div className="p-4 border-b border-white/10 wa-conversations-header">
-          <div className="flex items-center justify-between mb-4 pl-14 lg:pl-0">
-            <h1 className="text-xl font-bold text-white">Conversas</h1>
+          <div className="flex items-center justify-between mb-4 pl-16 lg:pl-0">
+            <h1 className="wa-panel-title">Conversas</h1>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowPurgeAllDialog(true)}
                 disabled={purgingAll || conversationsLoading || (conversations || []).length === 0}
                 className={cn(
-                  'p-2 rounded-lg transition-colors',
+                  'p-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                   'hover:bg-red-500/20 text-white/60 hover:text-red-200',
                   (purgingAll || conversationsLoading || (conversations || []).length === 0) && 'opacity-40 cursor-not-allowed hover:bg-transparent'
                 )}
@@ -2141,7 +2141,7 @@ const Inbox = () => {
               {/* Chat Header */}
               <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20 wa-chat-header">
                 <div className="flex items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 pl-14 lg:pl-0">
+                  <div className="flex items-center gap-3 pl-16 lg:pl-0">
                     <ContactAvatar
                       src={selectedConversation.contactAvatar}
                       name={selectedConversation.contactName}

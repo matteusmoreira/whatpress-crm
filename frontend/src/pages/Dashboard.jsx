@@ -289,12 +289,12 @@ const Dashboard = () => {
 
 
     return (
-        <div className="p-6 space-y-6 overflow-y-auto h-full">
+        <div className="p-4 sm:p-5 lg:p-6 space-y-5 lg:space-y-6 overflow-y-auto h-full">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pl-16 lg:pl-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-                    <p className="text-white/50">Visão geral do seu WhatsApp CRM</p>
+                    <h1 className="wa-page-title">Dashboard</h1>
+                    <p className="wa-page-subtitle">Visão geral do seu WhatsApp CRM</p>
                 </div>
             </div>
 

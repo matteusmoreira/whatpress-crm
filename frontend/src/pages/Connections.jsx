@@ -423,12 +423,12 @@ const Connections = () => {
   ];
 
   return (
-    <div className="min-h-screen p-6 lg:p-8 overflow-auto">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 overflow-auto">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8 pl-16 lg:pl-0">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Conexões WhatsApp</h1>
-          <p className="text-white/60">Gerencie suas conexões com diferentes provedores</p>
+          <h1 className="wa-page-title">Conexões WhatsApp</h1>
+          <p className="wa-page-subtitle">Gerencie suas conexões com diferentes provedores</p>
         </div>
         <GlassButton onClick={() => setShowCreateModal(true)} className="flex items-center gap-2">
           <Plus className="w-5 h-5" />

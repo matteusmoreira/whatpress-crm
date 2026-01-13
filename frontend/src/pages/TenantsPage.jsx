@@ -150,11 +150,11 @@ const TenantsPage = () => {
     };
 
     return (
-        <div className="min-h-screen p-6 lg:p-8">
+        <div className="min-h-screen p-4 sm:p-6 lg:p-8">
             {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-white mb-2">Gerenciar Tenants</h1>
-                <p className="text-white/60">Visualize e gerencie todos os tenants do sistema</p>
+            <div className="mb-8 pl-16 lg:pl-0">
+                <h1 className="wa-page-title">Gerenciar Tenants</h1>
+                <p className="wa-page-subtitle">Visualize e gerencie todos os tenants do sistema</p>
             </div>
 
             {/* Filters and Actions */}
@@ -173,7 +173,7 @@ const TenantsPage = () => {
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
-                        className="px-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        className="h-11 px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                     >
                         <option value="all" className="bg-emerald-900">Todos</option>
                         <option value="active" className="bg-emerald-900">Ativos</option>

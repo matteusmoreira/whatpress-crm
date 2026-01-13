@@ -45,7 +45,7 @@ code {
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
   }
 
   .dark {
@@ -121,11 +121,33 @@ code {
 /* Glassmorphism utilities */
 @layer utilities {
   .glass-card {
-    @apply backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 shadow-2xl shadow-emerald-500/10 rounded-3xl;
+    @apply backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 shadow-2xl shadow-emerald-500/10 rounded-2xl;
   }
 
   .glass-input {
     @apply bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder:text-white/50;
+  }
+}
+
+@layer components {
+  .wa-page-title {
+    @apply text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-foreground;
+  }
+
+  .wa-page-subtitle {
+    @apply mt-1 text-sm sm:text-base text-muted-foreground;
+  }
+
+  .wa-section-title {
+    @apply text-lg sm:text-xl font-semibold text-foreground;
+  }
+
+  .wa-panel-title {
+    @apply text-lg font-semibold text-foreground;
+  }
+
+  .wa-panel-subtitle {
+    @apply text-sm text-muted-foreground;
   }
 }
 
