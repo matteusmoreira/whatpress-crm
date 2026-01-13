@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import ReactFlow, {
+import {
+    ReactFlow,
     MiniMap,
     Controls,
     Background,
@@ -10,8 +11,8 @@ import ReactFlow, {
     applyEdgeChanges,
     Panel,
     ReactFlowProvider,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import './FlowBuilder.css';
 import { Plus, Save, Trash2, X, MessageSquare, Image, Clock, GitBranch, Variable, Webhook, ChevronRight, Play, Loader2, Search, Copy, Focus, RotateCcw } from 'lucide-react';
 import useFlowStore from '../store/flowStore';
@@ -712,10 +713,10 @@ const FlowBuilderInner = () => {
     };
 
     return (
-        <div className="flex h-full overflow-hidden">
+        <div className="flex flex-col lg:flex-row h-full overflow-hidden min-w-0">
             {/* Left Panel - Flow List */}
             <div className={cn(
-                "w-64 flex-shrink-0 border-r flex flex-col",
+                "w-full lg:w-64 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r max-h-[320px] lg:max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
@@ -821,7 +822,7 @@ const FlowBuilderInner = () => {
             </div>
 
             {/* Main Canvas */}
-            <div className="flex-1 relative" ref={reactFlowWrapperRef}>
+            <div className="flex-1 relative min-w-0 min-h-[360px] lg:min-h-0 p-2 lg:p-3" ref={reactFlowWrapperRef}>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -922,7 +923,7 @@ const FlowBuilderInner = () => {
 
             {/* Right Panel - Components Toolbar */}
             <div className={cn(
-                "w-80 flex-shrink-0 border-l flex flex-col",
+                "w-full lg:w-80 flex-shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l max-h-[45vh] lg:max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}

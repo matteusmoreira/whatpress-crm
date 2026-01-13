@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 
 const VariableNode = ({ data, selected }) => {
     const action = data.config?.action || 'set';
