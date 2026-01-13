@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   MessageSquare,
   Settings,
   Users,
+  ChevronLeft,
   LogOut,
   Menu,
   X,
@@ -31,9 +32,10 @@ import { toast } from '../ui/glass-toaster';
 
 const Sidebar = () => {
   const { user, logout } = useAuthStore();
-  const { sidebarCollapsed, toggleSidebar, conversations, brandName } = useAppStore();
+  const { sidebarCollapsed, toggleSidebar, conversations, brandName, selectedConversation, setSelectedConversation } = useAppStore();
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showSearch, setShowSearch] = useState(false);
 
   const handleLogout = () => {
@@ -81,10 +83,36 @@ const Sidebar = () => {
 
       {/* Mobile toggle button */}
       <button
-        onClick={toggleSidebar}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-emerald-600 text-white shadow-lg"
+        onClick={() => {
+          if (!sidebarCollapsed) {
+            toggleSidebar();
+            return;
+          }
+          const isInbox = location.pathname.startsWith('/app/inbox');
+          const hasOpenConversation = Boolean(isInbox && selectedConversation?.id);
+          if (hasOpenConversation) {
+            setSelectedConversation(null);
+            return;
+          }
+          toggleSidebar();
+        }}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-lg bg-emerald-600 text-white shadow-lg transition-all duration-200 ease-out hover:bg-emerald-500 active:scale-95 active:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
       >
-        {sidebarCollapsed ? <Menu size={24} /> : <X size={24} />}
+        {(() => {
+          const isInbox = location.pathname.startsWith('/app/inbox');
+          const hasOpenConversation = Boolean(isInbox && selectedConversation?.id);
+          const mode = !sidebarCollapsed ? 'close' : hasOpenConversation ? 'back' : 'menu';
+          const base = 'absolute inset-0 w-6 h-6 transition-all duration-200 ease-out';
+          const hidden = 'opacity-0 scale-95 translate-x-1';
+          const visible = 'opacity-100 scale-100 translate-x-0';
+          return (
+            <div className="relative w-6 h-6">
+              <ChevronLeft className={cn(base, mode === 'back' ? visible : hidden)} />
+              <Menu className={cn(base, mode === 'menu' ? visible : hidden)} />
+              <X className={cn(base, mode === 'close' ? visible : hidden)} />
+            </div>
+          );
+        })()}
       </button>
 
       {/* Overlay for mobile */}

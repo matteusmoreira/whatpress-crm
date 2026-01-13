@@ -1023,6 +1023,7 @@ const Inbox = () => {
     conversationFilter,
     fetchConversations,
     fetchConnections,
+    fetchMessages,
     setSelectedConversation,
     setConversationFilter,
     sendMessage,
@@ -1943,7 +1944,7 @@ const Inbox = () => {
       >
         {/* Header */}
         <div className="p-4 border-b border-white/10 wa-conversations-header">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 pl-14 lg:pl-0">
             <h1 className="text-xl font-bold text-white">Conversas</h1>
             <div className="flex items-center gap-2">
               <button
@@ -2140,14 +2141,7 @@ const Inbox = () => {
               {/* Chat Header */}
               <div className="p-4 border-b border-white/10 backdrop-blur-sm bg-black/20 wa-chat-header">
                 <div className="flex items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setSelectedConversation(null)}
-                      className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-                      title="Voltar"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
+                  <div className="flex items-center gap-3 pl-14 lg:pl-0">
                     <ContactAvatar
                       src={selectedConversation.contactAvatar}
                       name={selectedConversation.contactName}
