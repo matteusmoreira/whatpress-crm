@@ -731,7 +731,13 @@ const FlowBuilderInner = () => {
     };
 
     return (
-        <div className="flex flex-col lg:flex-row h-full min-h-0 overflow-hidden min-w-0">
+        <div className="p-4 lg:p-6 h-full min-h-0 min-w-0">
+            <div
+                className={cn(
+                    "flex flex-col lg:flex-row h-full min-h-0 overflow-hidden min-w-0 rounded-2xl border",
+                    isDark ? "bg-slate-900/30 border-white/10" : "bg-white border-slate-200 shadow-sm"
+                )}
+            >
             {/* Left Panel - Flow List */}
             <div className={cn(
                 "w-full lg:w-64 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r max-h-[320px] lg:max-h-none",
@@ -1278,6 +1284,7 @@ const FlowBuilderInner = () => {
                             : (currentFlow ? "Dica: use a busca para encontrar ações rápido" : "Selecione um fluxo para começar")}
                     </p>
                 </div>
+            </div>
             </div>
         </div>
     );
