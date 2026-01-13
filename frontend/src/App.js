@@ -22,7 +22,6 @@ const MaintenancePage = lazy(() => import("./pages/MaintenancePage"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Automations = lazy(() => import("./pages/Automations"));
-const Chatbot = lazy(() => import("./pages/Chatbot"));
 const Templates = lazy(() => import("./pages/Templates"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const Connections = lazy(() => import("./pages/Connections"));
@@ -118,7 +117,6 @@ function App() {
                   <Route path="inbox" element={<Inbox />} />
                   <Route path="contacts" element={<Contacts />} />
                   <Route path="automations" element={<Automations />} />
-                  <Route path="chatbot" element={<Chatbot />} />
                   <Route path="flows" element={<FlowBuilder />} />
                   <Route path="templates" element={<Templates />} />
                   <Route path="kb" element={<KnowledgeBase />} />

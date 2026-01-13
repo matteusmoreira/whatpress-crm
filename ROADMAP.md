@@ -93,7 +93,6 @@ Um sistema SaaS de CRM para WhatsApp com design glassmorphism, integração com 
 
 ### Automações (Janeiro 2026)
 - [x] **Mensagens Automáticas** - Welcome, away, keyword triggers
-- [x] **Chatbot Básico** - Flows, steps, menu de opções, transferência
 
 ---
 

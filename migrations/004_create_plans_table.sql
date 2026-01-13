@@ -37,10 +37,10 @@ CREATE POLICY "Service role full access plans" ON plans FOR ALL USING (true) WIT
 
 -- Inserir planos padrão
 INSERT INTO plans (name, slug, price, max_instances, max_messages_month, max_users, features) VALUES
-('Free', 'free', 0, 1, 500, 2, '{"chatbot": false, "automations": false, "kb": true}'),
-('Starter', 'starter', 49.90, 2, 5000, 5, '{"chatbot": true, "automations": true, "kb": true}'),
-('Pro', 'pro', 149.90, 5, 20000, 15, '{"chatbot": true, "automations": true, "kb": true, "api": true}'),
-('Enterprise', 'enterprise', 399.90, 0, 0, 0, '{"chatbot": true, "automations": true, "kb": true, "api": true, "whitelabel": true}')
+('Free', 'free', 0, 1, 500, 2, '{"automations": false, "kb": true}'),
+('Starter', 'starter', 49.90, 2, 5000, 5, '{"automations": true, "kb": true}'),
+('Pro', 'pro', 149.90, 5, 20000, 15, '{"automations": true, "kb": true, "api": true}'),
+('Enterprise', 'enterprise', 399.90, 0, 0, 0, '{"automations": true, "kb": true, "api": true, "whitelabel": true}')
 ON CONFLICT (slug) DO NOTHING;
 
 -- Atualizar tenants existentes para usar o plano correto baseado no campo 'plan' antigo

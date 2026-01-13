@@ -488,54 +488,6 @@ export const AutoMessagesAPI = {
   }
 };
 
-// Chatbot API
-export const ChatbotAPI = {
-  async listFlows(tenantId) {
-    const response = await apiClient.get('/chatbot/flows', { params: { tenant_id: tenantId } });
-    return response.data;
-  },
-
-  async getFlow(flowId) {
-    const response = await apiClient.get(`/chatbot/flows/${flowId}`);
-    return response.data;
-  },
-
-  async createFlow(tenantId, data) {
-    const response = await apiClient.post('/chatbot/flows', data, { params: { tenant_id: tenantId } });
-    return response.data;
-  },
-
-  async updateFlow(flowId, data) {
-    const response = await apiClient.put(`/chatbot/flows/${flowId}`, data);
-    return response.data;
-  },
-
-  async deleteFlow(flowId) {
-    const response = await apiClient.delete(`/chatbot/flows/${flowId}`);
-    return response.data;
-  },
-
-  async toggleFlow(flowId) {
-    const response = await apiClient.patch(`/chatbot/flows/${flowId}/toggle`);
-    return response.data;
-  },
-
-  async addStep(flowId, data) {
-    const response = await apiClient.post(`/chatbot/flows/${flowId}/steps`, data);
-    return response.data;
-  },
-
-  async updateStep(stepId, data) {
-    const response = await apiClient.put(`/chatbot/steps/${stepId}`, data);
-    return response.data;
-  },
-
-  async deleteStep(stepId) {
-    const response = await apiClient.delete(`/chatbot/steps/${stepId}`);
-    return response.data;
-  }
-};
-
 // Webhooks API
 export const WebhooksAPI = {
   async list(tenantId) {

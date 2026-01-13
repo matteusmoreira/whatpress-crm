@@ -23,6 +23,11 @@ const PlansPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingPlan, setEditingPlan] = useState(null);
+    const allowedFeatureKeys = ['automations', 'kb', 'api', 'whitelabel'];
+    const sanitizeFeatures = (features = {}) => {
+        const entries = Object.entries(features || {}).filter(([key]) => allowedFeatureKeys.includes(key));
+        return Object.fromEntries(entries);
+    };
     const [formData, setFormData] = useState({
         name: '',
         slug: '',
@@ -31,7 +36,6 @@ const PlansPage = () => {
         max_messages_month: 1000,
         max_users: 1,
         features: {
-            chatbot: false,
             automations: false,
             kb: true,
             api: false,
@@ -72,7 +76,7 @@ const PlansPage = () => {
                 max_instances: plan.maxInstances,
                 max_messages_month: plan.maxMessagesMonth,
                 max_users: plan.maxUsers,
-                features: plan.features || {},
+                features: sanitizeFeatures(plan.features),
                 is_active: plan.isActive
             });
         } else {
@@ -85,7 +89,6 @@ const PlansPage = () => {
                 max_messages_month: 1000,
                 max_users: 1,
                 features: {
-                    chatbot: false,
                     automations: false,
                     kb: true,
                     api: false,
@@ -230,11 +233,13 @@ const PlansPage = () => {
                             {/* Features */}
                             <div className="mt-4 pt-4 border-t border-white/10">
                                 <div className="flex flex-wrap gap-2">
-                                    {Object.entries(plan.features || {}).map(([key, value]) => (
+                                    {allowedFeatureKeys
+                                        .filter((key) => Object.prototype.hasOwnProperty.call(plan.features || {}, key))
+                                        .map((key) => (
                                         <GlassBadge
                                             key={key}
-                                            variant={value ? 'success' : 'danger'}
-                                            className={cn('px-2 py-1 text-xs font-medium rounded', !value && 'line-through')}
+                                            variant={plan.features?.[key] ? 'success' : 'danger'}
+                                            className={cn('px-2 py-1 text-xs font-medium rounded', !plan.features?.[key] && 'line-through')}
                                         >
                                             {key}
                                         </GlassBadge>
@@ -351,7 +356,7 @@ const PlansPage = () => {
                             <div>
                                 <label className="text-white/80 text-sm font-medium block mb-2">Recursos</label>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {['chatbot', 'automations', 'kb', 'api', 'whitelabel'].map((feature) => (
+                                    {['automations', 'kb', 'api', 'whitelabel'].map((feature) => (
                                         <button
                                             key={feature}
                                             type="button"
