@@ -311,6 +311,7 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const audioRef = useRef(null);
+  const loadLoggedRef = useRef({ url: '', success: false, error: false });
   const [readySrc, setReadySrc] = useState('');
   const [pendingPlay, setPendingPlay] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -328,6 +329,7 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
     setCurrentTime(0);
     setLoadError(false);
     setIsLoading(false);
+    loadLoggedRef.current = { url: '', success: false, error: false };
   }, [src]);
 
   useEffect(() => {
@@ -346,9 +348,49 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
       setIsLoading(false);
       setLoadError(true);
       setIsPlaying(false);
+      const url = (readySrc || src || '').trim();
+      if (url) {
+        if (loadLoggedRef.current.url !== url) loadLoggedRef.current = { url, success: false, error: false };
+        if (!loadLoggedRef.current.error) {
+          loadLoggedRef.current.error = true;
+          MediaAPI.logLoad({
+            url,
+            kind: 'audio',
+            messageId: meta?.message_id ?? meta?.messageId ?? null,
+            success: false,
+            error: 'audio_error',
+            ts: new Date().toISOString(),
+            extra: {
+              mimeType: meta?.mime_type ?? meta?.mimeType ?? meta?.mimetype ?? meta?.mime ?? null,
+              fileSize: meta?.file_size ?? meta?.fileSize ?? meta?.size ?? meta?.bytes ?? null
+            }
+          }).catch(() => {});
+        }
+      }
     };
     const handleWaiting = () => setIsLoading(true);
-    const handleCanPlay = () => setIsLoading(false);
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      const url = (readySrc || src || '').trim();
+      if (url) {
+        if (loadLoggedRef.current.url !== url) loadLoggedRef.current = { url, success: false, error: false };
+        if (!loadLoggedRef.current.success) {
+          loadLoggedRef.current.success = true;
+          MediaAPI.logLoad({
+            url,
+            kind: 'audio',
+            messageId: meta?.message_id ?? meta?.messageId ?? null,
+            success: true,
+            error: null,
+            ts: new Date().toISOString(),
+            extra: {
+              mimeType: meta?.mime_type ?? meta?.mimeType ?? meta?.mimetype ?? meta?.mime ?? null,
+              fileSize: meta?.file_size ?? meta?.fileSize ?? meta?.size ?? meta?.bytes ?? null
+            }
+          }).catch(() => {});
+        }
+      }
+    };
 
     a.addEventListener('loadedmetadata', handleLoadedMetadata);
     a.addEventListener('timeupdate', handleTimeUpdate);
@@ -371,7 +413,7 @@ const InlineAudioPlayer = ({ src, title, meta }) => {
       a.removeEventListener('waiting', handleWaiting);
       a.removeEventListener('canplay', handleCanPlay);
     };
-  }, [volume]);
+  }, [volume, readySrc, src, meta]);
 
   useEffect(() => {
     if (!pendingPlay) return;
@@ -621,6 +663,7 @@ const WhatsAppMediaDisplay = ({
   const [proxiedUrl, setProxiedUrl] = useState('');
   const [videoDuration, setVideoDuration] = useState(0);
   const [qualityUrl, setQualityUrl] = useState('');
+  const loadLoggedRef = useRef({ url: '', success: false, error: false });
 
   // Check if it's a WhatsApp CDN URL that might be expired
   const isWhatsAppUrl = mediaUrl && (
@@ -661,18 +704,43 @@ const WhatsAppMediaDisplay = ({
       } else {
         setLoading(false);
         setLoadError(true);
+        const url = String(mediaUrl || '').trim();
+        if (url) {
+          MediaAPI.logLoad({
+            url,
+            kind: type,
+            messageId: messageId ?? null,
+            success: false,
+            error: 'proxy_invalid_response',
+            ts: new Date().toISOString(),
+            extra: { proxied: false }
+          }).catch(() => {});
+        }
       }
     } catch {
       setLoading(false);
       setLoadError(true);
+      const url = String(mediaUrl || '').trim();
+      if (url) {
+        MediaAPI.logLoad({
+          url,
+          kind: type,
+          messageId: messageId ?? null,
+          success: false,
+          error: 'proxy_error',
+          ts: new Date().toISOString(),
+          extra: { proxied: false }
+        }).catch(() => {});
+      }
     }
-  }, [proxyInfo, canProxy, proxyTried]);
+  }, [proxyInfo, canProxy, proxyTried, mediaUrl, type, messageId]);
 
   useEffect(() => {
     setProxyTried(false);
     setProxiedUrl('');
     setLoadError(false);
     setLoading(true);
+    loadLoggedRef.current = { url: '', success: false, error: false };
   }, [mediaUrl, type]);
 
   useEffect(() => {
@@ -830,6 +898,22 @@ const WhatsAppMediaDisplay = ({
               onLoad={() => {
                 setLoading(false);
                 setLoadError(false);
+                const url = String(effectiveUrl || '').trim();
+                if (url) {
+                  if (loadLoggedRef.current.url !== url) loadLoggedRef.current = { url, success: false, error: false };
+                  if (!loadLoggedRef.current.success) {
+                    loadLoggedRef.current.success = true;
+                    MediaAPI.logLoad({
+                      url,
+                      kind: type,
+                      messageId: messageId ?? null,
+                      success: true,
+                      error: null,
+                      ts: new Date().toISOString(),
+                      extra: { proxied: Boolean(proxiedUrl) }
+                    }).catch(() => {});
+                  }
+                }
               }}
               onError={() => {
                 if ((isWhatsAppUrl || !mediaUrl) && canProxy && !proxyTried) {
@@ -838,6 +922,22 @@ const WhatsAppMediaDisplay = ({
                 }
                 setLoading(false);
                 setLoadError(true);
+                const url = String(effectiveUrl || mediaUrl || '').trim();
+                if (url) {
+                  if (loadLoggedRef.current.url !== url) loadLoggedRef.current = { url, success: false, error: false };
+                  if (!loadLoggedRef.current.error) {
+                    loadLoggedRef.current.error = true;
+                    MediaAPI.logLoad({
+                      url,
+                      kind: type,
+                      messageId: messageId ?? null,
+                      success: false,
+                      error: 'image_error',
+                      ts: new Date().toISOString(),
+                      extra: { proxied: Boolean(proxiedUrl) }
+                    }).catch(() => {});
+                  }
+                }
               }}
             />
           </button>
@@ -895,6 +995,22 @@ const WhatsAppMediaDisplay = ({
             const el = e.currentTarget;
             const dur = Number.isFinite(el.duration) ? el.duration : 0;
             if (dur > 0) setVideoDuration(dur);
+            const url = String(videoUrl || '').trim();
+            if (url) {
+              if (loadLoggedRef.current.url !== url) loadLoggedRef.current = { url, success: false, error: false };
+              if (!loadLoggedRef.current.success) {
+                loadLoggedRef.current.success = true;
+                MediaAPI.logLoad({
+                  url,
+                  kind: type,
+                  messageId: messageId ?? null,
+                  success: true,
+                  error: null,
+                  ts: new Date().toISOString(),
+                  extra: { proxied: Boolean(proxiedUrl), qualityUrl: qualityUrl || null }
+                }).catch(() => {});
+              }
+            }
           }}
           onError={() => {
             if (isWhatsAppUrl && canProxy && !proxyTried) {
@@ -903,6 +1019,22 @@ const WhatsAppMediaDisplay = ({
             }
             setLoading(false);
             setLoadError(true);
+            const url = String(videoUrl || effectiveUrl || mediaUrl || '').trim();
+            if (url) {
+              if (loadLoggedRef.current.url !== url) loadLoggedRef.current = { url, success: false, error: false };
+              if (!loadLoggedRef.current.error) {
+                loadLoggedRef.current.error = true;
+                MediaAPI.logLoad({
+                  url,
+                  kind: type,
+                  messageId: messageId ?? null,
+                  success: false,
+                  error: 'video_error',
+                  ts: new Date().toISOString(),
+                  extra: { proxied: Boolean(proxiedUrl), qualityUrl: qualityUrl || null }
+                }).catch(() => {});
+              }
+            }
           }}
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/70">

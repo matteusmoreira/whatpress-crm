@@ -897,3 +897,148 @@ def test_media_proxy_accepts_uuid_like_external_id_when_called_by_external_id(mo
     assert data.get("success") is True
     assert isinstance(data.get("dataUrl"), str)
     assert data["dataUrl"].startswith("data:image/png;base64,")
+
+
+@pytest.mark.anyio
+async def test_send_media_message_inserts_metadata_for_data_url(monkeypatch):
+    import base64
+    import backend.server as server
+
+    class _Bg:
+        def __init__(self):
+            self.calls = []
+
+        def add_task(self, fn, *args, **kwargs):
+            self.calls.append((fn, args, kwargs))
+
+    monkeypatch.setattr(server, "_require_conversation_access", lambda *_a, **_k: None)
+    monkeypatch.setattr(server, "_enforce_messages_limit", lambda *_a, **_k: None)
+    monkeypatch.setattr(server, "safe_insert_audit_log", lambda **_k: None)
+
+    inserted = {"message": None}
+
+    def table_handler(name, ops):
+        if name == "conversations":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(
+                        data=[
+                            {
+                                "id": "conv1",
+                                "tenant_id": "tenant1",
+                                "contact_phone": "5511999999999",
+                                "connections": {
+                                    "provider": "evolution",
+                                    "status": "connected",
+                                    "instance_name": "inst1",
+                                },
+                            }
+                        ]
+                    )
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "users":
+            return _Result(data=[])
+
+        if name == "messages":
+            for op in ops:
+                if op[0] == "insert":
+                    payload = dict(op[1])
+                    inserted["message"] = payload
+                    return _Result(data=[{"id": "msg1", "timestamp": "2025-01-01T00:00:00Z", **payload}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        if name == "tenants":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(data=[{"messages_this_month": 0}])
+                if op[0] == "update":
+                    return _Result(data=[{}])
+            return _Result(data=[])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+
+    png_head = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0d"
+        + b"IHDR"
+        + (100).to_bytes(4, "big", signed=False)
+        + (200).to_bytes(4, "big", signed=False)
+    )
+    b64 = base64.b64encode(png_head).decode("ascii")
+    url = f"data:image/png;base64,{b64}"
+
+    resp = await server.send_media_message(
+        conversation_id="conv1",
+        content="",
+        media_type="image",
+        media_url=url,
+        media_name="foto.png",
+        background_tasks=_Bg(),
+        payload={"user_id": "u1", "tenant_id": "tenant1"},
+    )
+
+    assert resp.get("status") == "sent"
+    assert inserted["message"] is not None
+    assert inserted["message"]["media_url"] == url
+    meta = inserted["message"].get("metadata") or {}
+    assert meta.get("media_kind") == "image"
+    assert meta.get("mime_type") == "image/png"
+    assert meta.get("file_name") == "foto.png"
+    assert meta.get("file_size") == len(png_head)
+    assert meta.get("width") == 100
+    assert meta.get("height") == 200
+    assert meta.get("instance_name") == "inst1"
+    assert meta.get("remote_jid") == "5511999999999@s.whatsapp.net"
+    assert meta.get("from_me") is True
+
+
+@pytest.mark.anyio
+async def test_send_media_message_rejects_oversize_data_url(monkeypatch):
+    import backend.server as server
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(server, "_require_conversation_access", lambda *_a, **_k: None)
+    monkeypatch.setattr(server, "_enforce_messages_limit", lambda *_a, **_k: None)
+
+    def table_handler(name, ops):
+        if name == "conversations":
+            for op in ops:
+                if op[0] == "select":
+                    return _Result(
+                        data=[
+                            {
+                                "id": "conv1",
+                                "tenant_id": "tenant1",
+                                "contact_phone": "5511999999999",
+                                "connections": {},
+                            }
+                        ]
+                    )
+            return _Result(data=[])
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+
+    max_size = 10 * 1024 * 1024
+    b64_len = (max_size * 4) // 3 + 16
+    url = "data:application/octet-stream;base64," + ("A" * b64_len)
+
+    with pytest.raises(HTTPException) as exc:
+        await server.send_media_message(
+            conversation_id="conv1",
+            content="",
+            media_type="document",
+            media_url=url,
+            media_name="x.bin",
+            background_tasks=None,
+            payload={"user_id": "u1", "tenant_id": "tenant1"},
+        )
+
+    assert exc.value.status_code == 400

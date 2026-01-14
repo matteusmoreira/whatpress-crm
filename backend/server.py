@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any, Tuple, Set
 import uuid
 from datetime import datetime, timedelta
+import httpx
 try:
     from .supabase_client import (
         supabase,
@@ -38,6 +39,7 @@ import base64
 import asyncio
 import re
 import time
+import hashlib
 from collections import deque
 from dataclasses import dataclass
 from typing import Callable
@@ -275,6 +277,7 @@ async def ensure_auto_messages_schema():
       IF to_regclass('public.messages') IS NOT NULL THEN
         ALTER TABLE messages ADD COLUMN IF NOT EXISTS external_id VARCHAR(255);
         ALTER TABLE messages ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+        ALTER TABLE messages ALTER COLUMN media_url TYPE TEXT;
 
         UPDATE messages
         SET type = 'text'
@@ -7210,6 +7213,189 @@ class FileUploadResponse(BaseModel):
     type: str
     size: int
 
+
+def _summarize_for_log(value: Any, max_len: int = 160) -> str:
+    s = str(value or "")
+    if not s:
+        return ""
+    if s.lower().startswith("data:"):
+        return f"data_url(len={len(s)})"
+    if len(s) <= max_len:
+        return s
+    return s[:max_len] + "…"
+
+
+def _sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _extract_image_dimensions(head: bytes) -> Tuple[Optional[int], Optional[int], Optional[str]]:
+    if not head:
+        return None, None, None
+
+    if head.startswith(b"\x89PNG\r\n\x1a\n") and len(head) >= 24:
+        if head[12:16] == b"IHDR" and len(head) >= 24:
+            w = int.from_bytes(head[16:20], "big", signed=False)
+            h = int.from_bytes(head[20:24], "big", signed=False)
+            if w > 0 and h > 0:
+                return w, h, "png"
+        return None, None, "png"
+
+    if (head.startswith(b"GIF87a") or head.startswith(b"GIF89a")) and len(head) >= 10:
+        w = int.from_bytes(head[6:8], "little", signed=False)
+        h = int.from_bytes(head[8:10], "little", signed=False)
+        if w > 0 and h > 0:
+            return w, h, "gif"
+        return None, None, "gif"
+
+    if head.startswith(b"\xFF\xD8\xFF"):
+        i = 2
+        n = len(head)
+        while i + 1 < n:
+            if head[i] != 0xFF:
+                i += 1
+                continue
+            while i < n and head[i] == 0xFF:
+                i += 1
+            if i >= n:
+                break
+            marker = head[i]
+            i += 1
+            if marker in {0xD8, 0xD9}:
+                continue
+            if marker == 0xDA:
+                break
+            if i + 1 >= n:
+                break
+            seg_len = int.from_bytes(head[i:i + 2], "big", signed=False)
+            if seg_len < 2:
+                break
+            seg_start = i + 2
+            if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+                if seg_start + 7 <= n:
+                    h = int.from_bytes(head[seg_start + 1:seg_start + 3], "big", signed=False)
+                    w = int.from_bytes(head[seg_start + 3:seg_start + 5], "big", signed=False)
+                    if w > 0 and h > 0:
+                        return w, h, "jpeg"
+                return None, None, "jpeg"
+            i = seg_start + (seg_len - 2)
+        return None, None, "jpeg"
+
+    if len(head) >= 16 and head[0:4] == b"RIFF" and head[8:12] == b"WEBP":
+        if len(head) >= 30 and head[12:16] == b"VP8X":
+            w = 1 + int.from_bytes(head[24:27], "little", signed=False)
+            h = 1 + int.from_bytes(head[27:30], "little", signed=False)
+            if w > 0 and h > 0:
+                return w, h, "webp"
+        return None, None, "webp"
+
+    return None, None, None
+
+
+def _log_media_event(event: str, fields: Dict[str, Any]) -> None:
+    safe_fields: Dict[str, Any] = {}
+    for k, v in (fields or {}).items():
+        if k in {"url", "media_url", "mediaUrl"}:
+            safe_fields[k] = _summarize_for_log(v, max_len=200)
+            safe_fields[f"{k}_len"] = len(str(v or ""))
+        else:
+            safe_fields[k] = v
+    try:
+        logger.info(json.dumps({"event": event, **safe_fields}, ensure_ascii=False))
+    except Exception:
+        logger.info(f"{event} {safe_fields}")
+
+
+def _estimate_base64_decoded_size(b64: str) -> int:
+    s = "".join((b64 or "").split())
+    if not s:
+        return 0
+    pad = 0
+    if s.endswith("=="):
+        pad = 2
+    elif s.endswith("="):
+        pad = 1
+    return max(0, (len(s) * 3) // 4 - pad)
+
+
+def _decode_base64_head(b64: str, max_bytes: int = 2048) -> bytes:
+    s = "".join((b64 or "").split())
+    if not s or max_bytes <= 0:
+        return b""
+    needed_chars = ((max_bytes * 4 + 2) // 3 + 3) // 4 * 4
+    prefix = s[:needed_chars]
+    prefix = prefix + ("=" * ((-len(prefix)) % 4))
+    try:
+        decoded = base64.b64decode(prefix, validate=False)
+        return (decoded or b"")[:max_bytes]
+    except Exception:
+        return b""
+
+
+def _parse_data_url(url: str) -> Tuple[Optional[str], Optional[str]]:
+    u = str(url or "").strip()
+    if not u.lower().startswith("data:"):
+        return None, None
+    if ";base64," not in u:
+        return None, None
+    try:
+        header, b64 = u.split(",", 1)
+    except Exception:
+        return None, None
+    mime = None
+    try:
+        if header.lower().startswith("data:"):
+            mime = header[5:].split(";", 1)[0].strip().lower() or None
+    except Exception:
+        mime = None
+    return mime, (b64 or "").strip() or None
+
+
+def _derive_media_metadata_from_url(
+    *,
+    media_type: str,
+    media_url: str,
+    media_name: str,
+    max_size_bytes: int = 10 * 1024 * 1024,
+) -> Dict[str, Any]:
+    mt = str(media_type or "").strip().lower()
+    name = str(media_name or "").strip()
+    url = str(media_url or "").strip()
+
+    declared_mime = None
+    head = b""
+    size = None
+
+    data_mime, data_b64 = _parse_data_url(url)
+    if data_mime and data_b64:
+        declared_mime = data_mime
+        size = _estimate_base64_decoded_size(data_b64)
+        if size > max_size_bytes:
+            raise HTTPException(status_code=400, detail="Arquivo muito grande. Máximo: 10MB")
+        head = _decode_base64_head(data_b64, max_bytes=2048)
+
+    detected = detect_media_kind(
+        declared_mime_type=declared_mime,
+        filename=name or None,
+        head_bytes=(head[:96] if head else b""),
+        hinted_kind=(mt if mt in {"image", "video", "audio", "document", "sticker"} else None),
+    )
+    w, h, fmt = _extract_image_dimensions(head[:96] if head else b"")
+    meta: Dict[str, Any] = {
+        "media_kind": detected.kind,
+        "mime_type": detected.mime_type,
+        "file_name": name or None,
+    }
+    if size is not None:
+        meta["file_size"] = size
+    if w is not None:
+        meta["width"] = w
+    if h is not None:
+        meta["height"] = h
+    if fmt is not None:
+        meta["format"] = fmt
+    return meta
+
 @api_router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(
     file: UploadFile = File(...),
@@ -7219,13 +7405,52 @@ async def upload_file(
     """Upload a file and return its URL"""
     try:
         _require_conversation_access(conversation_id, payload)
+        upload_id = str(uuid.uuid4())
         # Read file content
         content = await file.read()
         file_size = len(content)
+        head = content[:96] if isinstance(content, (bytes, bytearray)) else b""
+        declared_ct = file.content_type
+        filename = file.filename
+        ext = ""
+        try:
+            ext = (Path(filename).suffix or "").lower()
+        except Exception:
+            ext = ""
+        sha256 = _sha256_hex(content) if isinstance(content, (bytes, bytearray)) else ""
+        w, h, fmt = _extract_image_dimensions(head)
+
+        _log_media_event(
+            "upload.attempt",
+            {
+                "upload_id": upload_id,
+                "conversation_id": conversation_id,
+                "tenant_id": payload.get("tenant_id"),
+                "user_id": payload.get("user_id"),
+                "filename": filename,
+                "ext": ext,
+                "declared_content_type": declared_ct,
+                "size": file_size,
+                "sha256": sha256,
+                "width": w,
+                "height": h,
+                "format": fmt,
+            },
+        )
         
         # Validate file size (10MB max)
         max_size = 10 * 1024 * 1024
         if file_size > max_size:
+            _log_media_event(
+                "upload.rejected",
+                {
+                    "upload_id": upload_id,
+                    "reason": "file_too_large",
+                    "filename": filename,
+                    "size": file_size,
+                    "max_size": max_size,
+                },
+            )
             raise HTTPException(status_code=400, detail="Arquivo muito grande. Máximo: 10MB")
         
         # Generate unique filename
@@ -7235,7 +7460,7 @@ async def upload_file(
         detected = detect_media_kind(
             declared_mime_type=file.content_type,
             filename=file.filename,
-            head_bytes=content[:96] if isinstance(content, (bytes, bytearray)) else b"",
+            head_bytes=head,
         )
         file_type = detected.kind if detected.kind in {'image', 'video', 'audio', 'document', 'sticker'} else 'document'
         content_type = detected.mime_type or (file.content_type or 'application/octet-stream')
@@ -7264,12 +7489,49 @@ async def upload_file(
             
             # Get public URL
             public_url = supabase.storage.from_('uploads').get_public_url(storage_path)
+
+            _log_media_event(
+                "upload.storage.success",
+                {
+                    "upload_id": upload_id,
+                    "bucket": "uploads",
+                    "storage_path": storage_path,
+                    "file_type": file_type,
+                    "content_type": content_type,
+                    "result_type": str(type(result)),
+                    "url": public_url,
+                },
+            )
             
         except Exception as storage_error:
-            logger.warning(f"Supabase storage error: {storage_error}")
+            _log_media_event(
+                "upload.storage.failure",
+                {
+                    "upload_id": upload_id,
+                    "bucket": "uploads",
+                    "storage_path": storage_path,
+                    "file_type": file_type,
+                    "content_type": content_type,
+                    "error": str(storage_error),
+                    "error_type": str(type(storage_error)),
+                },
+            )
             # Fallback: encode as base64 and store in database or return as data URL
             encoded = base64.b64encode(content).decode('utf-8')
             public_url = f"data:{content_type};base64,{encoded}"
+
+        _log_media_event(
+            "upload.success",
+            {
+                "upload_id": upload_id,
+                "filename": filename,
+                "file_type": file_type,
+                "content_type": content_type,
+                "size": file_size,
+                "sha256": sha256,
+                "url": public_url,
+            },
+        )
         
         return {
             "id": str(uuid.uuid4()),
@@ -7282,8 +7544,167 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"File upload error: {e}")
+        _log_media_event(
+            "upload.error",
+            {
+                "conversation_id": conversation_id,
+                "tenant_id": payload.get("tenant_id") if isinstance(payload, dict) else None,
+                "user_id": payload.get("user_id") if isinstance(payload, dict) else None,
+                "error": str(e),
+                "error_type": str(type(e)),
+            },
+        )
         raise HTTPException(status_code=500, detail=f"Erro ao fazer upload: {str(e)}")
+
+
+class MediaInspectRequest(BaseModel):
+    url: str
+
+
+@api_router.post("/media/inspect")
+async def inspect_media(request: MediaInspectRequest, payload: dict = Depends(verify_token)):
+    url = str(request.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url é obrigatório")
+
+    start = time.time()
+    _log_media_event(
+        "media.inspect.attempt",
+        {
+            "url": url,
+            "tenant_id": payload.get("tenant_id"),
+            "user_id": payload.get("user_id"),
+        },
+    )
+
+    def _infer_ext_from_url(u: str) -> str:
+        try:
+            path = u.split("?", 1)[0].split("#", 1)[0]
+            return (Path(path).suffix or "").lower()
+        except Exception:
+            return ""
+
+    ext = _infer_ext_from_url(url)
+    declared_mime = None
+    content_length = None
+    head = b""
+    sha256 = None
+    warnings: List[str] = []
+
+    if url.lower().startswith("data:") and ";base64," in url:
+        try:
+            header, b64 = url.split(",", 1)
+            declared_mime = header[5:].split(";", 1)[0].strip() if header.startswith("data:") else None
+            padded = b64.strip() + ("=" * ((4 - (len(b64.strip()) % 4)) % 4))
+            raw = base64.b64decode(padded, validate=False)
+            content_length = len(raw)
+            head = raw[:96]
+            sha256 = _sha256_hex(raw)
+        except Exception as e:
+            _log_media_event(
+                "media.inspect.failure",
+                {"url": url, "error": str(e), "error_type": str(type(e))},
+            )
+            raise HTTPException(status_code=400, detail="data URL inválida")
+    else:
+        if not (url.startswith("http://") or url.startswith("https://")):
+            raise HTTPException(status_code=400, detail="Apenas http(s) URLs ou data URLs são suportadas")
+        timeout = httpx.Timeout(10.0, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            try:
+                head_resp = await client.head(url)
+                declared_mime = (head_resp.headers.get("content-type") or "").split(";", 1)[0].strip() or None
+                cl = (head_resp.headers.get("content-length") or "").strip()
+                content_length = int(cl) if cl.isdigit() else None
+            except Exception:
+                declared_mime = None
+                content_length = None
+            try:
+                resp = await client.get(url, headers={"Range": "bytes=0-2047"})
+                resp.raise_for_status()
+                head = (resp.content or b"")[:96]
+            except Exception as e:
+                _log_media_event(
+                    "media.inspect.failure",
+                    {"url": url, "error": str(e), "error_type": str(type(e))},
+                )
+                raise HTTPException(status_code=502, detail="Falha ao buscar cabeçalho da mídia")
+
+    detected = detect_media_kind(declared_mime_type=declared_mime, filename=ext or None, head_bytes=head)
+    w, h, fmt = _extract_image_dimensions(head)
+
+    if ext and detected.mime_type and detected.mime_type.startswith("image/"):
+        expected_from_ext = detect_media_kind(filename=f"file{ext}").mime_type
+        if expected_from_ext and expected_from_ext != detected.mime_type:
+            warnings.append("extensao_nao_confere_com_conteudo")
+
+    if content_length is not None and content_length > 10 * 1024 * 1024:
+        warnings.append("acima_do_limite_10mb")
+
+    elapsed_ms = int((time.time() - start) * 1000)
+    _log_media_event(
+        "media.inspect.success",
+        {
+            "url": url,
+            "ext": ext,
+            "declared_mime": declared_mime,
+            "detected_mime": detected.mime_type,
+            "detected_kind": detected.kind,
+            "confidence": detected.confidence,
+            "size": content_length,
+            "width": w,
+            "height": h,
+            "format": fmt,
+            "sha256": sha256,
+            "warnings": warnings,
+            "duration_ms": elapsed_ms,
+        },
+    )
+
+    return {
+        "url": url,
+        "ext": ext,
+        "declaredMime": declared_mime,
+        "detectedMime": detected.mime_type,
+        "detectedKind": detected.kind,
+        "confidence": detected.confidence,
+        "size": content_length,
+        "width": w,
+        "height": h,
+        "format": fmt,
+        "sha256": sha256,
+        "warnings": warnings,
+        "durationMs": elapsed_ms,
+    }
+
+
+class MediaLoadLog(BaseModel):
+    url: str
+    kind: Optional[str] = None
+    messageId: Optional[str] = None
+    success: bool
+    error: Optional[str] = None
+    ts: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
+@api_router.post("/media/log")
+async def log_media_load(body: MediaLoadLog, payload: dict = Depends(verify_token)):
+    _log_media_event(
+        "media.load",
+        {
+            "success": bool(body.success),
+            "kind": body.kind,
+            "message_id": body.messageId,
+            "url": body.url,
+            "error": body.error,
+            "ts": body.ts,
+            "tenant_id": payload.get("tenant_id"),
+            "user_id": payload.get("user_id"),
+            "extra": body.extra or {},
+        },
+    )
+    return {"ok": True}
 
 @api_router.post("/messages/media")
 async def send_media_message(
@@ -7320,17 +7741,96 @@ async def send_media_message(
 
     _enforce_messages_limit(conversation.get('tenant_id'))
     
+    derived_meta: Dict[str, Any] = {}
+    try:
+        derived_meta = _derive_media_metadata_from_url(
+            media_type=media_type,
+            media_url=media_url,
+            media_name=media_name,
+            max_size_bytes=10 * 1024 * 1024,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_media_event(
+            "message.media.metadata_error",
+            {
+                "conversation_id": conversation_id,
+                "tenant_id": conversation.get("tenant_id"),
+                "user_id": payload.get("user_id") if isinstance(payload, dict) else None,
+                "media_type": media_type,
+                "media_name": media_name,
+                "media_url": media_url,
+                "error": str(e),
+                "error_type": str(type(e)),
+            },
+        )
+        derived_meta = {
+            "media_kind": str(media_type or "").strip().lower() or "document",
+            "mime_type": "",
+            "file_name": str(media_name or "").strip() or None,
+        }
+
+    _log_media_event(
+        "message.media.attempt",
+        {
+            "conversation_id": conversation_id,
+            "tenant_id": conversation.get("tenant_id"),
+            "user_id": payload.get("user_id") if isinstance(payload, dict) else None,
+            "media_type": media_type,
+            "media_name": media_name,
+            "media_url": media_url,
+            "meta_kind": derived_meta.get("media_kind"),
+            "meta_mime": derived_meta.get("mime_type"),
+            "meta_size": derived_meta.get("file_size"),
+            "meta_width": derived_meta.get("width"),
+            "meta_height": derived_meta.get("height"),
+        },
+    )
+
     # Save message to database
+    connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
+    connection_status = (connection.get('status') if isinstance(connection, dict) else None)
+    is_evolution = str(connection_provider or '').lower() == 'evolution'
+    is_connected = str(connection_status or '').lower() in ['connected', 'open']
+    instance_name = connection.get('instance_name') if isinstance(connection, dict) else None
+    remote_jid_value = f"{conversation.get('contact_phone')}@s.whatsapp.net" if conversation.get('contact_phone') else None
+
+    insert_meta = dict(derived_meta or {})
+    if connection and is_evolution and is_connected and instance_name:
+        insert_meta.update(
+            {
+                "remote_jid": remote_jid_value,
+                "instance_name": instance_name,
+                "from_me": True,
+            }
+        )
+
     data = {
         'conversation_id': conversation_id,
         'content': message_content,
         'type': media_type,
         'direction': 'outbound',
         'status': 'sent',
-        'media_url': media_url
+        'media_url': media_url,
+        'metadata': insert_meta,
     }
     
     result = supabase.table('messages').insert(data).execute()
+    _log_media_event(
+        "message.media.inserted",
+        {
+            "conversation_id": conversation_id,
+            "tenant_id": conversation.get("tenant_id"),
+            "message_id": (result.data[0].get("id") if result and result.data else None),
+            "media_type": media_type,
+            "media_name": media_name,
+            "media_url": media_url,
+            "meta_kind": insert_meta.get("media_kind"),
+            "meta_mime": insert_meta.get("mime_type"),
+            "meta_size": insert_meta.get("file_size"),
+        },
+    )
     
     # Update conversation
     supabase.table('conversations').update({
@@ -7351,28 +7851,20 @@ async def send_media_message(
         action='message.media_sent',
         entity_type='message',
         entity_id=(result.data[0]['id'] if result.data else None),
-        metadata={'conversation_id': conversation_id, 'type': media_type, 'media_url': media_url}
+        metadata={
+            'conversation_id': conversation_id,
+            'type': media_type,
+            'media_name': media_name,
+            'media_url': _summarize_for_log(media_url, max_len=200),
+            'media_url_len': len(str(media_url or '')),
+            'mime_type': insert_meta.get('mime_type'),
+            'media_kind': insert_meta.get('media_kind'),
+            'file_size': insert_meta.get('file_size'),
+        }
     )
     
-    connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
-    connection_status = (connection.get('status') if isinstance(connection, dict) else None)
-    is_evolution = str(connection_provider or '').lower() == 'evolution'
-    is_connected = str(connection_status or '').lower() in ['connected', 'open']
-    instance_name = connection.get('instance_name') if isinstance(connection, dict) else None
-    remote_jid_value = f"{conversation.get('contact_phone')}@s.whatsapp.net" if conversation.get('contact_phone') else None
-
     status = 'sent'
     if connection and is_evolution and is_connected and connection.get('instance_name'):
-        try:
-            meta_row = {
-                "remote_jid": remote_jid_value,
-                "instance_name": instance_name,
-                "from_me": True,
-                "media_kind": (media_type or '').lower() or 'document',
-            }
-            supabase.table('messages').update({'metadata': meta_row}).eq('id', result.data[0]['id']).execute()
-        except Exception:
-            pass
         if background_tasks:
             background_tasks.add_task(
                 send_whatsapp_media,
@@ -7868,6 +8360,7 @@ async def startup_event():
     ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_include_title BOOLEAN DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_include_department BOOLEAN DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+    ALTER TABLE messages ALTER COLUMN media_url TYPE TEXT;
     """
     try:
         supabase.rpc('exec_sql', {'sql': sql}).execute()

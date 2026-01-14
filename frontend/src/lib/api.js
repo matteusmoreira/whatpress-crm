@@ -798,6 +798,24 @@ export const MediaAPI = {
       }
     });
     return response.data;
+  },
+
+  async logLoad({ url, kind = null, messageId = null, success, error = null, ts = null, extra = null }) {
+    const response = await apiClient.post('/media/log', {
+      url,
+      kind,
+      messageId,
+      success: Boolean(success),
+      error,
+      ts,
+      extra
+    });
+    return response.data;
+  },
+
+  async inspect({ url }) {
+    const response = await apiClient.post('/media/inspect', { url });
+    return response.data;
   }
 };
 

@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS messages (
     type VARCHAR(50) DEFAULT 'text',
     direction VARCHAR(50) NOT NULL,
     status VARCHAR(50) DEFAULT 'sent',
-    media_url VARCHAR(512),
+    media_url TEXT,
     external_id VARCHAR(255),
     metadata JSONB DEFAULT '{}'::jsonb,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
