@@ -97,7 +97,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOW_ORIGINS,
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -4616,19 +4616,80 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
 async def send_whatsapp_message(instance_name: str, phone: str, content: str, msg_type: str, message_id: str):
     """Background task to send WhatsApp message"""
     try:
+        def _extract_sent_message_id(obj: Any) -> Optional[str]:
+            seen: Set[int] = set()
+
+            def _walk(node: Any, depth: int = 0) -> Optional[str]:
+                if node is None or depth > 6:
+                    return None
+                try:
+                    node_id = id(node)
+                    if node_id in seen:
+                        return None
+                    seen.add(node_id)
+                except Exception:
+                    pass
+
+                if isinstance(node, dict):
+                    key = node.get("key")
+                    if isinstance(key, dict):
+                        v = key.get("id")
+                        if isinstance(v, str) and v.strip():
+                            return v.strip()
+                    for k in ("message_id", "messageId", "stanzaId", "id"):
+                        v = node.get(k)
+                        if isinstance(v, str) and v.strip():
+                            return v.strip()
+                    for k in ("data", "message", "result", "response"):
+                        if k in node:
+                            found = _walk(node.get(k), depth + 1)
+                            if found:
+                                return found
+                    for v in node.values():
+                        found = _walk(v, depth + 1)
+                        if found:
+                            return found
+                    return None
+
+                if isinstance(node, list):
+                    for v in node:
+                        found = _walk(v, depth + 1)
+                        if found:
+                            return found
+                    return None
+
+                return None
+
+            return _walk(obj, 0)
+
+        def _read_message_metadata() -> dict:
+            try:
+                row = supabase.table("messages").select("metadata").eq("id", message_id).limit(1).execute()
+                if row.data and isinstance(row.data[0].get("metadata"), dict):
+                    return row.data[0].get("metadata") or {}
+            except Exception:
+                return {}
+            return {}
+
+        result = None
         if msg_type == 'text':
-            await evolution_api.send_text(instance_name, phone, content)
+            result = await evolution_api.send_text(instance_name, phone, content)
         elif msg_type == 'image':
-            await evolution_api.send_media(instance_name, phone, 'image', media_url=content)
+            result = await evolution_api.send_media(instance_name, phone, 'image', media_url=content)
         elif msg_type == 'audio':
-            await evolution_api.send_audio(instance_name, phone, content)
+            result = await evolution_api.send_audio(instance_name, phone, content)
         elif msg_type == 'document':
-            await evolution_api.send_media(instance_name, phone, 'document', media_url=content)
+            result = await evolution_api.send_media(instance_name, phone, 'document', media_url=content)
         elif msg_type == 'sticker':
-            await evolution_api.send_sticker(instance_name, phone, content)
+            result = await evolution_api.send_sticker(instance_name, phone, content)
         
-        # Update message status to delivered
-        supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
+        external_id = _extract_sent_message_id(result)
+        if external_id:
+            current_meta = _read_message_metadata()
+            next_meta = {**current_meta, "message_id": external_id}
+            supabase.table('messages').update({'status': 'delivered', 'external_id': external_id, 'metadata': next_meta}).eq('id', message_id).execute()
+        else:
+            supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
     except Exception as e:
         logger.error(f"Failed to send WhatsApp message: {e}")
         supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
@@ -5561,6 +5622,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         'remote_jid': parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
                         'instance_name': instance_name,
                         'from_me': is_from_me,
+                        'message_id': parsed.get('message_id'),
                         'media_kind': parsed.get('media_kind') or message_type_to_store,
                         'mime_type': detected_mime_type
                     }
@@ -7294,9 +7356,21 @@ async def send_media_message(
     connection_status = (connection.get('status') if isinstance(connection, dict) else None)
     is_evolution = str(connection_provider or '').lower() == 'evolution'
     is_connected = str(connection_status or '').lower() in ['connected', 'open']
+    instance_name = connection.get('instance_name') if isinstance(connection, dict) else None
+    remote_jid_value = f"{conversation.get('contact_phone')}@s.whatsapp.net" if conversation.get('contact_phone') else None
 
     status = 'sent'
     if connection and is_evolution and is_connected and connection.get('instance_name'):
+        try:
+            meta_row = {
+                "remote_jid": remote_jid_value,
+                "instance_name": instance_name,
+                "from_me": True,
+                "media_kind": (media_type or '').lower() or 'document',
+            }
+            supabase.table('messages').update({'metadata': meta_row}).eq('id', result.data[0]['id']).execute()
+        except Exception:
+            pass
         if background_tasks:
             background_tasks.add_task(
                 send_whatsapp_media,
@@ -7337,6 +7411,61 @@ async def send_media_message(
 async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, *rest):
     """Background task to send WhatsApp media"""
     try:
+        def _extract_sent_message_id(obj: Any) -> Optional[str]:
+            seen: Set[int] = set()
+
+            def _walk(node: Any, depth: int = 0) -> Optional[str]:
+                if node is None or depth > 6:
+                    return None
+                try:
+                    node_id = id(node)
+                    if node_id in seen:
+                        return None
+                    seen.add(node_id)
+                except Exception:
+                    pass
+
+                if isinstance(node, dict):
+                    key = node.get("key")
+                    if isinstance(key, dict):
+                        v = key.get("id")
+                        if isinstance(v, str) and v.strip():
+                            return v.strip()
+                    for k in ("message_id", "messageId", "stanzaId", "id"):
+                        v = node.get(k)
+                        if isinstance(v, str) and v.strip():
+                            return v.strip()
+                    for k in ("data", "message", "result", "response"):
+                        if k in node:
+                            found = _walk(node.get(k), depth + 1)
+                            if found:
+                                return found
+                    for v in node.values():
+                        found = _walk(v, depth + 1)
+                        if found:
+                            return found
+                    return None
+
+                if isinstance(node, list):
+                    for v in node:
+                        found = _walk(v, depth + 1)
+                        if found:
+                            return found
+                    return None
+
+                return None
+
+            return _walk(obj, 0)
+
+        def _read_message_metadata(message_id: str) -> dict:
+            try:
+                row = supabase.table("messages").select("metadata").eq("id", message_id).limit(1).execute()
+                if row.data and isinstance(row.data[0].get("metadata"), dict):
+                    return row.data[0].get("metadata") or {}
+            except Exception:
+                return {}
+            return {}
+
         filename = None
         message_id = None
         if len(rest) == 1:
@@ -7356,13 +7485,14 @@ async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, m
             except Exception:
                 base64_payload = None
 
+        result = None
         if mt == 'sticker':
-            await evolution_api.send_sticker(instance_name, phone, base64_payload or media_str)
+            result = await evolution_api.send_sticker(instance_name, phone, base64_payload or media_str)
         elif mt == 'audio':
             if base64_payload:
-                await evolution_api.send_media(instance_name, phone, 'audio', media_base64=base64_payload, caption=caption or '', filename=filename)
+                result = await evolution_api.send_media(instance_name, phone, 'audio', media_base64=base64_payload, caption=caption or '', filename=filename)
             else:
-                await evolution_api.send_audio(instance_name, phone, media_str)
+                result = await evolution_api.send_audio(instance_name, phone, media_str)
         else:
             send_kwargs = {
                 "instance_name": instance_name,
@@ -7376,10 +7506,16 @@ async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, m
                 send_kwargs["media_url"] = media_str
             if filename:
                 send_kwargs["filename"] = filename
-            await evolution_api.send_media(**send_kwargs)
+            result = await evolution_api.send_media(**send_kwargs)
 
         if message_id:
-            supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
+            external_id = _extract_sent_message_id(result)
+            if external_id:
+                current_meta = _read_message_metadata(message_id)
+                next_meta = {**current_meta, "message_id": external_id}
+                supabase.table('messages').update({'status': 'delivered', 'external_id': external_id, 'metadata': next_meta}).eq('id', message_id).execute()
+            else:
+                supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
     except Exception as e:
         logger.error(f"Failed to send WhatsApp media: {e}")
         try:
