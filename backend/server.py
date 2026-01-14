@@ -53,6 +53,7 @@ app = FastAPI(title="WhatsApp CRM API")
 def resolve_cors_allow_origins() -> List[str]:
     required = [
         "https://whatpress-crm.vercel.app",
+        "https://crm.altartech.com.br",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
@@ -90,7 +91,8 @@ def resolve_cors_allow_origins() -> List[str]:
 
 CORS_ALLOW_ORIGINS = resolve_cors_allow_origins()
 CORS_ALLOW_ORIGIN_REGEX = os.getenv(
-    "CORS_ALLOW_ORIGIN_REGEX", r"^https://(.*\.)?whatpress-crm(-.*)?\.vercel\.app$"
+    "CORS_ALLOW_ORIGIN_REGEX",
+    r"^https://((.*\.)?whatpress-crm(-.*)?\.vercel\.app|crm\.altartech\.com\.br)$",
 )
 
 app.add_middleware(
