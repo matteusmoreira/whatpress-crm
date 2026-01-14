@@ -7642,127 +7642,132 @@ async def proxy_whatsapp_media(
 
             external_id = (row.get('external_id') or '').strip() if isinstance(row.get('external_id'), str) else (row.get('external_id') or '')
             if external_id:
-                evo_message_id = external_id
+                evo_message_id = str(external_id).strip()
 
-        # Try to get media from message content/metadata if external_id is not available
-        if _looks_like_uuid(evo_message_id):
-            # Try to extract media URL from message content or metadata as fallback
-            media_url = None
-            mimetype_hint = None
-            msg_type = 'unknown'
-            extracted_provider_id = None
+        # Try to extract media URL and provider message id from stored message data.
+        media_url = None
+        mimetype_hint = None
+        msg_type = 'unknown'
+        extracted_provider_id = None
+        internal_message_uuid = row.get('id') if isinstance(row, dict) else None
 
-            def _is_plausible_provider_id(value: Any) -> bool:
-                s = str(value or "").strip()
-                if not s:
-                    return False
-                if _looks_like_uuid(s):
-                    return False
-                lowered = s.lower()
-                if lowered.startswith("http://") or lowered.startswith("https://"):
-                    return False
-                if lowered.startswith("data:"):
-                    return False
-                if "@" in s:
-                    return False
-                if any(ch.isspace() for ch in s):
-                    return False
-                if len(s) < 8 or len(s) > 160:
-                    return False
-                return True
+        def _is_plausible_provider_id(value: Any) -> bool:
+            s = str(value or "").strip()
+            if not s:
+                return False
+            lowered = s.lower()
+            if lowered.startswith("http://") or lowered.startswith("https://"):
+                return False
+            if lowered.startswith("data:"):
+                return False
+            if "@" in s:
+                return False
+            if any(ch.isspace() for ch in s):
+                return False
+            if len(s) < 8 or len(s) > 160:
+                return False
+            return True
 
-            def _find_provider_id(node: Any, depth: int = 0) -> Optional[str]:
-                if depth > 5:
-                    return None
-                if isinstance(node, dict):
-                    for k in ("external_id", "externalId", "message_id", "messageId", "id", "stanzaId"):
-                        if k in node and _is_plausible_provider_id(node.get(k)):
-                            return str(node.get(k)).strip()
-                    key_node = node.get("key")
-                    if isinstance(key_node, dict):
-                        if _is_plausible_provider_id(key_node.get("id")):
-                            return str(key_node.get("id")).strip()
-                    for v in node.values():
-                        found = _find_provider_id(v, depth + 1)
-                        if found:
-                            return found
-                if isinstance(node, list):
-                    for v in node:
-                        found = _find_provider_id(v, depth + 1)
-                        if found:
-                            return found
+        def _find_provider_id(node: Any, depth: int = 0) -> Optional[str]:
+            if depth > 5:
                 return None
+            if isinstance(node, dict):
+                for k in ("external_id", "externalId", "message_id", "messageId", "id", "stanzaId"):
+                    if k in node and _is_plausible_provider_id(node.get(k)):
+                        return str(node.get(k)).strip()
+                key_node = node.get("key")
+                if isinstance(key_node, dict):
+                    if _is_plausible_provider_id(key_node.get("id")):
+                        return str(key_node.get("id")).strip()
+                for v in node.values():
+                    found = _find_provider_id(v, depth + 1)
+                    if found:
+                        return found
+            if isinstance(node, list):
+                for v in node:
+                    found = _find_provider_id(v, depth + 1)
+                    if found:
+                        return found
+            return None
             
-            try:
-                # Query message data to check for stored media URL
-                msg_full = supabase.table('messages').select('content, type, metadata, media_url, external_id').eq('id', message_id).limit(1).execute()
-                if msg_full.data:
-                    msg_data = msg_full.data[0]
-                    content = msg_data.get('content')
-                    metadata = msg_data.get('metadata') or {}
-                    msg_type = msg_data.get('type') or 'unknown'
-                    stored_media_url = msg_data.get('media_url')
-                    extracted_provider_id = _find_provider_id(msg_data) or _find_provider_id(metadata) or _find_provider_id(content)
-                    
-                    # Priority 1: Check media_url field directly (Supabase Storage URL)
-                    if stored_media_url and isinstance(stored_media_url, str):
-                        stored_url = stored_media_url.strip()
-                        if stored_url.startswith('http://') or stored_url.startswith('https://'):
-                            # This is likely a Supabase Storage URL or direct HTTP URL, use it directly
-                            media_url = stored_url
-                            mimetype_hint = metadata.get('mime_type') or metadata.get('mimetype') or metadata.get('mimeType')
-                            logger.info(f"Found media_url in database for message {message_id}: {media_url[:60]}...")
-                    
-                    # Priority 2: Check content dict
-                    if not media_url and isinstance(content, dict):
-                        media_url = (
-                            content.get('url') or content.get('mediaUrl') or 
-                            content.get('media_url') or content.get('imageUrl') or
-                            content.get('videoUrl') or content.get('audioUrl') or
-                            content.get('documentUrl')
-                        )
-                        mimetype_hint = content.get('mimetype') or content.get('mimeType')
-                        if media_url:
-                            logger.info(f"Found media URL in content dict for message {message_id}")
-                    
-                    # Priority 3: Check metadata dict
-                    if not media_url and isinstance(metadata, dict):
-                        media_url = (
-                            metadata.get('url') or metadata.get('mediaUrl') or 
-                            metadata.get('media_url') or metadata.get('directPath')
-                        )
-                        if not mimetype_hint:
-                            mimetype_hint = metadata.get('mimetype') or metadata.get('mimeType')
-                        if media_url:
-                            logger.info(f"Found media URL in metadata for message {message_id}")
-                    
-                    # Priority 4: Check if content is a string URL
-                    if not media_url and isinstance(content, str):
-                        content_str = content.strip()
-                        if content_str.startswith('http://') or content_str.startswith('https://'):
-                            media_url = content_str
-                            logger.info(f"Found media URL in content string for message {message_id}")
-            except Exception as e:
-                logger.warning(f"Error fetching message data for fallback: {e}")
+        try:
+            lookup_id = internal_message_uuid or message_id
+            msg_full = (
+                supabase.table('messages')
+                .select('content, type, metadata, media_url, external_id')
+                .eq('id', lookup_id)
+                .limit(1)
+                .execute()
+            )
+            if (not msg_full.data) and (not internal_message_uuid):
+                msg_full = (
+                    supabase.table('messages')
+                    .select('content, type, metadata, media_url, external_id')
+                    .eq('external_id', message_id)
+                    .limit(1)
+                    .execute()
+                )
+            if msg_full.data:
+                msg_data = msg_full.data[0]
+                content = msg_data.get('content')
+                metadata = msg_data.get('metadata') or {}
+                msg_type = msg_data.get('type') or 'unknown'
+                stored_media_url = msg_data.get('media_url')
+                extracted_provider_id = _find_provider_id(msg_data) or _find_provider_id(metadata) or _find_provider_id(content)
 
-            if extracted_provider_id and _is_plausible_provider_id(extracted_provider_id):
+                if stored_media_url and isinstance(stored_media_url, str):
+                    stored_url = stored_media_url.strip()
+                    if stored_url.startswith('http://') or stored_url.startswith('https://'):
+                        media_url = stored_url
+                        mimetype_hint = metadata.get('mime_type') or metadata.get('mimetype') or metadata.get('mimeType')
+                        logger.info(f"Found media_url in database for message {lookup_id}: {media_url[:60]}...")
+
+                if not media_url and isinstance(content, dict):
+                    media_url = (
+                        content.get('url') or content.get('mediaUrl') or
+                        content.get('media_url') or content.get('imageUrl') or
+                        content.get('videoUrl') or content.get('audioUrl') or
+                        content.get('documentUrl')
+                    )
+                    mimetype_hint = content.get('mimetype') or content.get('mimeType')
+                    if media_url:
+                        logger.info(f"Found media URL in content dict for message {lookup_id}")
+
+                if not media_url and isinstance(metadata, dict):
+                    media_url = (
+                        metadata.get('url') or metadata.get('mediaUrl') or
+                        metadata.get('media_url') or metadata.get('directPath')
+                    )
+                    if not mimetype_hint:
+                        mimetype_hint = metadata.get('mimetype') or metadata.get('mimeType')
+                    if media_url:
+                        logger.info(f"Found media URL in metadata for message {lookup_id}")
+
+                if not media_url and isinstance(content, str):
+                    content_str = content.strip()
+                    if content_str.startswith('http://') or content_str.startswith('https://'):
+                        media_url = content_str
+                        logger.info(f"Found media URL in content string for message {lookup_id}")
+        except Exception as e:
+            logger.warning(f"Error fetching message data for fallback: {e}")
+
+        if extracted_provider_id and _is_plausible_provider_id(extracted_provider_id):
+            if not (evo_message_id and str(evo_message_id).strip()) or (internal_message_uuid and str(evo_message_id) == str(internal_message_uuid)):
                 evo_message_id = extracted_provider_id
             
-            # If we found a valid HTTP(S) URL, return it as fallback
-            if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
-                logger.info(f"Using fallback media URL for message {message_id}: {media_url[:60]}...")
-                return {
-                    "success": True,
-                    "mediaUrl": media_url,
-                    "mimetype": mimetype_hint or 'application/octet-stream',
-                    "kind": msg_type,
-                    "confidence": 0.5,
-                    "fallback": True
-                }
-            
-            # No media URL found and no external_id available
-            if _looks_like_uuid(evo_message_id):
-                raise HTTPException(status_code=404, detail="Mídia indisponível para esta mensagem")
+        if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
+            logger.info(f"Using fallback media URL for message {message_id}: {media_url[:60]}...")
+            return {
+                "success": True,
+                "mediaUrl": media_url,
+                "mimetype": mimetype_hint or 'application/octet-stream',
+                "kind": msg_type,
+                "confidence": 0.5,
+                "fallback": True
+            }
+
+        if internal_message_uuid and str(evo_message_id) == str(internal_message_uuid) and not extracted_provider_id:
+            raise HTTPException(status_code=404, detail="Mídia indisponível para esta mensagem")
 
         # Call Evolution API to get base64 media
         normalized_remote_jid = _normalize_remote_jid(remote_jid)

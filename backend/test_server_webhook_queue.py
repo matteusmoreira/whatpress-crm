@@ -732,3 +732,168 @@ def test_agent_cannot_list_connections_from_other_tenant(monkeypatch):
     client = TestClient(server.app)
     resp = client.get("/api/connections", params={"tenant_id": "tenant2"})
     assert resp.status_code == 403
+
+
+def test_media_proxy_accepts_uuid_like_external_id(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    internal_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    provider_id = "11111111-2222-3333-4444-555555555555"
+
+    async def get_base64_stub(*_args, **_kwargs):
+        return {"base64": "aGVsbG8=", "mimetype": "image/png"}
+
+    monkeypatch.setattr(server.evolution_api, "get_base64_from_media_message", get_base64_stub)
+
+    def table_handler(name, ops):
+        if name == "messages":
+            wanted_id = None
+            wanted_external = None
+            for op in ops:
+                if op[0] == "eq" and op[1] == "id":
+                    wanted_id = op[2]
+                if op[0] == "eq" and op[1] == "external_id":
+                    wanted_external = op[2]
+
+            if wanted_id == internal_id:
+                return _Result(
+                    data=[
+                        {
+                            "id": internal_id,
+                            "conversation_id": "conv1",
+                            "external_id": provider_id,
+                            "content": "",
+                            "type": "image",
+                            "metadata": {"remote_jid": "5511999999999@s.whatsapp.net", "instance_name": "inst1"},
+                            "media_url": None,
+                        }
+                    ]
+                )
+
+            if wanted_external == provider_id:
+                return _Result(
+                    data=[
+                        {
+                            "id": internal_id,
+                            "conversation_id": "conv1",
+                            "external_id": provider_id,
+                        }
+                    ]
+                )
+
+            return _Result(data=[])
+
+        if name == "conversations":
+            return _Result(data=[{"tenant_id": "tenant1"}])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+    resp = client.get(
+        "/api/media/proxy",
+        params={
+            "message_id": internal_id,
+            "remote_jid": "5511999999999@s.whatsapp.net",
+            "instance_name": "inst1",
+            "from_me": "false",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("success") is True
+    assert isinstance(data.get("dataUrl"), str)
+    assert data["dataUrl"].startswith("data:image/png;base64,")
+
+
+def test_media_proxy_accepts_uuid_like_external_id_when_called_by_external_id(monkeypatch):
+    import backend.server as server
+    from fastapi.testclient import TestClient
+
+    internal_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    provider_id = "11111111-2222-3333-4444-555555555555"
+
+    async def get_base64_stub(*_args, **_kwargs):
+        return {"base64": "aGVsbG8=", "mimetype": "image/png"}
+
+    monkeypatch.setattr(server.evolution_api, "get_base64_from_media_message", get_base64_stub)
+
+    def table_handler(name, ops):
+        if name == "messages":
+            wanted_id = None
+            wanted_external = None
+            for op in ops:
+                if op[0] == "eq" and op[1] == "id":
+                    wanted_id = op[2]
+                if op[0] == "eq" and op[1] == "external_id":
+                    wanted_external = op[2]
+
+            if wanted_id == provider_id:
+                return _Result(data=[])
+
+            if wanted_external == provider_id:
+                return _Result(
+                    data=[
+                        {
+                            "id": internal_id,
+                            "conversation_id": "conv1",
+                            "external_id": provider_id,
+                            "content": "",
+                            "type": "image",
+                            "metadata": {"remote_jid": "5511999999999@s.whatsapp.net", "instance_name": "inst1"},
+                            "media_url": None,
+                        }
+                    ]
+                )
+
+            if wanted_id == internal_id:
+                return _Result(
+                    data=[
+                        {
+                            "id": internal_id,
+                            "conversation_id": "conv1",
+                            "external_id": provider_id,
+                            "content": "",
+                            "type": "image",
+                            "metadata": {"remote_jid": "5511999999999@s.whatsapp.net", "instance_name": "inst1"},
+                            "media_url": None,
+                        }
+                    ]
+                )
+
+            return _Result(data=[])
+
+        if name == "conversations":
+            return _Result(data=[{"tenant_id": "tenant1"}])
+
+        return _Result(data=[])
+
+    monkeypatch.setattr(server, "supabase", _SupabaseStub(table_handler))
+    server.app.dependency_overrides[server.verify_token] = lambda: {
+        "user_id": "agent1",
+        "role": "agent",
+        "tenant_id": "tenant1",
+    }
+
+    client = TestClient(server.app)
+    resp = client.get(
+        "/api/media/proxy",
+        params={
+            "message_id": provider_id,
+            "remote_jid": "5511999999999@s.whatsapp.net",
+            "instance_name": "inst1",
+            "from_me": "false",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("success") is True
+    assert isinstance(data.get("dataUrl"), str)
+    assert data["dataUrl"].startswith("data:image/png;base64,")
