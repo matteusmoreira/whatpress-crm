@@ -24,6 +24,9 @@ export const useAuthStore = create(
           }
           return user || null;
         } catch (error) {
+          if (error?.response?.status === 401) {
+            set({ user: null, token: null, isAuthenticated: false, maintenance: null, maintenanceDismissedKey: null });
+          }
           return null;
         } finally {
           set({ isBootstrapping: false });
@@ -45,7 +48,10 @@ export const useAuthStore = create(
       },
 
       logout: () => {
-        AuthAPI.logout().catch(() => null);
+        const token = get().token;
+        if (token) {
+          AuthAPI.logout().catch(() => null);
+        }
         set({ user: null, token: null, isAuthenticated: false, error: null, maintenance: null, maintenanceDismissedKey: null });
       },
 
@@ -56,6 +62,9 @@ export const useAuthStore = create(
           set({ user, isAuthenticated: true });
           return user;
         } catch (error) {
+          if (error?.response?.status === 401) {
+            set({ user: null, token: null, isAuthenticated: false, maintenance: null, maintenanceDismissedKey: null });
+          }
           return null;
         }
       },

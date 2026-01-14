@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect } from "react";
 import "./App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 
 // Loading Component
 const PageLoader = () => (
@@ -73,6 +73,25 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
+const AuthEventBridge = () => {
+  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
+
+  useEffect(() => {
+    const handler = () => {
+      logout();
+      if (window.location.pathname !== '/sign-in') {
+        navigate('/sign-in', { replace: true });
+      }
+    };
+
+    window.addEventListener('auth:unauthorized', handler);
+    return () => window.removeEventListener('auth:unauthorized', handler);
+  }, [logout, navigate]);
+
+  return null;
+};
+
 function App() {
   const initAuth = useAuthStore((s) => s.initAuth);
 
@@ -86,6 +105,7 @@ function App() {
         <div className="App">
           <GlassToaster />
           <BrowserRouter>
+            <AuthEventBridge />
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 {/* Public Routes */}

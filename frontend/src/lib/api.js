@@ -44,8 +44,19 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('whatsapp-crm-auth');
-      window.location.href = '/sign-in';
+      const url = String(error.config?.url || '');
+      const isAuthAttempt =
+        url.startsWith('/auth/login') ||
+        url.startsWith('/auth/register') ||
+        url.startsWith('/auth/logout');
+
+      if (!isAuthAttempt) {
+        localStorage.removeItem('whatsapp-crm-auth');
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('auth:unauthorized'));
+        }
+      }
     }
     return Promise.reject(error);
   }
