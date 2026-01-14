@@ -26,7 +26,7 @@ const CATEGORY_ICONS = {
 
 const QuickRepliesPanel = ({ onSelect, onClose }) => {
   const { user } = useAuthStore();
-  const tenantId = user?.tenantId || 'tenant-1';
+  const tenantId = user?.tenantId;
 
   const [replies, setReplies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +39,7 @@ const QuickRepliesPanel = ({ onSelect, onClose }) => {
 
   const loadReplies = useCallback(async () => {
     try {
+      if (!tenantId) return;
       setLoading(true);
       const data = await QuickRepliesAPI.list(tenantId);
       setReplies(data || []);

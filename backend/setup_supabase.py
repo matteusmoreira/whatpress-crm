@@ -5,6 +5,9 @@ Execute com: python setup_supabase.py
 
 from supabase_client import supabase
 import json
+from passlib.context import CryptContext
+
+_PASSWORD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def setup_database():
     """Cria as tabelas necessárias no Supabase usando SQL"""
@@ -228,10 +231,11 @@ def seed_data():
     tenant_2_id = tenants[1]['id']
     
     # Insert users (password: 123456 - in production use proper hashing)
+    demo_password_hash = _PASSWORD_CONTEXT.hash("123456")
     users_data = [
         {
             'email': 'super@admin.com',
-            'password_hash': '123456',  # In production, use bcrypt
+            'password_hash': demo_password_hash,
             'name': 'Super Administrador',
             'role': 'superadmin',
             'tenant_id': None,
@@ -239,7 +243,7 @@ def seed_data():
         },
         {
             'email': 'admin@minhaempresa.com',
-            'password_hash': '123456',
+            'password_hash': demo_password_hash,
             'name': 'Carlos Silva',
             'role': 'admin',
             'tenant_id': tenant_1_id,
@@ -247,7 +251,7 @@ def seed_data():
         },
         {
             'email': 'maria@minhaempresa.com',
-            'password_hash': '123456',
+            'password_hash': demo_password_hash,
             'name': 'Maria Oliveira',
             'role': 'agent',
             'tenant_id': tenant_1_id,

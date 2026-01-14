@@ -383,9 +383,10 @@ const Connections = () => {
     phoneNumber: ''
   });
 
-  const tenantId = user?.tenantId || 'tenant-1';
+  const tenantId = user?.tenantId;
 
   useEffect(() => {
+    if (!tenantId) return;
     fetchConnections(tenantId);
   }, [tenantId, fetchConnections]);
 

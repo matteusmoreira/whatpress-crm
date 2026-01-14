@@ -22,10 +22,11 @@ const LabelsManager = ({ isOpen, onClose, onLabelsChange }) => {
     const [formData, setFormData] = useState({ name: '', color: '#3B82F6' });
     const [saving, setSaving] = useState(false);
 
-    const tenantId = user?.tenantId || 'tenant-1';
+    const tenantId = user?.tenantId;
 
     const loadLabels = useCallback(async () => {
         try {
+            if (!tenantId) return;
             setLoading(true);
             const data = await LabelsAPI.list(tenantId);
             setLabels(data);

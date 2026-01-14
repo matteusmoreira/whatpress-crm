@@ -206,9 +206,15 @@ const Dashboard = () => {
     const [agentPerformance, setAgentPerformance] = useState([]);
     const [conversationsByStatus, setConversationsByStatus] = useState([]);
 
-    const tenantId = user?.tenantId || 'tenant-1';
+    const tenantId = user?.tenantId;
 
     const loadData = useCallback(async () => {
+        if (!tenantId) {
+            setStatsLoading(false);
+            setChartsLoading(false);
+            setAgentsLoading(false);
+            return;
+        }
         // Load stats first (fastest)
         AnalyticsAPI.getOverview(tenantId).then(data => {
             setOverview(data);

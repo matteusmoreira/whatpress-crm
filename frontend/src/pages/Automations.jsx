@@ -358,10 +358,11 @@ const Automations = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingMessage, setEditingMessage] = useState(null);
 
-    const tenantId = user?.tenantId || 'tenant-1';
+    const tenantId = user?.tenantId;
 
     const loadMessages = useCallback(async () => {
         try {
+            if (!tenantId) return;
             setLoading(true);
             const data = await AutoMessagesAPI.list(tenantId);
             setMessages(data);

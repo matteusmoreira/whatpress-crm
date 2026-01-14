@@ -43,12 +43,18 @@ import hashlib
 from collections import deque
 from dataclasses import dataclass
 from typing import Callable
+import hmac
+from passlib.context import CryptContext
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Create the main app
 app = FastAPI(title="WhatsApp CRM API")
+
+_DEBUG_ENDPOINTS_ENABLED = (
+    (os.getenv("DEBUG_ENDPOINTS") or "").strip().lower() in {"1", "true", "yes", "y"}
+)
 
 # Configure CORS immediately - Fix for Railway deployment
 # allow_origins=["*"] fails with allow_credentials=True in some browsers/proxies
@@ -144,7 +150,8 @@ async def root():
 
 @app.get("/debug-routes")
 async def debug_routes():
-    """List all registered routes to verify paths"""
+    if not _DEBUG_ENDPOINTS_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
     routes = []
     for route in app.routes:
         routes.append({
@@ -332,6 +339,38 @@ JWT_SECRET = (
     or "whatsapp-crm-secret-key-2025"
 ).strip()
 
+_PASSWORD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _looks_like_bcrypt_hash(value: str) -> bool:
+    s = (value or "").strip()
+    return s.startswith("$2a$") or s.startswith("$2b$") or s.startswith("$2y$")
+
+def _verify_password_and_maybe_upgrade(plain_password: str, stored_hash: Any) -> Tuple[bool, Optional[str]]:
+    plain = str(plain_password or "")
+    stored = str(stored_hash or "")
+    if not stored or not plain:
+        return False, None
+
+    if _looks_like_bcrypt_hash(stored):
+        try:
+            ok = bool(_PASSWORD_CONTEXT.verify(plain, stored))
+        except Exception:
+            return False, None
+        if ok and _PASSWORD_CONTEXT.needs_update(stored):
+            try:
+                return True, _PASSWORD_CONTEXT.hash(plain)
+            except Exception:
+                return True, None
+        return ok, None
+
+    if hmac.compare_digest(stored, plain):
+        try:
+            return True, _PASSWORD_CONTEXT.hash(plain)
+        except Exception:
+            return True, None
+
+    return False, None
+
 def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
@@ -417,7 +456,8 @@ def normalize_phone_number(value: Any) -> str:
 
 @app.post("/test-login")
 async def test_login(data: dict):
-    """Direct login test endpoint outside router"""
+    if not _DEBUG_ENDPOINTS_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
     return {"message": "Direct login endpoint works", "received": data}
 
 # OPTIONS handler for CORS preflight
@@ -438,7 +478,6 @@ async def direct_login(request: LoginRequest):
             supabase.table("users")
             .select("*")
             .eq("email", email)
-            .eq("password_hash", password)
             .execute()
         )
 
@@ -459,6 +498,18 @@ async def direct_login(request: LoginRequest):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
     user = data[0]
+    ok, upgraded_hash = _verify_password_and_maybe_upgrade(password, user.get("password_hash"))
+    if not ok:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+
+    if upgraded_hash:
+        def _upgrade_password_hash():
+            try:
+                supabase.table("users").update({"password_hash": upgraded_hash}).eq("id", user["id"]).execute()
+            except Exception:
+                return
+        await asyncio.to_thread(_upgrade_password_hash)
+
     token = create_token(user["id"], user["email"], user["role"], user.get("tenant_id"))
 
     user_response = {
@@ -1376,7 +1427,7 @@ async def register_tenant(data: TenantRegister):
     # Create admin user
     user_data = {
         'email': data.admin_email,
-        'password_hash': data.admin_password,  # In production, hash this!
+        'password_hash': _PASSWORD_CONTEXT.hash(str(data.admin_password or "")),
         'name': data.admin_name,
         'role': 'admin',
         'tenant_id': tenant['id'],

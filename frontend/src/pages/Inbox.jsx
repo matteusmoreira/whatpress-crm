@@ -1210,7 +1210,7 @@ const Inbox = () => {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasMoreOlderMessages, setHasMoreOlderMessages] = useState(true);
 
-  const tenantId = user?.tenantId || 'tenant-1';
+  const tenantId = user?.tenantId;
 
   // Typing indicator hook
   const { setTyping, getTypingContact } = useTypingIndicator();
@@ -1237,6 +1237,7 @@ const Inbox = () => {
 
   // Fetch initial data
   useEffect(() => {
+    if (!tenantId) return;
     fetchConversations(tenantId);
     fetchConnections(tenantId);
     loadAgents();
