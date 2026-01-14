@@ -2442,7 +2442,7 @@ const Inbox = () => {
                               })();
                               if (!remoteJid || !instanceName) return null;
                               return {
-                                messageId: msg.id,
+                                messageId: msg.externalId ?? msg.external_id ?? meta.message_id ?? meta.messageId ?? msg.id,
                                 remoteJid,
                                 instanceName,
                                 fromMe

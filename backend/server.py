@@ -7514,16 +7514,59 @@ async def proxy_whatsapp_media(
             media_url = None
             mimetype_hint = None
             msg_type = 'unknown'
+            extracted_provider_id = None
+
+            def _is_plausible_provider_id(value: Any) -> bool:
+                s = str(value or "").strip()
+                if not s:
+                    return False
+                if _looks_like_uuid(s):
+                    return False
+                lowered = s.lower()
+                if lowered.startswith("http://") or lowered.startswith("https://"):
+                    return False
+                if lowered.startswith("data:"):
+                    return False
+                if "@" in s:
+                    return False
+                if any(ch.isspace() for ch in s):
+                    return False
+                if len(s) < 8 or len(s) > 160:
+                    return False
+                return True
+
+            def _find_provider_id(node: Any, depth: int = 0) -> Optional[str]:
+                if depth > 5:
+                    return None
+                if isinstance(node, dict):
+                    for k in ("external_id", "externalId", "message_id", "messageId", "id", "stanzaId"):
+                        if k in node and _is_plausible_provider_id(node.get(k)):
+                            return str(node.get(k)).strip()
+                    key_node = node.get("key")
+                    if isinstance(key_node, dict):
+                        if _is_plausible_provider_id(key_node.get("id")):
+                            return str(key_node.get("id")).strip()
+                    for v in node.values():
+                        found = _find_provider_id(v, depth + 1)
+                        if found:
+                            return found
+                if isinstance(node, list):
+                    for v in node:
+                        found = _find_provider_id(v, depth + 1)
+                        if found:
+                            return found
+                return None
             
             try:
                 # Query message data to check for stored media URL
-                msg_full = supabase.table('messages').select('content, type, metadata, media_url').eq('id', message_id).limit(1).execute()
+                msg_full = supabase.table('messages').select('content, type, metadata, media_url, external_id').eq('id', message_id).limit(1).execute()
                 if msg_full.data:
                     msg_data = msg_full.data[0]
                     content = msg_data.get('content')
                     metadata = msg_data.get('metadata') or {}
                     msg_type = msg_data.get('type') or 'unknown'
                     stored_media_url = msg_data.get('media_url')
+                    extracted_provider_id = _find_provider_id(msg_data) or _find_provider_id(metadata) or _find_provider_id(content)
                     
                     # Priority 1: Check media_url field directly (Supabase Storage URL)
                     if stored_media_url and isinstance(stored_media_url, str):
@@ -7565,6 +7608,9 @@ async def proxy_whatsapp_media(
                             logger.info(f"Found media URL in content string for message {message_id}")
             except Exception as e:
                 logger.warning(f"Error fetching message data for fallback: {e}")
+
+            if extracted_provider_id and _is_plausible_provider_id(extracted_provider_id):
+                evo_message_id = extracted_provider_id
             
             # If we found a valid HTTP(S) URL, return it as fallback
             if media_url and isinstance(media_url, str) and (media_url.startswith('http://') or media_url.startswith('https://')):
@@ -7579,8 +7625,8 @@ async def proxy_whatsapp_media(
                 }
             
             # No media URL found and no external_id available
-            # Try using message_id directly as a fallback (it might be the Evolution API message ID)
-            logger.warning(f"Message {message_id} has no external_id and no media_url in database. Trying message_id as external_id...")
+            if _looks_like_uuid(evo_message_id):
+                raise HTTPException(status_code=404, detail="Mídia indisponível para esta mensagem")
 
         # Call Evolution API to get base64 media
         normalized_remote_jid = _normalize_remote_jid(remote_jid)
@@ -7648,8 +7694,10 @@ async def proxy_whatsapp_media(
             raise HTTPException(status_code=500, detail="Evolution API não configurada no backend.")
         if "401" in lowered or "403" in lowered:
             raise HTTPException(status_code=502, detail="Falha ao autenticar na Evolution API.")
-        if "404" in lowered:
+        if "404" in lowered or "not found" in lowered or "não encontrado" in lowered or "nao encontrado" in lowered:
             raise HTTPException(status_code=404, detail="Mídia não encontrada na Evolution API.")
+        if "400" in lowered or "bad request" in lowered or "invalid" in lowered:
+            raise HTTPException(status_code=400, detail="Requisição inválida para obter mídia.")
         if "timeout" in lowered or "timed out" in lowered or "502" in lowered or "503" in lowered or "504" in lowered:
             raise HTTPException(status_code=503, detail="Evolution API indisponível.")
         raise HTTPException(status_code=502, detail="Erro ao obter mídia.")
