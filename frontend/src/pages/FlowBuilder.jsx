@@ -30,6 +30,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { Separator } from '../components/ui/separator';
+import { Drawer, DrawerContent } from '../components/ui/drawer';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -106,7 +107,14 @@ const FlowBuilderInner = () => {
         if (typeof window === 'undefined') return false;
         return window.matchMedia?.('(max-width: 768px)')?.matches ?? false;
     });
+    const [isNarrowUI, setIsNarrowUI] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.matchMedia?.('(max-width: 1023px)')?.matches ?? false;
+    });
+    const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+    const [mobilePanelTab, setMobilePanelTab] = useState('components');
     const lastSyncRef = useRef({ nodes: [], edges: [] });
+    const lastPaneTapAtRef = useRef(0);
     const reactFlowWrapperRef = useRef(null);
     const reactFlowInstanceRef = useRef(null);
     const [nodeConfigDraft, setNodeConfigDraft] = useState({});
@@ -145,6 +153,19 @@ const FlowBuilderInner = () => {
         if (typeof window === 'undefined' || !window.matchMedia) return;
         const media = window.matchMedia('(max-width: 768px)');
         const handleChange = () => setIsCompactUI(media.matches);
+        handleChange();
+        if (typeof media.addEventListener === 'function') {
+            media.addEventListener('change', handleChange);
+            return () => media.removeEventListener('change', handleChange);
+        }
+        media.addListener(handleChange);
+        return () => media.removeListener(handleChange);
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const media = window.matchMedia('(max-width: 1023px)');
+        const handleChange = () => setIsNarrowUI(media.matches);
         handleChange();
         if (typeof media.addEventListener === 'function') {
             media.addEventListener('change', handleChange);
@@ -254,11 +275,24 @@ const FlowBuilderInner = () => {
         });
         setSelectedNode(node);
         setSelectedNodeState(node);
+        if (isNarrowUI) {
+            setMobilePanelTab('config');
+            setMobilePanelOpen(true);
+        }
         setRightPanelTab('config');
-    }, [setNodes, setSelectedNode, setStoreNodes]);
+    }, [isNarrowUI, setNodes, setSelectedNode, setStoreNodes]);
 
     // Handle pane click (deselect)
     const onPaneClick = useCallback(() => {
+        if (isNarrowUI) {
+            const now = Date.now();
+            if (now - lastPaneTapAtRef.current < 280) {
+                lastPaneTapAtRef.current = 0;
+                reactFlowInstanceRef.current?.fitView?.({ padding: 0.2, duration: 250 });
+                return;
+            }
+            lastPaneTapAtRef.current = now;
+        }
         setSelectedNode(null);
         setSelectedNodeState(null);
         setNodes((currentNodes) => {
@@ -267,8 +301,11 @@ const FlowBuilderInner = () => {
             lastSyncRef.current.nodes = updatedNodes;
             return updatedNodes;
         });
+        if (isNarrowUI) {
+            setMobilePanelTab('components');
+        }
         setRightPanelTab('components');
-    }, [setNodes, setSelectedNode, setStoreNodes]);
+    }, [isNarrowUI, setNodes, setSelectedNode, setStoreNodes]);
 
     useEffect(() => {
         if (!selectedNode) {
@@ -361,6 +398,11 @@ const FlowBuilderInner = () => {
         if (!loaded) {
             setCurrentFlow(flow);
         }
+    };
+
+    const openMobilePanel = (tab) => {
+        setMobilePanelTab(tab);
+        setMobilePanelOpen(true);
     };
 
     const handleDragOver = useCallback((event) => {
@@ -749,7 +791,7 @@ const FlowBuilderInner = () => {
     };
 
     return (
-        <div className="p-3 sm:p-5 lg:p-6 h-full min-h-0 min-w-0">
+        <div className="p-3 sm:p-5 lg:p-6 pb-24 lg:pb-6 h-full min-h-0 min-w-0">
             <div
                 className={cn(
                     "flex flex-col lg:flex-row h-full min-h-0 overflow-hidden min-w-0 rounded-2xl border",
@@ -758,7 +800,7 @@ const FlowBuilderInner = () => {
             >
             {/* Left Panel - Flow List */}
             <div className={cn(
-                "w-full lg:w-64 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r max-h-[240px] sm:max-h-[320px] lg:max-h-none",
+                "hidden lg:flex w-64 flex-shrink-0 flex-col border-r max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
@@ -858,6 +900,7 @@ const FlowBuilderInner = () => {
                                                     : "hover:bg-emerald-50 text-slate-500 hover:text-emerald-700")
                                         )}
                                         title={(flow.is_active || flow.isActive) ? "Desativar" : "Ativar"}
+                                        aria-label={(flow.is_active || flow.isActive) ? "Desativar fluxo" : "Ativar fluxo"}
                                     >
                                         {(flow.is_active || flow.isActive) ? (
                                             <Pause className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
@@ -875,6 +918,7 @@ const FlowBuilderInner = () => {
                                                 ? "hover:bg-red-500/20 text-white/50 hover:text-red-400"
                                                 : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                         )}
+                                        aria-label="Excluir fluxo"
                                     >
                                         <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                     </button>
@@ -903,6 +947,8 @@ const FlowBuilderInner = () => {
                     onDragOver={handleDragOver}
                     onlyRenderVisibleElements
                     zoomOnScroll={false}
+                    zoomOnPinch
+                    zoomOnDoubleClick={!isNarrowUI}
                     panOnScroll
                     fitView
                     className={isDark ? "react-flow-dark" : ""}
@@ -915,7 +961,7 @@ const FlowBuilderInner = () => {
                             isDark ? "!bg-slate-800 !border-white/10" : "!bg-white !border-slate-200"
                         )}
                     />
-                    {!isCompactUI && (
+                    {!isNarrowUI && (
                         <MiniMap
                             nodeColor={(node) => {
                                 switch (node.type) {
@@ -972,10 +1018,11 @@ const FlowBuilderInner = () => {
                                     <button
                                         onClick={() => setIsRenamingFlow((v) => !v)}
                                         className={cn(
-                                            "p-2.5 sm:p-1.5 rounded-lg transition-colors touch-manipulation",
+                                            "h-11 w-11 sm:h-9 sm:w-9 inline-flex items-center justify-center rounded-lg transition-colors touch-manipulation",
                                             isDark ? "hover:bg-white/10 text-white/60 hover:text-white" : "hover:bg-slate-100 text-slate-500 hover:text-slate-800"
                                         )}
                                         title="Renomear fluxo"
+                                        aria-label="Renomear fluxo"
                                     >
                                         <Pencil className="w-4 h-4" />
                                     </button>
@@ -1010,6 +1057,7 @@ const FlowBuilderInner = () => {
                                             "bg-emerald-500 hover:bg-emerald-600 text-white",
                                             "disabled:opacity-50 disabled:cursor-not-allowed"
                                         )}
+                                        aria-label="Salvar fluxo"
                                     >
                                         {saving ? (
                                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1044,7 +1092,7 @@ const FlowBuilderInner = () => {
 
             {/* Right Panel - Components Toolbar */}
             <div className={cn(
-                "w-full lg:w-80 flex-shrink-0 flex flex-col min-h-0 border-t lg:border-t-0 lg:border-l max-h-[40vh] sm:max-h-[45vh] lg:max-h-none",
+                "hidden lg:flex w-80 flex-shrink-0 flex-col min-h-0 border-l max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
@@ -1150,8 +1198,9 @@ const FlowBuilderInner = () => {
                                                                     key={item.type}
                                                                     onClick={() => handleAddNode(item.type)}
                                                                     disabled={!currentFlow}
-                                                                    draggable={!!currentFlow}
+                                                                    draggable={!isNarrowUI && !!currentFlow}
                                                                     onDragStart={(event) => {
+                                                                        if (isNarrowUI) return;
                                                                         event.dataTransfer.setData('application/reactflow-node-type', item.type);
                                                                         event.dataTransfer.effectAllowed = 'move';
                                                                     }}
@@ -1310,6 +1359,420 @@ const FlowBuilderInner = () => {
                 </div>
             </div>
             </div>
+            <div className={cn(
+                "flowbuilder-mobilebar lg:hidden",
+                isDark ? "bg-slate-900/80 border-white/10" : "bg-white/80 border-slate-200"
+            )}>
+                <div className="flex items-center gap-2 px-3 pt-2">
+                    <button
+                        onClick={() => openMobilePanel('flows')}
+                        className={cn(
+                            "flex-1 h-11 rounded-xl border text-sm font-medium transition-colors touch-manipulation",
+                            isDark ? "bg-white/5 border-white/10 text-white hover:bg-white/10" : "bg-white border-slate-200 text-slate-800 hover:bg-slate-50"
+                        )}
+                    >
+                        <span className="inline-flex items-center justify-center gap-2">
+                            <GitBranch className="w-4 h-4" />
+                            Fluxos
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => openMobilePanel('components')}
+                        className={cn(
+                            "flex-1 h-11 rounded-xl border text-sm font-medium transition-colors touch-manipulation",
+                            isDark ? "bg-white/5 border-white/10 text-white hover:bg-white/10" : "bg-white border-slate-200 text-slate-800 hover:bg-slate-50"
+                        )}
+                    >
+                        <span className="inline-flex items-center justify-center gap-2">
+                            <Plus className="w-4 h-4" />
+                            Componentes
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => openMobilePanel('config')}
+                        disabled={!selectedNode}
+                        className={cn(
+                            "flex-1 h-11 rounded-xl border text-sm font-medium transition-colors touch-manipulation",
+                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                            isDark ? "bg-white/5 border-white/10 text-white hover:bg-white/10" : "bg-white border-slate-200 text-slate-800 hover:bg-slate-50"
+                        )}
+                        aria-label="Abrir configurações do nó"
+                    >
+                        <span className="inline-flex items-center justify-center gap-2">
+                            <Pencil className="w-4 h-4" />
+                            Config
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <Drawer open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
+                <DrawerContent className={cn(
+                    "flowbuilder-mobile-drawer lg:hidden h-[82vh] flex flex-col",
+                    isDark ? "bg-slate-950 text-white border-white/10" : "bg-white text-slate-900 border-slate-200"
+                )}>
+                    <div className="px-4 pt-2 pb-3">
+                        <div className="grid grid-cols-3 gap-2">
+                            <Button
+                                type="button"
+                                variant={mobilePanelTab === 'flows' ? "default" : "outline"}
+                                className="h-11"
+                                onClick={() => setMobilePanelTab('flows')}
+                            >
+                                Fluxos
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={mobilePanelTab === 'components' ? "default" : "outline"}
+                                className="h-11"
+                                onClick={() => setMobilePanelTab('components')}
+                            >
+                                Componentes
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={mobilePanelTab === 'config' ? "default" : "outline"}
+                                className="h-11"
+                                onClick={() => setMobilePanelTab('config')}
+                                disabled={!selectedNode}
+                            >
+                                Config
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-hidden px-4 pb-4">
+                        <ScrollArea className="h-full flowbuilder-scrollarea">
+                            {mobilePanelTab === 'flows' && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className={cn("font-semibold truncate", isDark ? "text-white" : "text-slate-900")}>Fluxos</div>
+                                            <div className={cn("text-xs mt-0.5", isDark ? "text-white/50" : "text-slate-500")}>
+                                                {flows?.length ? `${flows.length} item(ns)` : "Nenhum fluxo"}
+                                            </div>
+                                        </div>
+                                        <Button onClick={handleCreateFlow} disabled={saving} className="h-11">
+                                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                            Novo
+                                        </Button>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        {loading && !flows.length ? (
+                                            <div className={cn("text-center py-8", isDark ? "text-white/50" : "text-slate-500")}>
+                                                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                                                <p className="text-sm">Carregando fluxos...</p>
+                                            </div>
+                                        ) : (!flows || flows.length === 0) ? (
+                                            <div className={cn("text-center py-8 px-4", isDark ? "text-white/50" : "text-slate-500")}>
+                                                <p className="text-sm">Nenhum fluxo encontrado</p>
+                                                <p className="text-xs mt-1">Crie seu primeiro fluxo clicando em "Novo"</p>
+                                            </div>
+                                        ) : (
+                                            flows.map(flow => (
+                                                <div
+                                                    key={flow.id}
+                                                    onClick={async () => {
+                                                        await handleSelectFlow(flow);
+                                                        setMobilePanelOpen(false);
+                                                    }}
+                                                    className={cn(
+                                                        "p-3 rounded-xl cursor-pointer transition-all border flowbuilder-cv",
+                                                        currentFlow?.id === flow.id
+                                                            ? isDark
+                                                                ? "bg-emerald-500/20 border-emerald-500/50"
+                                                                : "bg-emerald-50 border-emerald-300"
+                                                            : isDark
+                                                                ? "bg-white/5 border-white/10 hover:bg-white/10"
+                                                                : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center justify-between mb-1 gap-2">
+                                                        <span className={cn(
+                                                            "font-medium text-sm truncate flex-1",
+                                                            isDark ? "text-white" : "text-slate-800"
+                                                        )}>{flow.name}</span>
+                                                        <span className={cn(
+                                                            "text-xs px-2 py-0.5 rounded-full",
+                                                            flow.is_active || flow.isActive
+                                                                ? "bg-emerald-500/20 text-emerald-400"
+                                                                : isDark ? "bg-white/10 text-white/50" : "bg-slate-200 text-slate-500"
+                                                        )}>
+                                                            {(flow.is_active || flow.isActive) ? 'Ativo' : 'Inativo'}
+                                                        </span>
+                                                    </div>
+                                                    {flow.description && (
+                                                        <p className={cn(
+                                                            "text-xs truncate",
+                                                            isDark ? "text-white/50" : "text-slate-500"
+                                                        )}>{flow.description}</p>
+                                                    )}
+                                                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={(e) => handleToggleFlow(flow.id, e)}
+                                                            disabled={loading || saving}
+                                                            className="h-11 w-11"
+                                                            aria-label={(flow.is_active || flow.isActive) ? "Desativar fluxo" : "Ativar fluxo"}
+                                                        >
+                                                            {(flow.is_active || flow.isActive) ? (
+                                                                <Pause className="w-4 h-4" />
+                                                            ) : (
+                                                                <Play className="w-4 h-4" />
+                                                            )}
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="destructive"
+                                                            size="icon"
+                                                            onClick={(e) => handleDeleteFlow(flow.id, e)}
+                                                            disabled={loading || saving}
+                                                            className="h-11 w-11"
+                                                            aria-label="Excluir fluxo"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {mobilePanelTab === 'components' && (
+                                <div className="space-y-3">
+                                    <div className={cn("relative", !currentFlow && "opacity-60")}>
+                                        <Search className={cn(
+                                            "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4",
+                                            isDark ? "text-white/40" : "text-slate-400"
+                                        )} />
+                                        <Input
+                                            value={componentSearch}
+                                            onChange={(e) => setComponentSearch(e.target.value)}
+                                            placeholder="Buscar componentes..."
+                                            disabled={!currentFlow}
+                                            className="pl-9 h-11"
+                                        />
+                                    </div>
+
+                                    {currentFlow && !componentSearch.trim() && (
+                                        <div className="space-y-2">
+                                            <div className={cn(
+                                                "text-xs font-semibold uppercase tracking-wider px-1",
+                                                isDark ? "text-white/40" : "text-slate-500"
+                                            )}>
+                                                Atalhos
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {quickAddItems.map((item) => {
+                                                    const Icon = item.icon;
+                                                    return (
+                                                        <Button
+                                                            key={item.type}
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                handleAddNode(item.type);
+                                                                setMobilePanelOpen(false);
+                                                            }}
+                                                            className={cn(
+                                                                "h-11",
+                                                                isDark ? "border-white/10 bg-white/5 hover:bg-white/10" : "bg-white"
+                                                            )}
+                                                        >
+                                                            <Icon className="w-4 h-4" />
+                                                            {item.label}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {filteredNodeCategories.length === 0 ? (
+                                        <div className={cn(
+                                            "rounded-xl border p-4 text-center",
+                                            isDark ? "border-white/10 bg-white/5 text-white/60" : "border-slate-200 bg-slate-50 text-slate-600"
+                                        )}>
+                                            <p className="text-sm font-medium">Nenhum componente encontrado</p>
+                                            <p className={cn("text-xs mt-1", isDark ? "text-white/40" : "text-slate-500")}>
+                                                Tente outro termo de busca.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <Accordion type="multiple" defaultValue={filteredNodeCategories.map(c => c.title)} className="w-full">
+                                            {filteredNodeCategories.map(category => (
+                                                <AccordionItem key={category.title} value={category.title} className={cn(isDark ? "border-white/10" : "border-slate-200")}>
+                                                    <AccordionTrigger className={cn(
+                                                        "py-3 px-1 text-xs font-semibold uppercase tracking-wider",
+                                                        isDark ? "text-white/50 hover:text-white/70" : "text-slate-500 hover:text-slate-700"
+                                                    )}>
+                                                        {category.title}
+                                                    </AccordionTrigger>
+                                                    <AccordionContent className="pb-3">
+                                                        <div className="space-y-1">
+                                                            {category.items.map(item => {
+                                                                const Icon = item.icon;
+                                                                const colorClasses = {
+                                                                    emerald: isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600',
+                                                                    blue: isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600',
+                                                                    purple: isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600',
+                                                                    amber: isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-100 text-amber-600',
+                                                                    pink: isDark ? 'bg-pink-500/20 text-pink-400' : 'bg-pink-100 text-pink-600',
+                                                                    cyan: isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-100 text-cyan-600',
+                                                                    indigo: isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600',
+                                                                };
+                                                                return (
+                                                                    <button
+                                                                        key={item.type}
+                                                                        onClick={() => {
+                                                                            handleAddNode(item.type);
+                                                                            setMobilePanelOpen(false);
+                                                                        }}
+                                                                        disabled={!currentFlow}
+                                                                        className={cn(
+                                                                            "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group touch-manipulation flowbuilder-cv",
+                                                                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                                                                            isDark
+                                                                                ? "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40"
+                                                                                : "bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-emerald-300"
+                                                                        )}
+                                                                    >
+                                                                        <div className={cn("p-2 rounded-lg", colorClasses[item.color])}>
+                                                                            <Icon className="w-4 h-4" />
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <span className={cn(
+                                                                                "block text-sm font-medium",
+                                                                                isDark ? "text-white" : "text-slate-800"
+                                                                            )}>{item.label}</span>
+                                                                            <span className={cn(
+                                                                                "block text-xs truncate",
+                                                                                isDark ? "text-white/50" : "text-slate-500"
+                                                                            )}>{item.description}</span>
+                                                                        </div>
+                                                                        <ChevronRight className={cn(
+                                                                            "w-4 h-4 opacity-60",
+                                                                            isDark ? "text-white/50" : "text-slate-400"
+                                                                        )} />
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </AccordionContent>
+                                                </AccordionItem>
+                                            ))}
+                                        </Accordion>
+                                    )}
+                                </div>
+                            )}
+
+                            {mobilePanelTab === 'config' && (
+                                <div className="space-y-3">
+                                    {!selectedNode ? (
+                                        <div className={cn(
+                                            "rounded-xl border p-4",
+                                            isDark ? "border-white/10 bg-white/5 text-white/60" : "border-slate-200 bg-slate-50 text-slate-600"
+                                        )}>
+                                            <p className="text-sm font-medium">Selecione um nó no canvas</p>
+                                            <p className={cn("text-xs mt-1", isDark ? "text-white/40" : "text-slate-500")}>
+                                                As configurações aparecem aqui para edição rápida.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className={cn(
+                                            "rounded-xl border",
+                                            isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white"
+                                        )}>
+                                            <div className={cn(
+                                                "p-4 border-b",
+                                                isDark ? "border-white/10" : "border-slate-200"
+                                            )}>
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/20">
+                                                            {selectedNode.data?.label || selectedNode.type}
+                                                        </Badge>
+                                                        <div className={cn("text-xs mt-2 truncate", isDark ? "text-white/40" : "text-slate-500")}>
+                                                            {selectedNode.id}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button variant="outline" size="icon" onClick={focusSelectedNode} className="h-11 w-11">
+                                                            <Focus className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button variant="outline" size="icon" onClick={duplicateSelectedNode} className="h-11 w-11">
+                                                            <Copy className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className={cn("text-xs mt-3", isDark ? "text-white/40" : "text-slate-500")}>
+                                                    Alterações aplicadas automaticamente
+                                                </div>
+                                            </div>
+                                            <div className="p-4 space-y-5">
+                                                {renderNodeConfigFields()}
+                                            </div>
+                                            <div className={cn(
+                                                "p-4 border-t space-y-2",
+                                                isDark ? "border-white/10" : "border-slate-200"
+                                            )}>
+                                                <div className="flex gap-2">
+                                                    <Button variant="outline" className="flex-1 h-11" onClick={resetSelectedNodeConfig}>
+                                                        <RotateCcw className="w-4 h-4" />
+                                                        Restaurar
+                                                    </Button>
+                                                    <Button variant="outline" className="flex-1 h-11" onClick={onPaneClick}>
+                                                        <X className="w-4 h-4" />
+                                                        Fechar
+                                                    </Button>
+                                                </div>
+
+                                                {currentFlow && (
+                                                    <Button
+                                                        onClick={handleSaveFlow}
+                                                        disabled={saving}
+                                                        className="w-full h-11"
+                                                    >
+                                                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                        {saving ? 'Salvando...' : 'Salvar Fluxo'}
+                                                    </Button>
+                                                )}
+
+                                                <Separator className={cn(isDark ? "bg-white/10" : "bg-slate-200")} />
+
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="destructive" className="w-full h-11">
+                                                            <Trash2 className="w-4 h-4" />
+                                                            Deletar Nó
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Deletar nó?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Isso removerá o nó e suas conexões. Esta ação não pode ser desfeita.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={performDeleteSelectedNode}>Deletar</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </ScrollArea>
+                    </div>
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 };
