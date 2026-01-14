@@ -3330,14 +3330,23 @@ const Inbox = () => {
       </Dialog>
 
       <Dialog open={showPurgeAllDialog} onOpenChange={(open) => !purgingAll && setShowPurgeAllDialog(open)}>
-        <DialogContent className="max-w-md bg-black/70 border border-white/10">
+        <DialogContent
+          className={cn(
+            "max-w-md",
+            isDark
+              ? "bg-black/70 backdrop-blur-xl border border-white/10 text-white"
+              : "bg-white border border-slate-200 shadow-xl text-slate-900"
+          )}
+        >
           <DialogTitle className="sr-only">Excluir todas as conversas</DialogTitle>
           <DialogDescription className="sr-only">
             Confirmação para excluir todas as conversas do tenant
           </DialogDescription>
           <div className="p-6">
-            <h2 className="text-lg font-bold text-white mb-2">Excluir todas as conversas</h2>
-            <p className="text-white/70 text-sm">
+            <h2 className={cn("text-lg font-bold mb-2", isDark ? "text-white" : "text-slate-900")}>
+              Excluir todas as conversas
+            </h2>
+            <p className={cn("text-sm", isDark ? "text-white/70" : "text-slate-600")}>
               Isso vai remover todas as conversas e mensagens deste tenant. Essa ação não pode ser desfeita.
             </p>
             <div className="mt-5 flex items-center justify-end gap-3">
@@ -3364,14 +3373,26 @@ const Inbox = () => {
 
       {/* Contact View Modal */}
       <Dialog open={showContactModal} onOpenChange={setShowContactModal}>
-        <DialogContent className="max-w-md bg-white/10 backdrop-blur-xl border border-white/20">
+        <DialogContent
+          className={cn(
+            "max-w-md",
+            isDark
+              ? "bg-white/10 backdrop-blur-xl border border-white/20"
+              : "bg-white border border-slate-200 shadow-xl"
+          )}
+        >
           <DialogTitle className="sr-only">Informações do contato</DialogTitle>
           <DialogDescription className="sr-only">
             Detalhes do contato selecionado
           </DialogDescription>
           <div className="p-6">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <Users className="w-5 h-5 text-emerald-400" />
+            <h2
+              className={cn(
+                "text-xl font-bold mb-6 flex items-center gap-2",
+                isDark ? "text-white" : "text-slate-900"
+              )}
+            >
+              <Users className={cn("w-5 h-5", isDark ? "text-emerald-400" : "text-emerald-600")} />
               Informações do Contato
             </h2>
 
@@ -3385,55 +3406,87 @@ const Inbox = () => {
                     sizeClassName="w-16 h-16"
                   />
                   <div>
-                    <h3 className="text-lg font-semibold text-white">{contactData.fullName}</h3>
-                    <p className="text-white/60 text-sm">{contactData.phone}</p>
+                    <h3 className={cn("text-lg font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                      {contactData.fullName}
+                    </h3>
+                    <p className={cn("text-sm", isDark ? "text-white/60" : "text-slate-600")}>{contactData.phone}</p>
                   </div>
                 </div>
 
                 {/* Contact Details */}
                 <div className="space-y-3 mt-6">
                   {/* Phone */}
-                  <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                      <Phone className="w-4 h-4 text-emerald-400" />
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg",
+                      isDark ? "bg-white/5" : "bg-slate-50 border border-slate-200"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center",
+                        isDark ? "bg-emerald-500/20" : "bg-emerald-50"
+                      )}
+                    >
+                      <Phone className={cn("w-4 h-4", isDark ? "text-emerald-400" : "text-emerald-700")} />
                     </div>
                     <div>
-                      <p className="text-white/50 text-xs">Telefone</p>
-                      <p className="text-white">{contactData.phone}</p>
+                      <p className={cn("text-xs", isDark ? "text-white/50" : "text-slate-500")}>Telefone</p>
+                      <p className={cn(isDark ? "text-white" : "text-slate-900")}>{contactData.phone}</p>
                     </div>
                   </div>
 
                   {/* Email */}
                   {contactData.email && (
-                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                        <Mail className="w-4 h-4 text-blue-400" />
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg",
+                        isDark ? "bg-white/5" : "bg-slate-50 border border-slate-200"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center",
+                          isDark ? "bg-blue-500/20" : "bg-blue-50"
+                        )}
+                      >
+                        <Mail className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-blue-700")} />
                       </div>
                       <div>
-                        <p className="text-white/50 text-xs">Email</p>
-                        <p className="text-white">{contactData.email}</p>
+                        <p className={cn("text-xs", isDark ? "text-white/50" : "text-slate-500")}>Email</p>
+                        <p className={cn(isDark ? "text-white" : "text-slate-900")}>{contactData.email}</p>
                       </div>
                     </div>
                   )}
 
                   {/* Status */}
                   {contactData.status && (
-                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg",
+                        isDark ? "bg-white/5" : "bg-slate-50 border border-slate-200"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center",
+                          isDark ? "bg-emerald-500/20" : "bg-emerald-50"
+                        )}
+                      >
                         <Circle
                           className={cn(
                             "w-4 h-4",
                             String(contactData.status).trim().toLowerCase() === 'verified'
-                              ? 'text-emerald-400'
+                              ? (isDark ? 'text-emerald-400' : 'text-emerald-700')
                               : String(contactData.status).trim().toLowerCase() === 'unverified'
-                                ? 'text-amber-400'
-                                : 'text-amber-400'
+                                ? (isDark ? 'text-amber-400' : 'text-amber-700')
+                                : (isDark ? 'text-amber-400' : 'text-amber-700')
                           )}
                         />
                       </div>
                       <div>
-                        <p className="text-white/50 text-xs">Status</p>
-                        <p className="text-white">
+                        <p className={cn("text-xs", isDark ? "text-white/50" : "text-slate-500")}>Status</p>
+                        <p className={cn(isDark ? "text-white" : "text-slate-900")}>
                           {(() => {
                             const s = String(contactData.status || '').trim().toLowerCase();
                             if (s === 'verified') return 'Verificado';
@@ -3447,8 +3500,13 @@ const Inbox = () => {
 
                   {/* Tags */}
                   {contactData.tags && contactData.tags.length > 0 && (
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <p className="text-white/50 text-xs mb-2">Tags</p>
+                    <div
+                      className={cn(
+                        "p-3 rounded-lg",
+                        isDark ? "bg-white/5" : "bg-slate-50 border border-slate-200"
+                      )}
+                    >
+                      <p className={cn("text-xs mb-2", isDark ? "text-white/50" : "text-slate-500")}>Tags</p>
                       <div className="flex flex-wrap gap-2">
                         {contactData.tags.map((tag, idx) => (
                           <GlassBadge key={idx} variant="success" className="px-2 py-1 text-xs">
@@ -3461,13 +3519,24 @@ const Inbox = () => {
 
                   {/* Custom Fields */}
                   {contactData.customFields && Object.keys(contactData.customFields).length > 0 && (
-                    <div className="p-3 bg-white/5 rounded-lg">
-                      <p className="text-white/50 text-xs mb-2">Campos Personalizados</p>
+                    <div
+                      className={cn(
+                        "p-3 rounded-lg",
+                        isDark ? "bg-white/5" : "bg-slate-50 border border-slate-200"
+                      )}
+                    >
+                      <p className={cn("text-xs mb-2", isDark ? "text-white/50" : "text-slate-500")}>
+                        Campos Personalizados
+                      </p>
                       <div className="space-y-2">
                         {Object.entries(contactData.customFields).map(([key, value]) => (
                           <div key={key} className="flex justify-between">
-                            <span className="text-white/60 text-sm capitalize">{key.replace(/_/g, ' ')}</span>
-                            <span className="text-white text-sm">{String(value)}</span>
+                            <span className={cn("text-sm capitalize", isDark ? "text-white/60" : "text-slate-600")}>
+                              {key.replace(/_/g, ' ')}
+                            </span>
+                            <span className={cn("text-sm", isDark ? "text-white" : "text-slate-900")}>
+                              {String(value)}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -3476,25 +3545,35 @@ const Inbox = () => {
 
                   {/* Source */}
                   {contactData.source && (
-                    <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-purple-400" />
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg",
+                        isDark ? "bg-white/5" : "bg-slate-50 border border-slate-200"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center",
+                          isDark ? "bg-purple-500/20" : "bg-purple-50"
+                        )}
+                      >
+                        <FileText className={cn("w-4 h-4", isDark ? "text-purple-400" : "text-purple-700")} />
                       </div>
                       <div>
-                        <p className="text-white/50 text-xs">Origem</p>
-                        <p className="text-white capitalize">{contactData.source}</p>
+                        <p className={cn("text-xs", isDark ? "text-white/50" : "text-slate-500")}>Origem</p>
+                        <p className={cn("capitalize", isDark ? "text-white" : "text-slate-900")}>{contactData.source}</p>
                       </div>
                     </div>
                   )}
 
                   {/* Created At */}
                   {contactData.firstContactAt && (
-                    <div className="text-center text-white/40 text-xs mt-4">
+                    <div className={cn("text-center text-xs mt-4", isDark ? "text-white/40" : "text-slate-500")}>
                       1º contato em {new Date(contactData.firstContactAt).toLocaleDateString('pt-BR')}
                     </div>
                   )}
                   {contactData.createdAt && (
-                    <div className="text-center text-white/40 text-xs mt-4">
+                    <div className={cn("text-center text-xs mt-4", isDark ? "text-white/40" : "text-slate-500")}>
                       Criado em {new Date(contactData.createdAt).toLocaleDateString('pt-BR')}
                     </div>
                   )}

@@ -60,7 +60,7 @@ const Sidebar = () => {
       { to: '/app/automations', icon: Bot, label: 'Automações' },
       { to: '/app/flows', icon: Workflow, label: 'Fluxos' },
       ...(canManageConnections ? [{ to: '/app/settings/connections', icon: Plug, label: 'Conexões' }] : []),
-      { to: '/app/settings', icon: Settings, label: 'Configurações' },
+      { to: '/app/settings', icon: Settings, label: 'Configurações', end: true },
     ];
 
   const handleSelectConversation = (conv) => {
@@ -196,14 +196,22 @@ const Sidebar = () => {
             <button
               onClick={() => setShowSearch(true)}
               className={cn(
-                'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
-                'transition-all duration-200 group',
+                sidebarCollapsed
+                  ? 'mx-auto grid h-12 w-12 place-items-center rounded-xl'
+                  : 'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
+                'group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60',
+                'transition-colors duration-300 ease-in-out',
                 theme === 'dark'
                   ? 'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900'
               )}
+              aria-label="Buscar"
+              title={sidebarCollapsed ? 'Buscar' : undefined}
             >
-              <Search className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
+              <Search className={cn(
+                "w-5 h-5 group-hover:scale-110 transition-transform duration-300 ease-in-out",
+                !sidebarCollapsed && "flex-shrink-0"
+              )} />
               {!sidebarCollapsed && (
                 <>
                   <span className="flex-1 text-left text-sm">Buscar...</span>
@@ -224,10 +232,15 @@ const Sidebar = () => {
               key={item.to}
               to={item.to}
               end={item.end}
+              aria-label={item.label}
+              title={sidebarCollapsed ? item.label : undefined}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-xl',
-                  'transition-all duration-200 group',
+                  sidebarCollapsed
+                    ? 'mx-auto grid h-12 w-12 place-items-center rounded-xl'
+                    : 'flex items-center gap-3 px-4 py-3 rounded-xl',
+                  'group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60',
+                  'transition-colors duration-300 ease-in-out',
                   isActive
                     ? theme === 'dark'
                       ? 'bg-emerald-500/30 text-white shadow-lg'
@@ -238,7 +251,10 @@ const Sidebar = () => {
                 )
               }
             >
-              <item.icon className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
+              <item.icon className={cn(
+                "w-5 h-5 group-hover:scale-110 transition-transform duration-300 ease-in-out",
+                !sidebarCollapsed && "flex-shrink-0"
+              )} />
               {!sidebarCollapsed && <span className="font-medium">{item.label}</span>}
             </NavLink>
           ))}
@@ -299,12 +315,17 @@ const Sidebar = () => {
           <button
             onClick={handleLogout}
             className={cn(
-              'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
-              'text-red-500 transition-all duration-200 group',
+              sidebarCollapsed
+                ? 'mx-auto grid h-12 w-12 place-items-center rounded-xl'
+                : 'flex items-center gap-3 w-full px-4 py-3 rounded-xl',
+              'group text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60',
+              'transition-colors duration-300 ease-in-out',
               theme === 'dark' ? 'hover:bg-red-500/20' : 'hover:bg-red-50'
             )}
+            aria-label="Sair"
+            title={sidebarCollapsed ? 'Sair' : undefined}
           >
-            <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform duration-300 ease-in-out" />
             {!sidebarCollapsed && <span>Sair</span>}
           </button>
         </div>
