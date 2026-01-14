@@ -9,9 +9,26 @@ export const useAuthStore = create(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      isBootstrapping: false,
       error: null,
       maintenance: null,
       maintenanceDismissedKey: null,
+
+      initAuth: async () => {
+        if (get().isBootstrapping) return null;
+        set({ isBootstrapping: true });
+        try {
+          const user = await AuthAPI.getCurrentUser();
+          if (user) {
+            set({ user, isAuthenticated: true });
+          }
+          return user || null;
+        } catch (error) {
+          return null;
+        } finally {
+          set({ isBootstrapping: false });
+        }
+      },
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
@@ -28,6 +45,7 @@ export const useAuthStore = create(
       },
 
       logout: () => {
+        AuthAPI.logout().catch(() => null);
         set({ user: null, token: null, isAuthenticated: false, error: null, maintenance: null, maintenanceDismissedKey: null });
       },
 

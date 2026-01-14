@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request, Query, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -467,7 +467,7 @@ async def login_options():
 
 # DIRECT ROUTE FOR LOGIN (FIX FOR 405)
 @app.post("/api/auth/login", response_model=LoginResponse)
-async def direct_login(request: LoginRequest):
+async def direct_login(request: LoginRequest, response: Response, http_request: Request):
     """Direct Login path to avoid Router/Prefix issues"""
     email = _normalize_email(request.email)
     password = str(request.password or "").strip()
@@ -512,6 +512,19 @@ async def direct_login(request: LoginRequest):
 
     token = create_token(user["id"], user["email"], user["role"], user.get("tenant_id"))
 
+    proto = (http_request.headers.get("x-forwarded-proto") or http_request.url.scheme or "http").strip().lower()
+    is_secure = proto == "https"
+    cookie_samesite = "none" if is_secure else "lax"
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=is_secure,
+        samesite=cookie_samesite,
+        max_age=86400 * 7,
+        path="/",
+    )
+
     user_response = {
         "id": user["id"],
         "email": user["email"],
@@ -537,6 +550,12 @@ async def direct_login(request: LoginRequest):
         maintenance = None
 
     return {"user": user_response, "token": token, "maintenance": maintenance}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(response: Response):
+    response.delete_cookie(key="access_token", path="/")
+    return {"success": True}
 
 # Create a router with the /api prefix, ensuring trailing slash handling
 api_router = APIRouter(prefix="/api")
@@ -984,11 +1003,14 @@ class FlowDuplicate(BaseModel):
 # ==================== AUTH ====================
 # Note: create_token is defined at the top of the file
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not credentials:
+def verify_token(http_request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials if credentials else None
+    if not token:
+        token = http_request.cookies.get("access_token")
+    if not token:
         raise HTTPException(status_code=401, detail="Token não fornecido")
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")

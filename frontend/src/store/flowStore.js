@@ -31,19 +31,14 @@ const getAuthToken = () => {
     return null;
 };
 
-// Helper function to get tenant ID from localStorage
-const getAuthTenantId = () => {
-    const authData = localStorage.getItem('whatsapp-crm-auth');
-    if (authData) {
-        try {
-            const { state } = JSON.parse(authData);
-            return state?.user?.tenantId || null;
-        } catch {
-            return null;
-        }
+const buildAuthConfig = (token, extra = {}) => ({
+    withCredentials: true,
+    ...(extra || {}),
+    headers: {
+        ...((extra || {}).headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
     }
-    return null;
-};
+});
 
 // Helper to safely parse JSON fields
 const safeParseJson = (value, defaultValue = []) => {
@@ -145,18 +140,11 @@ const useFlowStore = create((set, get) => ({
     // API Actions
     fetchFlows: async () => {
         const token = getAuthToken();
-        const tenantId = getAuthTenantId();
-
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.', loading: false });
-            return;
-        }
 
         set({ loading: true, error: null });
         try {
             const response = await axios.get(`${API_URL}/flows`, {
-                headers: { Authorization: `Bearer ${token}` },
-                params: { tenant_id: tenantId }
+                ...buildAuthConfig(token)
             });
 
             const flows = (response.data || []).map(f => ({
@@ -175,15 +163,10 @@ const useFlowStore = create((set, get) => ({
 
     fetchFlow: async (flowId) => {
         const token = getAuthToken();
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.' });
-            return null;
-        }
-
         set({ loading: true, error: null });
         try {
             const response = await axios.get(`${API_URL}/flows/${flowId}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                ...buildAuthConfig(token)
             });
 
             const flow = {
@@ -214,17 +197,6 @@ const useFlowStore = create((set, get) => ({
         }
 
         const token = getAuthToken();
-        const tenantId = getAuthTenantId();
-
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.' });
-            return null;
-        }
-
-        if (!tenantId) {
-            set({ error: 'Tenant não identificado. Faça login novamente.' });
-            return null;
-        }
 
         set({ saving: true, error: null });
         try {
@@ -235,10 +207,9 @@ const useFlowStore = create((set, get) => ({
                     description: description || '',
                     nodes: nodes || [],
                     edges: edges || [],
-                    status: flowStatus || 'draft',
-                    tenant_id: tenantId
+                    status: flowStatus || 'draft'
                 },
-                { headers: { Authorization: `Bearer ${token}` } }
+                buildAuthConfig(token)
             );
 
             const newFlow = {
@@ -269,11 +240,6 @@ const useFlowStore = create((set, get) => ({
         }
 
         const token = getAuthToken();
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.' });
-            return null;
-        }
-
         set({ saving: true, error: null });
         try {
             const response = await axios.put(
@@ -286,7 +252,7 @@ const useFlowStore = create((set, get) => ({
                     status: flowStatus,
                     is_active: isActive
                 },
-                { headers: { Authorization: `Bearer ${token}` } }
+                buildAuthConfig(token)
             );
 
             const updatedFlow = {
@@ -309,15 +275,10 @@ const useFlowStore = create((set, get) => ({
 
     deleteFlow: async (flowId) => {
         const token = getAuthToken();
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.' });
-            return false;
-        }
-
         set({ loading: true, error: null });
         try {
             await axios.delete(`${API_URL}/flows/${flowId}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                ...buildAuthConfig(token)
             });
 
             if (get().currentFlow?.id === flowId) {
@@ -342,17 +303,12 @@ const useFlowStore = create((set, get) => ({
         }
 
         const token = getAuthToken();
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.' });
-            return null;
-        }
-
         set({ saving: true, error: null });
         try {
             const response = await axios.post(
                 `${API_URL}/flows/${flowId}/duplicate`,
                 { name: newName.trim() },
-                { headers: { Authorization: `Bearer ${token}` } }
+                buildAuthConfig(token)
             );
 
             await get().fetchFlows();
@@ -368,17 +324,12 @@ const useFlowStore = create((set, get) => ({
 
     toggleFlow: async (flowId) => {
         const token = getAuthToken();
-        if (!token) {
-            set({ error: 'Não autenticado. Faça login novamente.' });
-            return null;
-        }
-
         set({ saving: true, error: null });
         try {
             const response = await axios.patch(
                 `${API_URL}/flows/${flowId}/toggle`,
                 {},
-                { headers: { Authorization: `Bearer ${token}` } }
+                buildAuthConfig(token)
             );
 
             const nextActive = !!(response.data?.isActive ?? response.data?.is_active ?? response.data?.active);

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -42,7 +42,11 @@ import { RealtimeProvider } from "./context/RealtimeContext";
 import { GlassToaster } from "./components/ui/glass-toaster";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, isBootstrapping } = useAuthStore();
+
+  if (isBootstrapping) {
+    return <PageLoader />;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/sign-in" replace />;
@@ -56,7 +60,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 };
 
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, isBootstrapping } = useAuthStore();
+
+  if (isBootstrapping) {
+    return <PageLoader />;
+  }
 
   if (isAuthenticated) {
     return <Navigate to={user?.role === 'superadmin' ? '/superadmin' : '/app/inbox'} replace />;
@@ -66,6 +74,12 @@ const PublicRoute = ({ children }) => {
 };
 
 function App() {
+  const initAuth = useAuthStore((s) => s.initAuth);
+
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
+
   return (
     <ThemeProvider>
       <RealtimeProvider>

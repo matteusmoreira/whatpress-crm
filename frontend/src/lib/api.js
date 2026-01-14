@@ -21,6 +21,7 @@ const API = `${BACKEND_URL}/api`;
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -54,6 +55,11 @@ apiClient.interceptors.response.use(
 export const AuthAPI = {
   async login(email, password) {
     const response = await apiClient.post('/auth/login', { email, password });
+    return response.data;
+  },
+
+  async logout() {
+    const response = await apiClient.post('/auth/logout');
     return response.data;
   },
 
