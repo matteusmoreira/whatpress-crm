@@ -201,6 +201,16 @@
   animation: nodeAppear 0.3s ease-out;
 }
 
+.flowbuilder-scrollarea [data-radix-scroll-area-viewport] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.flowbuilder-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: 56px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 1280px) {
   .custom-node {
@@ -213,5 +223,69 @@
 
   .node-body {
     padding: 0.5rem 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .custom-node {
+    min-width: 132px;
+    border-radius: 10px;
+  }
+
+  .node-header {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .node-title {
+    font-size: 0.8125rem;
+  }
+
+  .node-body {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .node-description {
+    font-size: 0.6875rem;
+  }
+
+  .react-flow__handle {
+    width: 18px;
+    height: 18px;
+  }
+
+  .react-flow__controls button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .flowbuilder-canvas .react-flow {
+    touch-action: none;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .custom-node {
+    min-width: 148px;
+  }
+
+  .react-flow__handle {
+    width: 16px;
+    height: 16px;
+  }
+
+  .react-flow__controls button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  .flowbuilder-canvas .react-flow {
+    touch-action: none;
+  }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+  .react-flow__controls {
+    transform: scale(0.95);
+    transform-origin: top left;
   }
 }

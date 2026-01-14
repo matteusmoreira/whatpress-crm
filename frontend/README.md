@@ -2,6 +2,13 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Responsividade (FlowBuilder / Fluxos)
+
+- Breakpoints: 320–480px, 481–768px e ajustes por orientação (portrait/landscape)
+- Touch: alvos mínimos maiores (botões/ícones) e gestos mais estáveis no canvas
+- Performance: MiniMap desativado em telas até 768px e uso de `content-visibility` em listas longas
+- Arquivos principais: `src/pages/FlowBuilder.jsx` e `src/pages/FlowBuilder.css`
+
 ## Available Scripts
 
 In the project directory, you can run:

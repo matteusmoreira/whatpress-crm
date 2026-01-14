@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState, useRef } from 'react';
 import {
     ReactFlow,
     MiniMap,
@@ -101,6 +101,11 @@ const FlowBuilderInner = () => {
     const [selectedNode, setSelectedNodeState] = useState(null);
     const [rightPanelTab, setRightPanelTab] = useState('components');
     const [componentSearch, setComponentSearch] = useState('');
+    const deferredComponentSearch = useDeferredValue(componentSearch);
+    const [isCompactUI, setIsCompactUI] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.matchMedia?.('(max-width: 768px)')?.matches ?? false;
+    });
     const lastSyncRef = useRef({ nodes: [], edges: [] });
     const reactFlowWrapperRef = useRef(null);
     const reactFlowInstanceRef = useRef(null);
@@ -135,6 +140,19 @@ const FlowBuilderInner = () => {
     useEffect(() => {
         fetchFlows();
     }, [fetchFlows]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const media = window.matchMedia('(max-width: 768px)');
+        const handleChange = () => setIsCompactUI(media.matches);
+        handleChange();
+        if (typeof media.addEventListener === 'function') {
+            media.addEventListener('change', handleChange);
+            return () => media.removeEventListener('change', handleChange);
+        }
+        media.addListener(handleChange);
+        return () => media.removeListener(handleChange);
+    }, []);
 
     useEffect(() => {
         setIsRenamingFlow(false);
@@ -460,7 +478,7 @@ const FlowBuilderInner = () => {
     }, [nodes, selectedNode]);
 
     const filteredNodeCategories = useMemo(() => {
-        const q = componentSearch.trim().toLowerCase();
+        const q = deferredComponentSearch.trim().toLowerCase();
         if (!q) return nodeCategories;
         return nodeCategories
             .map((category) => ({
@@ -471,7 +489,7 @@ const FlowBuilderInner = () => {
                 })
             }))
             .filter((category) => category.items.length > 0);
-    }, [componentSearch]);
+    }, [deferredComponentSearch]);
 
     const quickAddItems = useMemo(() => {
         const preferredTypes = ['textMessage', 'wait', 'conditional', 'webhook'];
@@ -492,7 +510,7 @@ const FlowBuilderInner = () => {
                                 value={nodeConfigDraft.trigger || 'manual'}
                                 onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, trigger: value })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 sm:h-9">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -539,7 +557,7 @@ const FlowBuilderInner = () => {
                                 value={nodeConfigDraft.mediaType || 'image'}
                                 onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, mediaType: value })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 sm:h-9">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -590,7 +608,7 @@ const FlowBuilderInner = () => {
                                 value={nodeConfigDraft.unit || 'seconds'}
                                 onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, unit: value })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 sm:h-9">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -622,7 +640,7 @@ const FlowBuilderInner = () => {
                                 value={condition.operator || 'equals'}
                                 onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, condition: { ...condition, operator: value } })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 sm:h-9">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -654,7 +672,7 @@ const FlowBuilderInner = () => {
                                 value={nodeConfigDraft.action || 'set'}
                                 onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, action: value })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 sm:h-9">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -694,7 +712,7 @@ const FlowBuilderInner = () => {
                                 value={nodeConfigDraft.method || 'POST'}
                                 onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, method: value })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 sm:h-9">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -731,7 +749,7 @@ const FlowBuilderInner = () => {
     };
 
     return (
-        <div className="p-4 sm:p-5 lg:p-6 h-full min-h-0 min-w-0">
+        <div className="p-3 sm:p-5 lg:p-6 h-full min-h-0 min-w-0">
             <div
                 className={cn(
                     "flex flex-col lg:flex-row h-full min-h-0 overflow-hidden min-w-0 rounded-2xl border",
@@ -740,12 +758,12 @@ const FlowBuilderInner = () => {
             >
             {/* Left Panel - Flow List */}
             <div className={cn(
-                "w-full lg:w-64 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r max-h-[320px] lg:max-h-none",
+                "w-full lg:w-64 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r max-h-[240px] sm:max-h-[320px] lg:max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
                 <div className={cn(
-                    "p-4 border-b flex items-center justify-between",
+                    "p-3 sm:p-4 border-b flex items-center justify-between gap-3",
                     isDark ? "border-white/10" : "border-slate-200"
                 )}>
                     <h2 className={cn(
@@ -756,7 +774,7 @@ const FlowBuilderInner = () => {
                         onClick={handleCreateFlow}
                         disabled={saving}
                         className={cn(
-                            "flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                            "flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                             "bg-emerald-500 hover:bg-emerald-600 text-white",
                             "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
@@ -794,7 +812,7 @@ const FlowBuilderInner = () => {
                                 key={flow.id}
                                 onClick={() => handleSelectFlow(flow)}
                                 className={cn(
-                                    "p-3 rounded-lg cursor-pointer transition-all border",
+                                    "p-3 rounded-lg cursor-pointer transition-all border flowbuilder-cv",
                                     currentFlow?.id === flow.id
                                         ? isDark
                                             ? "bg-emerald-500/20 border-emerald-500/50"
@@ -829,7 +847,7 @@ const FlowBuilderInner = () => {
                                         onClick={(e) => handleToggleFlow(flow.id, e)}
                                         disabled={loading || saving}
                                         className={cn(
-                                            "p-1.5 rounded transition-colors",
+                                            "p-2.5 sm:p-1.5 rounded transition-colors touch-manipulation",
                                             "disabled:opacity-50",
                                             (flow.is_active || flow.isActive)
                                                 ? (isDark
@@ -842,23 +860,23 @@ const FlowBuilderInner = () => {
                                         title={(flow.is_active || flow.isActive) ? "Desativar" : "Ativar"}
                                     >
                                         {(flow.is_active || flow.isActive) ? (
-                                            <Pause className="w-3.5 h-3.5" />
+                                            <Pause className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                         ) : (
-                                            <Play className="w-3.5 h-3.5" />
+                                            <Play className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                         )}
                                     </button>
                                     <button
                                         onClick={(e) => handleDeleteFlow(flow.id, e)}
                                         disabled={loading || saving}
                                         className={cn(
-                                            "p-1.5 rounded transition-colors",
+                                            "p-2.5 sm:p-1.5 rounded transition-colors touch-manipulation",
                                             "disabled:opacity-50",
                                             isDark
                                                 ? "hover:bg-red-500/20 text-white/50 hover:text-red-400"
                                                 : "hover:bg-red-50 text-slate-400 hover:text-red-500"
                                         )}
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                     </button>
                                 </div>
                             </div>
@@ -868,7 +886,7 @@ const FlowBuilderInner = () => {
             </div>
 
             {/* Main Canvas */}
-            <div className="flex-1 relative min-w-0 min-h-[360px] lg:min-h-0 p-2 lg:p-3" ref={reactFlowWrapperRef}>
+            <div className="flex-1 relative min-w-0 min-h-[240px] sm:min-h-[320px] lg:min-h-0 p-2 lg:p-3 flowbuilder-canvas" ref={reactFlowWrapperRef}>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -883,6 +901,9 @@ const FlowBuilderInner = () => {
                     }}
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
+                    onlyRenderVisibleElements
+                    zoomOnScroll={false}
+                    panOnScroll
                     fitView
                     className={isDark ? "react-flow-dark" : ""}
                     style={{ background: isDark ? '#0f172a' : '#f8fafc' }}
@@ -894,35 +915,37 @@ const FlowBuilderInner = () => {
                             isDark ? "!bg-slate-800 !border-white/10" : "!bg-white !border-slate-200"
                         )}
                     />
-                    <MiniMap
-                        nodeColor={(node) => {
-                            switch (node.type) {
-                                case 'start': return '#10b981';
-                                case 'textMessage': return '#3b82f6';
-                                case 'mediaMessage': return '#8b5cf6';
-                                case 'wait': return '#f59e0b';
-                                case 'conditional': return '#ec4899';
-                                case 'variable': return '#06b6d4';
-                                case 'webhook': return '#6366f1';
-                                default: return '#64748b';
-                            }
-                        }}
-                        className={cn(
-                            "!bg-opacity-90 !border !rounded-lg",
-                            isDark ? "!bg-slate-800 !border-white/10" : "!bg-white !border-slate-200"
-                        )}
-                    />
+                    {!isCompactUI && (
+                        <MiniMap
+                            nodeColor={(node) => {
+                                switch (node.type) {
+                                    case 'start': return '#10b981';
+                                    case 'textMessage': return '#3b82f6';
+                                    case 'mediaMessage': return '#8b5cf6';
+                                    case 'wait': return '#f59e0b';
+                                    case 'conditional': return '#ec4899';
+                                    case 'variable': return '#06b6d4';
+                                    case 'webhook': return '#6366f1';
+                                    default: return '#64748b';
+                                }
+                            }}
+                            className={cn(
+                                "!bg-opacity-90 !border !rounded-lg",
+                                isDark ? "!bg-slate-800 !border-white/10" : "!bg-white !border-slate-200"
+                            )}
+                        />
+                    )}
 
                     {/* Top Panel */}
                     <Panel position="top-left">
                         <div className={cn(
-                            "flex items-center gap-3 px-3 py-2 rounded-xl border backdrop-blur-sm",
+                            "flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 rounded-xl border backdrop-blur-sm max-w-[calc(100vw-2rem)] overflow-x-auto",
                             isDark
                                 ? "bg-slate-800/90 border-white/10"
                                 : "bg-white/90 border-slate-200 shadow-lg"
                         )}>
                             {currentFlow ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
                                     {isRenamingFlow ? (
                                         <Input
                                             value={flowName}
@@ -934,13 +957,13 @@ const FlowBuilderInner = () => {
                                             onBlur={() => setIsRenamingFlow(false)}
                                             autoFocus
                                             className={cn(
-                                                "h-8 w-[220px] text-sm",
+                                                "h-11 sm:h-8 w-[180px] sm:w-[220px] text-sm",
                                                 isDark ? "bg-white/5 border-white/10 text-white" : "bg-white"
                                             )}
                                         />
                                     ) : (
                                         <h2 className={cn(
-                                            "font-semibold text-sm max-w-[220px] truncate",
+                                            "font-semibold text-sm max-w-[180px] sm:max-w-[220px] truncate",
                                             isDark ? "text-white" : "text-slate-800"
                                         )}>
                                             {flowName || currentFlow.name || 'Sem nome'}
@@ -949,7 +972,7 @@ const FlowBuilderInner = () => {
                                     <button
                                         onClick={() => setIsRenamingFlow((v) => !v)}
                                         className={cn(
-                                            "p-1.5 rounded-lg transition-colors",
+                                            "p-2.5 sm:p-1.5 rounded-lg transition-colors touch-manipulation",
                                             isDark ? "hover:bg-white/10 text-white/60 hover:text-white" : "hover:bg-slate-100 text-slate-500 hover:text-slate-800"
                                         )}
                                         title="Renomear fluxo"
@@ -971,7 +994,7 @@ const FlowBuilderInner = () => {
                                         onClick={(e) => handleToggleFlow(currentFlow.id, e)}
                                         disabled={saving}
                                         className={cn(
-                                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                                            "flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                                             isActive ? "bg-white/10 hover:bg-white/15 text-white" : "bg-emerald-500 hover:bg-emerald-600 text-white",
                                             "disabled:opacity-50 disabled:cursor-not-allowed"
                                         )}
@@ -983,7 +1006,7 @@ const FlowBuilderInner = () => {
                                         onClick={handleSaveFlow}
                                         disabled={saving}
                                         className={cn(
-                                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                                            "flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                                             "bg-emerald-500 hover:bg-emerald-600 text-white",
                                             "disabled:opacity-50 disabled:cursor-not-allowed"
                                         )}
@@ -1021,24 +1044,24 @@ const FlowBuilderInner = () => {
 
             {/* Right Panel - Components Toolbar */}
             <div className={cn(
-                "w-full lg:w-80 flex-shrink-0 flex flex-col min-h-0 border-t lg:border-t-0 lg:border-l max-h-[45vh] lg:max-h-none",
+                "w-full lg:w-80 flex-shrink-0 flex flex-col min-h-0 border-t lg:border-t-0 lg:border-l max-h-[40vh] sm:max-h-[45vh] lg:max-h-none",
                 isDark ? "bg-slate-900/50 border-white/10" : "bg-white border-slate-200"
             )}>
                 {/* Header */}
                 <div className={cn(
-                    "p-4 border-b",
+                    "p-3 sm:p-4 border-b",
                     isDark ? "border-white/10" : "border-slate-200"
                 )}>
                     <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="w-full">
-                        <TabsList className="w-full grid grid-cols-2">
-                            <TabsTrigger value="components">Componentes</TabsTrigger>
-                            <TabsTrigger value="config" disabled={!selectedNode}>Configurar</TabsTrigger>
+                        <TabsList className="w-full grid grid-cols-2 h-11 sm:h-9">
+                            <TabsTrigger value="components" className="py-2 sm:py-1">Componentes</TabsTrigger>
+                            <TabsTrigger value="config" disabled={!selectedNode} className="py-2 sm:py-1">Configurar</TabsTrigger>
                         </TabsList>
                     </Tabs>
                 </div>
 
                 <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 min-h-0 flex flex-col">
-                    <ScrollArea className="flex-1 min-h-0">
+                    <ScrollArea className="flex-1 min-h-0 flowbuilder-scrollarea">
                         <TabsContent value="components" className="m-0">
                             <div className="p-3 space-y-3">
                                 <div className={cn(
@@ -1054,7 +1077,7 @@ const FlowBuilderInner = () => {
                                         onChange={(e) => setComponentSearch(e.target.value)}
                                         placeholder="Buscar componentes..."
                                         disabled={!currentFlow}
-                                        className="pl-9"
+                                        className="pl-9 h-11 sm:h-9"
                                     />
                                 </div>
 
@@ -1076,6 +1099,7 @@ const FlowBuilderInner = () => {
                                                         size="sm"
                                                         onClick={() => handleAddNode(item.type)}
                                                         className={cn(
+                                                            "h-11 sm:h-8",
                                                             isDark ? "border-white/10 bg-white/5 hover:bg-white/10" : "bg-white"
                                                         )}
                                                     >
@@ -1132,7 +1156,7 @@ const FlowBuilderInner = () => {
                                                                         event.dataTransfer.effectAllowed = 'move';
                                                                     }}
                                                                     className={cn(
-                                                                        "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group",
+                                                                        "w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left group touch-manipulation flowbuilder-cv",
                                                                         "disabled:opacity-50 disabled:cursor-not-allowed",
                                                                         isDark
                                                                             ? "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40"
@@ -1199,10 +1223,10 @@ const FlowBuilderInner = () => {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <Button variant="outline" size="icon" onClick={focusSelectedNode}>
+                                                <Button variant="outline" size="icon" onClick={focusSelectedNode} className="h-11 w-11 sm:h-9 sm:w-9">
                                                     <Focus className="w-4 h-4" />
                                                 </Button>
-                                                <Button variant="outline" size="icon" onClick={duplicateSelectedNode}>
+                                                <Button variant="outline" size="icon" onClick={duplicateSelectedNode} className="h-11 w-11 sm:h-9 sm:w-9">
                                                     <Copy className="w-4 h-4" />
                                                 </Button>
                                             </div>

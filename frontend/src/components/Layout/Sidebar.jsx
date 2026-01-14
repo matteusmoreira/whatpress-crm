@@ -14,7 +14,6 @@ import {
   Search,
   User,
   Bot,
-  FileText,
   CreditCard,
   Wrench,
   PanelLeftClose,
@@ -60,7 +59,6 @@ const Sidebar = () => {
       { to: '/app/contacts', icon: Users, label: 'Contatos' },
       { to: '/app/automations', icon: Bot, label: 'Automações' },
       { to: '/app/flows', icon: Workflow, label: 'Fluxos' },
-      { to: '/app/templates', icon: FileText, label: 'Templates' },
       ...(canManageConnections ? [{ to: '/app/settings/connections', icon: Plug, label: 'Conexões' }] : []),
       { to: '/app/settings', icon: Settings, label: 'Configurações' },
     ];
@@ -148,8 +146,9 @@ const Sidebar = () => {
           theme === 'dark' ? 'border-white/10' : 'border-slate-200'
         )}>
           <div className={cn(
-            "flex items-center gap-3",
-            sidebarCollapsed ? "justify-center" : "justify-between"
+            sidebarCollapsed
+              ? "flex flex-col items-center gap-3"
+              : "flex items-center justify-between gap-3"
           )}>
             {!sidebarCollapsed && (
               <div className="flex items-center gap-3">
@@ -175,7 +174,7 @@ const Sidebar = () => {
                 theme === 'dark'
                   ? 'hover:bg-white/10 text-white/60 hover:text-white'
                   : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800',
-                sidebarCollapsed && "absolute right-2 top-6"
+                sidebarCollapsed && "mt-1"
               )}
               title={sidebarCollapsed ? "Expandir menu" : "Retrair menu"}
             >
