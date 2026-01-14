@@ -29,12 +29,22 @@ const apiClient = axios.create({
 
 // Add auth token to requests
 apiClient.interceptors.request.use((config) => {
-  const authData = localStorage.getItem('whatsapp-crm-auth');
-  if (authData) {
-    const { state } = JSON.parse(authData);
-    if (state?.token) {
-      config.headers.Authorization = `Bearer ${state.token}`;
+  try {
+    const authData = localStorage.getItem('whatsapp-crm-auth');
+    if (authData) {
+      const { state } = JSON.parse(authData);
+      const token = state?.token;
+      if (token) {
+        if (!config.headers) config.headers = {};
+        if (typeof config.headers.set === 'function') {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        } else {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
     }
+  } catch {
+    return config;
   }
   return config;
 });

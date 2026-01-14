@@ -18,6 +18,24 @@ export const useAuthStore = create(
         if (get().isBootstrapping) return null;
         set({ isBootstrapping: true });
         try {
+          const hasToken =
+            Boolean(get().token) ||
+            (() => {
+              try {
+                const raw = localStorage.getItem('whatsapp-crm-auth');
+                if (!raw) return false;
+                const parsed = JSON.parse(raw);
+                return Boolean(parsed?.state?.token);
+              } catch {
+                return false;
+              }
+            })();
+
+          if (!hasToken) {
+            set({ user: null, token: null, isAuthenticated: false, maintenance: null, maintenanceDismissedKey: null });
+            return null;
+          }
+
           const user = await AuthAPI.getCurrentUser();
           if (user) {
             set({ user, isAuthenticated: true });
