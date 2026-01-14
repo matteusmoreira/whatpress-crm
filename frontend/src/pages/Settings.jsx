@@ -3,7 +3,6 @@ import {
   User,
   Bell,
   Shield,
-  Globe,
   CreditCard,
   ChevronRight,
   Plug,
@@ -165,17 +164,6 @@ const Settings = () => {
       ]
     },
     {
-      title: 'Preferências',
-      items: [
-        {
-          icon: Globe,
-          title: 'Idioma e Região',
-          description: 'Idioma, fuso horário e formato de data',
-          comingSoon: true
-        }
-      ]
-    },
-    {
       title: 'Assinatura',
       items: [
         {
@@ -193,7 +181,7 @@ const Settings = () => {
       {/* Header */}
       <div className="mb-8 pl-16 lg:pl-0">
         <h1 className="wa-page-title">Configurações</h1>
-        <p className="wa-page-subtitle">Gerencie suas preferências e configurações da conta</p>
+        <p className="wa-page-subtitle">Gerencie as configurações da sua conta</p>
       </div>
 
       {/* User Card */}

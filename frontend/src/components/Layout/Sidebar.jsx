@@ -15,7 +15,6 @@ import {
   User,
   Bot,
   FileText,
-  BookOpen,
   CreditCard,
   Wrench,
   PanelLeftClose,
@@ -57,12 +56,11 @@ const Sidebar = () => {
     ]
     : [
       { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/app/inbox', icon: MessageSquare, label: 'Inbox' },
+      { to: '/app/inbox', icon: MessageSquare, label: 'Bate Papo' },
       { to: '/app/contacts', icon: Users, label: 'Contatos' },
       { to: '/app/automations', icon: Bot, label: 'Automações' },
       { to: '/app/flows', icon: Workflow, label: 'Fluxos' },
       { to: '/app/templates', icon: FileText, label: 'Templates' },
-      { to: '/app/kb', icon: BookOpen, label: 'Base de Conhecimento' },
       ...(canManageConnections ? [{ to: '/app/settings/connections', icon: Plug, label: 'Conexões' }] : []),
       { to: '/app/settings', icon: Settings, label: 'Configurações' },
     ];
