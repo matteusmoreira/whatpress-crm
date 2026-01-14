@@ -1783,16 +1783,29 @@ const Inbox = () => {
 
     try {
       const result = await MediaAPI.proxy(proxyInfo);
-      const dataUrl = result?.dataUrl;
-      if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
-        triggerClientDownload(dataUrl, filename);
+      const rawMimeType = result?.mimetype ?? result?.mime_type ?? result?.mimeType ?? '';
+      const candidate = result?.dataUrl ?? result?.mediaUrl ?? '';
+      if (typeof candidate === 'string' && candidate.startsWith('data:')) {
+        triggerClientDownload(candidate, filename);
+        return;
+      }
+      if (typeof candidate === 'string' && candidate.startsWith('http')) {
+        triggerClientDownload(candidate, filename);
+        return;
+      }
+      if (typeof candidate === 'string' && isLikelyBareBase64(candidate)) {
+        const dataUrl = toDataUrlFromBareBase64(candidate, rawMimeType || viewerResolvedMimeType || 'application/octet-stream');
+        if (dataUrl) {
+          triggerClientDownload(dataUrl, filename);
+          return;
+        }
         return;
       }
       toast.error('Não foi possível baixar esta mídia');
     } catch {
       toast.error('Não foi possível baixar esta mídia');
     }
-  }, [viewerResolvedUrl, currentViewerItem, mediaViewer, triggerClientDownload]);
+  }, [viewerResolvedUrl, currentViewerItem, mediaViewer, triggerClientDownload, viewerResolvedMimeType]);
 
   useEffect(() => {
     if (!mediaViewer?.open) return;
@@ -1862,13 +1875,27 @@ const Inbox = () => {
           instanceName: proxyInfo.instanceName,
           fromMe: Boolean(proxyInfo.fromMe)
         });
-        const dataUrl = result?.dataUrl;
-        const mimetype = result?.mimetype;
-        if (typeof mimetype === 'string') setViewerResolvedMimeType(mimetype);
-        if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
-          setViewerResolvedUrl(dataUrl);
+        const rawMimeType = result?.mimetype ?? result?.mime_type ?? result?.mimeType ?? '';
+        if (typeof rawMimeType === 'string' && rawMimeType.trim()) setViewerResolvedMimeType(rawMimeType);
+
+        const candidate = result?.dataUrl ?? result?.mediaUrl ?? '';
+        if (typeof candidate === 'string' && candidate.startsWith('data:')) {
+          setViewerResolvedUrl(candidate);
           setViewerLoading(false);
           return;
+        }
+        if (typeof candidate === 'string' && candidate.startsWith('http')) {
+          setViewerResolvedUrl(candidate);
+          setViewerLoading(false);
+          return;
+        }
+        if (typeof candidate === 'string' && isLikelyBareBase64(candidate)) {
+          const dataUrl = toDataUrlFromBareBase64(candidate, rawMimeType || 'application/octet-stream');
+          if (dataUrl) {
+            setViewerResolvedUrl(dataUrl);
+            setViewerLoading(false);
+            return;
+          }
         }
         setViewerResolvedUrl(url);
         setViewerLoading(false);
@@ -2861,16 +2888,27 @@ const Inbox = () => {
       </TooltipProvider>
 
       <Dialog open={mediaViewer.open} onOpenChange={(open) => setMediaViewer(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-5xl bg-black/80 border border-white/10 p-0">
+        <DialogContent
+          showClose={false}
+          className={cn(
+            "max-w-5xl border p-0",
+            isDark ? "bg-black/80 border-white/10" : "bg-white/95 border-black/10"
+          )}
+        >
           <DialogTitle className="sr-only">
             {currentViewerItem?.title || mediaViewer.title || 'Mídia'}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Visualizador de mídia
           </DialogDescription>
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
+          <div
+            className={cn(
+              "flex items-center justify-between gap-3 px-4 py-3 border-b",
+              isDark ? "border-white/10" : "border-black/10"
+            )}
+          >
             <div className="min-w-0">
-              <p className="text-sm font-medium text-white truncate">
+              <p className={cn("text-sm font-medium truncate", isDark ? "text-white" : "text-slate-900")}>
                 {currentViewerItem?.title || mediaViewer.title || 'Mídia'}
               </p>
             </div>
@@ -2884,7 +2922,12 @@ const Inbox = () => {
                   }
                 }}
                 disabled={currentViewerIndex <= 0}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:hover:bg-white/10 text-white text-sm"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg disabled:opacity-40 text-sm",
+                  isDark
+                    ? "bg-white/10 hover:bg-white/15 disabled:hover:bg-white/10 text-white"
+                    : "bg-black/5 hover:bg-black/10 disabled:hover:bg-black/5 text-slate-900"
+                )}
                 aria-label="Mídia anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -2898,18 +2941,26 @@ const Inbox = () => {
                   }
                 }}
                 disabled={currentViewerIndex < 0 || currentViewerIndex >= imageViewerItems.length - 1}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:hover:bg-white/10 text-white text-sm"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg disabled:opacity-40 text-sm",
+                  isDark
+                    ? "bg-white/10 hover:bg-white/15 disabled:hover:bg-white/10 text-white"
+                    : "bg-black/5 hover:bg-black/10 disabled:hover:bg-black/5 text-slate-900"
+                )}
                 aria-label="Próxima mídia"
               >
                 <ChevronLeft className="w-4 h-4 rotate-180" />
               </button>
 
-              <div className="w-px h-6 bg-white/10 mx-1" />
+              <div className={cn("w-px h-6 mx-1", isDark ? "bg-white/10" : "bg-black/10")} />
 
               <button
                 type="button"
                 onClick={() => setViewerZoom(z => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm",
+                  isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                )}
                 aria-label="Diminuir zoom"
               >
                 –
@@ -2917,7 +2968,10 @@ const Inbox = () => {
               <button
                 type="button"
                 onClick={() => setViewerZoom(1)}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm tabular-nums"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm tabular-nums",
+                  isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                )}
                 aria-label="Resetar zoom"
               >
                 {Math.round(viewerZoom * 100)}%
@@ -2925,18 +2979,24 @@ const Inbox = () => {
               <button
                 type="button"
                 onClick={() => setViewerZoom(z => Math.min(4, Math.round((z + 0.25) * 100) / 100))}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm",
+                  isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                )}
                 aria-label="Aumentar zoom"
               >
                 +
               </button>
 
-              <div className="w-px h-6 bg-white/10 mx-1" />
+              <div className={cn("w-px h-6 mx-1", isDark ? "bg-white/10" : "bg-black/10")} />
 
               <button
                 type="button"
                 onClick={() => setViewerRotation(r => (r - 90) % 360)}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm",
+                  isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                )}
                 aria-label="Rotacionar à esquerda"
               >
                 90°
@@ -2944,13 +3004,16 @@ const Inbox = () => {
               <button
                 type="button"
                 onClick={() => setViewerRotation(r => (r + 90) % 360)}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm",
+                  isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                )}
                 aria-label="Rotacionar à direita"
               >
                 90°
               </button>
 
-              <div className="w-px h-6 bg-white/10 mx-1" />
+              <div className={cn("w-px h-6 mx-1", isDark ? "bg-white/10" : "bg-black/10")} />
 
               {currentViewerItem?.url && (
                 <a
@@ -2959,7 +3022,12 @@ const Inbox = () => {
                   target="_blank"
                   rel="noreferrer"
                   onClick={handleViewerDownload}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100 text-sm"
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg border text-sm",
+                    isDark
+                      ? "bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-100"
+                      : "bg-emerald-600/10 hover:bg-emerald-600/15 border-emerald-600/20 text-emerald-800"
+                  )}
                 >
                   Baixar
                 </a>
@@ -2967,7 +3035,10 @@ const Inbox = () => {
               <button
                 type="button"
                 onClick={() => setMediaViewer(prev => ({ ...prev, open: false }))}
-                className="p-2 rounded-lg bg-white/10 hover:bg-white/15 text-white"
+                className={cn(
+                  "p-2 rounded-lg",
+                  isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                )}
                 aria-label="Fechar visualizador"
               >
                 <X className="w-4 h-4" />
@@ -2978,16 +3049,26 @@ const Inbox = () => {
           <div className="relative h-[80vh] overflow-auto">
             {viewerLoading && !viewerLoadError && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-white/20 border-t-white/70 rounded-full animate-spin" />
+                <div
+                  className={cn(
+                    "w-8 h-8 border-2 rounded-full animate-spin",
+                    isDark ? "border-white/20 border-t-white/70" : "border-black/20 border-t-black/70"
+                  )}
+                />
               </div>
             )}
 
             {viewerLoadError && (
-              <div className="h-full flex items-center justify-center p-6 text-white/70">
+              <div className={cn("h-full flex items-center justify-center p-6", isDark ? "text-white/70" : "text-slate-600")}>
                 <div className="max-w-md text-center">
                   <p className="text-sm">Não foi possível carregar esta mídia.</p>
                   {(viewerResolvedUrl || currentViewerItem?.url) && (
-                    <a href={viewerResolvedUrl || currentViewerItem.url} target="_blank" rel="noreferrer" className="text-white underline mt-2 inline-block">
+                    <a
+                      href={viewerResolvedUrl || currentViewerItem.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={cn("underline mt-2 inline-block", isDark ? "text-white" : "text-slate-900")}
+                    >
                       Abrir em nova aba
                     </a>
                   )}
@@ -3022,14 +3103,21 @@ const Inbox = () => {
                 setTimeout(() => setViewerLoading(false), 0);
                 return (
                   <div className="min-h-full flex items-center justify-center p-6">
-                    <div className="w-full max-w-md rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div
+                      className={cn(
+                        "w-full max-w-md rounded-xl border p-4",
+                        isDark ? "border-white/10 bg-white/5" : "border-black/10 bg-black/5"
+                      )}
+                    >
                       <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-                          <FileText className="w-5 h-5 opacity-80" />
+                        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", isDark ? "bg-white/10" : "bg-black/5")}>
+                          <FileText className={cn("w-5 h-5 opacity-80", isDark ? "text-white" : "text-slate-900")} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{currentViewerItem?.title || 'Documento'}</p>
-                          <p className="text-xs text-white/60 truncate">{shortenUrl(url)}</p>
+                          <p className={cn("text-sm font-medium truncate", isDark ? "text-white" : "text-slate-900")}>
+                            {currentViewerItem?.title || 'Documento'}
+                          </p>
+                          <p className={cn("text-xs truncate", isDark ? "text-white/60" : "text-slate-600")}>{shortenUrl(url)}</p>
                         </div>
                       </div>
                       <div className="mt-4 flex items-center justify-end gap-2">
@@ -3037,7 +3125,10 @@ const Inbox = () => {
                           href={url}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm"
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-sm",
+                            isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-slate-900"
+                          )}
                         >
                           Abrir
                         </a>
@@ -3047,7 +3138,12 @@ const Inbox = () => {
                           target="_blank"
                           rel="noreferrer"
                           onClick={handleViewerDownload}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100 text-sm"
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg border text-sm",
+                            isDark
+                              ? "bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-100"
+                              : "bg-emerald-600/10 hover:bg-emerald-600/15 border-emerald-600/20 text-emerald-800"
+                          )}
                         >
                           Baixar
                         </a>
@@ -3073,7 +3169,12 @@ const Inbox = () => {
                       }}
                     />
                   </div>
-                  <div className="w-full max-w-2xl text-xs text-white/70 flex flex-wrap items-center justify-between gap-2">
+                  <div
+                    className={cn(
+                      "w-full max-w-2xl text-xs flex flex-wrap items-center justify-between gap-2",
+                      isDark ? "text-white/70" : "text-slate-600"
+                    )}
+                  >
                     <span className="truncate">
                       {viewerResolvedMimeType || currentViewerItem?.metadata?.mime_type || currentViewerItem?.metadata?.mimeType || 'Formato desconhecido'}
                     </span>
