@@ -296,6 +296,108 @@ async def ensure_auto_messages_schema():
           CHECK (type IN ('text', 'image', 'audio', 'video', 'document', 'sticker', 'system'));
       END IF;
     END $$;
+
+    CREATE TABLE IF NOT EXISTS bulk_message_templates (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bulk_message_templates_tenant ON bulk_message_templates(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_bulk_message_templates_active ON bulk_message_templates(is_active);
+
+    ALTER TABLE bulk_message_templates ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access bulk_message_templates" ON bulk_message_templates FOR ALL USING (true);
+
+    CREATE TABLE IF NOT EXISTS bulk_campaigns (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        name VARCHAR(255) NOT NULL,
+        template_body TEXT NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled', 'failed')),
+        selection_mode VARCHAR(30) NOT NULL DEFAULT 'explicit' CHECK (selection_mode IN ('explicit', 'kanban_column', 'filters')),
+        selection_payload JSONB DEFAULT '{}'::jsonb,
+        delay_seconds INTEGER DEFAULT 0,
+        start_at TIMESTAMP WITH TIME ZONE,
+        recurrence VARCHAR(10) NOT NULL DEFAULT 'none' CHECK (recurrence IN ('none', 'daily', 'weekly', 'monthly')),
+        timezone VARCHAR(80),
+        next_run_at TIMESTAMP WITH TIME ZONE,
+        last_run_at TIMESTAMP WITH TIME ZONE,
+        max_messages_per_period INTEGER,
+        period_unit VARCHAR(10) CHECK (period_unit IN ('minute', 'hour', 'day', 'week', 'month')),
+        paused_at TIMESTAMP WITH TIME ZONE,
+        cancelled_at TIMESTAMP WITH TIME ZONE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_tenant ON bulk_campaigns(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_next_run ON bulk_campaigns(next_run_at);
+    CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_status ON bulk_campaigns(status);
+
+    ALTER TABLE bulk_campaigns ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access bulk_campaigns" ON bulk_campaigns FOR ALL USING (true);
+
+    CREATE TABLE IF NOT EXISTS bulk_campaign_recipients (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        campaign_id UUID NOT NULL REFERENCES bulk_campaigns(id) ON DELETE CASCADE,
+        run_id UUID,
+        contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+        contact_phone VARCHAR(50) NOT NULL,
+        contact_name VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'sending', 'sent', 'failed', 'skipped')),
+        scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        locked_at TIMESTAMP WITH TIME ZONE,
+        locked_by VARCHAR(120),
+        attempts INTEGER DEFAULT 0,
+        message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+        sent_at TIMESTAMP WITH TIME ZONE,
+        error TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bulk_recipients_tenant ON bulk_campaign_recipients(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_bulk_recipients_campaign ON bulk_campaign_recipients(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_bulk_recipients_due ON bulk_campaign_recipients(status, scheduled_at);
+    CREATE INDEX IF NOT EXISTS idx_bulk_recipients_message ON bulk_campaign_recipients(message_id);
+
+    ALTER TABLE bulk_campaign_recipients ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access bulk_campaign_recipients" ON bulk_campaign_recipients FOR ALL USING (true);
+
+    CREATE TABLE IF NOT EXISTS bulk_campaign_runs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        campaign_id UUID NOT NULL REFERENCES bulk_campaigns(id) ON DELETE CASCADE,
+        scheduled_for TIMESTAMP WITH TIME ZONE,
+        started_at TIMESTAMP WITH TIME ZONE,
+        finished_at TIMESTAMP WITH TIME ZONE,
+        status VARCHAR(20) NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bulk_runs_tenant ON bulk_campaign_runs(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_bulk_runs_campaign ON bulk_campaign_runs(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_bulk_runs_created_at ON bulk_campaign_runs(created_at DESC);
+
+    ALTER TABLE bulk_campaign_runs ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Service role has full access bulk_campaign_runs" ON bulk_campaign_runs FOR ALL USING (true);
+
+    DO $$
+    BEGIN
+      IF to_regclass('public.bulk_campaign_recipients') IS NOT NULL THEN
+        ALTER TABLE bulk_campaign_recipients
+          ADD CONSTRAINT IF NOT EXISTS fk_bulk_recipients_run
+          FOREIGN KEY (run_id) REFERENCES bulk_campaign_runs(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
     """
     try:
         supabase.rpc('exec_sql', {'sql': sql}).execute()
@@ -303,6 +405,7 @@ async def ensure_auto_messages_schema():
         logger.warning(f"Auto messages schema not ensured (exec_sql unavailable?): {e}")
         return
     _ensure_offline_flush_task_started()
+    _ensure_bulk_worker_task_started()
 
 # ==================== MODELS (defined early for login endpoint) ====================
 
@@ -575,6 +678,8 @@ _CONTACT_CACHE_BY_ID: Dict[str, dict] = {}
 _CONTACT_CACHE_BY_TENANT_PHONE: Dict[str, dict] = {}
 _TENANT_USER_NAMES_CACHE: Dict[str, Set[str]] = {}
 _OFFLINE_FLUSH_TASK_STARTED = False
+_BULK_WORKER_TASK_STARTED = False
+_BULK_WORKER_ID = hashlib.sha1(f"{os.getpid()}:{time.time()}".encode("utf-8")).hexdigest()[:12]
 
 def _is_transient_db_error(exc: Exception) -> bool:
     s = str(exc or "").lower()
@@ -687,6 +792,87 @@ async def _flush_db_write_queue_loop() -> None:
             pass
         await asyncio.sleep(2.5)
 
+async def _bulk_campaign_worker_loop() -> None:
+    enabled = (os.getenv("BULK_WORKER_ENABLED") or "").strip().lower()
+    if enabled in {"0", "false", "no", "off"}:
+        while True:
+            await asyncio.sleep(60)
+
+    poll_s = float(os.getenv("BULK_WORKER_POLL_INTERVAL_SECONDS", "1.0") or "1.0")
+    poll_s = max(0.25, min(10.0, poll_s))
+
+    while True:
+        try:
+            await _bulk_campaign_worker_tick()
+        except Exception as e:
+            logger.error(f"Bulk worker tick error: {e}")
+        await asyncio.sleep(poll_s)
+
+async def _bulk_campaign_worker_tick() -> None:
+    now = datetime.utcnow().isoformat()
+
+    try:
+        due = (
+            supabase.table("bulk_campaigns")
+            .select("id, tenant_id, status, next_run_at")
+            .in_("status", ["scheduled"])
+            .lte("next_run_at", now)
+            .order("next_run_at", desc=False)
+            .limit(25)
+            .execute()
+        )
+    except Exception:
+        due = None
+
+    for c in (getattr(due, "data", None) or []):
+        cid = c.get("id")
+        if not cid:
+            continue
+        try:
+            await _bulk_begin_campaign_run(cid)
+        except Exception as e:
+            logger.warning(f"Bulk begin run failed for {cid}: {e}")
+
+    batch = int(os.getenv("BULK_WORKER_SEND_BATCH", "10") or "10")
+    batch = max(1, min(50, batch))
+
+    try:
+        ready = (
+            supabase.table("bulk_campaign_recipients")
+            .select("id, campaign_id, tenant_id, contact_id, contact_phone, contact_name, scheduled_at, attempts")
+            .eq("status", "scheduled")
+            .lte("scheduled_at", now)
+            .order("scheduled_at", desc=False)
+            .limit(batch)
+            .execute()
+        )
+    except Exception:
+        ready = None
+
+    for r in (getattr(ready, "data", None) or []):
+        rid = r.get("id")
+        if not rid:
+            continue
+        try:
+            locked = (
+                supabase.table("bulk_campaign_recipients")
+                .update({"status": "sending", "locked_at": now, "locked_by": _BULK_WORKER_ID, "attempts": int(r.get("attempts") or 0) + 1, "updated_at": now})
+                .eq("id", rid)
+                .eq("status", "scheduled")
+                .execute()
+            )
+            if not (getattr(locked, "data", None) or []):
+                continue
+        except Exception:
+            continue
+        try:
+            await _bulk_send_recipient_message(rid)
+        except Exception as e:
+            try:
+                supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": str(e)[:800], "updated_at": now}).eq("id", rid).execute()
+            except Exception:
+                pass
+
 def _ensure_offline_flush_task_started() -> None:
     global _OFFLINE_FLUSH_TASK_STARTED
     if _OFFLINE_FLUSH_TASK_STARTED:
@@ -696,6 +882,16 @@ def _ensure_offline_flush_task_started() -> None:
         _OFFLINE_FLUSH_TASK_STARTED = True
     except Exception:
         _OFFLINE_FLUSH_TASK_STARTED = True
+
+def _ensure_bulk_worker_task_started() -> None:
+    global _BULK_WORKER_TASK_STARTED
+    if _BULK_WORKER_TASK_STARTED:
+        return
+    try:
+        asyncio.create_task(_bulk_campaign_worker_loop())
+        _BULK_WORKER_TASK_STARTED = True
+    except Exception:
+        _BULK_WORKER_TASK_STARTED = True
 
 def _cache_contact_row(contact_row: dict) -> None:
     if not isinstance(contact_row, dict):
@@ -4945,6 +5141,111 @@ def _render_template_text(template: str, ctx: Dict[str, Any]) -> str:
             return ""
         return str(val)
     return re.sub(r"\{([^{}]+)\}", repl, s)
+
+def _bulk_template_ctx_from_contact(contact_row: Any) -> Dict[str, Any]:
+    if not isinstance(contact_row, dict):
+        return {}
+    name = (contact_row.get("name") or contact_row.get("full_name") or "").strip()
+    phone = (contact_row.get("phone") or "").strip()
+    email = (contact_row.get("email") or "").strip()
+    tags = contact_row.get("tags") or []
+    custom_fields = contact_row.get("custom_fields") or contact_row.get("customFields") or {}
+    if not isinstance(custom_fields, dict):
+        custom_fields = {}
+
+    ctx: Dict[str, Any] = {
+        "nome": name,
+        "name": name,
+        "contato_nome": name,
+        "contact_name": name,
+        "telefone": phone,
+        "phone": phone,
+        "email": email,
+        "tags": tags,
+    }
+    for k, v in custom_fields.items():
+        if not isinstance(k, str) or not k.strip():
+            continue
+        if k in ctx:
+            continue
+        ctx[k] = v
+    return ctx
+
+def _bulk_period_seconds(period_unit: Any) -> Optional[int]:
+    unit = str(period_unit or "").strip().lower()
+    if unit == "minute":
+        return 60
+    if unit == "hour":
+        return 60 * 60
+    if unit == "day":
+        return 60 * 60 * 24
+    if unit == "week":
+        return 60 * 60 * 24 * 7
+    if unit == "month":
+        return 60 * 60 * 24 * 30
+    return None
+
+def _bulk_build_schedule(
+    start_at: datetime,
+    count: int,
+    *,
+    delay_seconds: int,
+    max_messages_per_period: Optional[int],
+    period_unit: Optional[str],
+) -> List[datetime]:
+    n = int(count or 0)
+    if n <= 0:
+        return []
+    delay = int(delay_seconds or 0)
+    if delay < 0:
+        delay = 0
+
+    per = int(max_messages_per_period or 0) if max_messages_per_period is not None else 0
+    period_s = _bulk_period_seconds(period_unit) if per > 0 else None
+
+    out: List[datetime] = []
+    for i in range(n):
+        when = start_at + timedelta(seconds=delay * i)
+        if period_s and per > 0:
+            window_idx = i // per
+            when = when + timedelta(seconds=window_idx * period_s)
+        out.append(when)
+    return out
+
+def _bulk_add_months(dt: datetime, months: int) -> datetime:
+    m = int(months or 0)
+    if m == 0:
+        return dt
+    year = dt.year
+    month = dt.month + m
+    while month > 12:
+        month -= 12
+        year += 1
+    while month < 1:
+        month += 12
+        year -= 1
+
+    last_day = 28
+    for d in (31, 30, 29, 28):
+        try:
+            datetime(year, month, d)
+            last_day = d
+            break
+        except Exception:
+            continue
+
+    day = min(dt.day, last_day)
+    return dt.replace(year=year, month=month, day=day)
+
+def _bulk_compute_next_run_at(recurrence: Any, from_dt: datetime) -> Optional[datetime]:
+    r = str(recurrence or "none").strip().lower()
+    if r == "daily":
+        return from_dt + timedelta(days=1)
+    if r == "weekly":
+        return from_dt + timedelta(days=7)
+    if r == "monthly":
+        return _bulk_add_months(from_dt, 1)
+    return None
 
 
 def _wait_seconds(duration: Any, unit: Any) -> int:
