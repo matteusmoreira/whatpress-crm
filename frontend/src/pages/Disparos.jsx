@@ -7,6 +7,9 @@ import { BulkCampaignsAPI, ContactsAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
 
+const KANBAN_UNASSIGNED_COLUMN_ID = '__unassigned__';
+const KANBAN_CUSTOM_FIELD_KEY = 'kanban_column';
+
 const PERIOD_UNITS = [
   { value: 'minute', label: 'Minuto' },
   { value: 'hour', label: 'Hora' },
@@ -44,6 +47,10 @@ const CampaignForm = ({
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
+  const [kanbanColumns, setKanbanColumns] = useState([]);
+  const [selectedKanbanColumnId, setSelectedKanbanColumnId] = useState('');
+  const [addingKanbanColumn, setAddingKanbanColumn] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
     if (editingCampaign) {
@@ -69,18 +76,103 @@ const CampaignForm = ({
     }
   }, [editingCampaign, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!tenantId) {
+      setKanbanColumns([]);
+      setSelectedKanbanColumnId('');
+      return;
+    }
+    try {
+      const key = `contacts-kanban:${tenantId}`;
+      const raw = window?.localStorage?.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const storedColumns = Array.isArray(parsed?.columns) ? parsed.columns : [];
+      const normalized = storedColumns
+        .filter((c) => c && c.id && c.title)
+        .map((c) => ({
+          id: String(c.id),
+          title: String(c.title),
+          color: String(c.color || 'slate')
+        }));
+      const boardCols = [
+        { id: KANBAN_UNASSIGNED_COLUMN_ID, title: 'Sem Coluna', color: 'slate' },
+        ...normalized
+      ];
+      setKanbanColumns(boardCols);
+      if (boardCols.length > 0) setSelectedKanbanColumnId((prev) => prev || boardCols[0].id);
+    } catch {
+      setKanbanColumns([{ id: KANBAN_UNASSIGNED_COLUMN_ID, title: 'Sem Coluna', color: 'slate' }]);
+      setSelectedKanbanColumnId(KANBAN_UNASSIGNED_COLUMN_ID);
+    }
+  }, [isOpen, tenantId]);
+
   const loadContacts = useCallback(async () => {
     try {
       if (!tenantId) return;
       setLoadingContacts(true);
       const data = await ContactsAPI.list(tenantId, contactSearch, 50, 0);
-      setContacts(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : (data?.contacts || []);
+      setContacts(Array.isArray(list) ? list : []);
     } catch (e) {
       toast.error('Erro ao carregar contatos');
     } finally {
       setLoadingContacts(false);
     }
   }, [contactSearch, tenantId]);
+
+  const loadAllContacts = useCallback(async () => {
+    if (!tenantId) return [];
+    const pageLimit = 200;
+    let pageOffset = 0;
+    let totalCount = Infinity;
+    const all = [];
+
+    while (all.length < totalCount) {
+      const data = await ContactsAPI.list(tenantId, '', pageLimit, pageOffset);
+      const batch = Array.isArray(data?.contacts) ? data.contacts : (Array.isArray(data) ? data : []);
+      const reportedTotal = typeof data?.total === 'number' ? data.total : null;
+      if (typeof reportedTotal === 'number') totalCount = reportedTotal;
+
+      all.push(...batch);
+      if (batch.length === 0) break;
+      pageOffset += pageLimit;
+      if (pageOffset > 20000) break;
+    }
+
+    return all;
+  }, [tenantId]);
+
+  const addContactsFromKanbanColumn = useCallback(async () => {
+    if (!tenantId) return;
+    const colId = String(selectedKanbanColumnId || '').trim();
+    if (!colId) return;
+
+    setAddingKanbanColumn(true);
+    try {
+      const all = await loadAllContacts();
+      const matched = all.filter((c) => {
+        const cf = c?.customFields || c?.custom_fields || {};
+        const current = String(cf?.[KANBAN_CUSTOM_FIELD_KEY] || '').trim() || KANBAN_UNASSIGNED_COLUMN_ID;
+        return current === colId;
+      });
+      const ids = matched.map((c) => String(c?.id || '').trim()).filter(Boolean);
+      if (ids.length === 0) {
+        toast.error('Nenhum contato nessa coluna');
+        return;
+      }
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+      toast.success(`${ids.length} contato(s) adicionados`);
+    } catch (e) {
+      toast.error('Erro ao carregar contatos do Kanban');
+    } finally {
+      setAddingKanbanColumn(false);
+    }
+  }, [loadAllContacts, selectedKanbanColumnId, tenantId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -137,7 +229,8 @@ const CampaignForm = ({
       onSaved?.();
       onClose?.();
     } catch (e) {
-      toast.error('Erro ao salvar campanha');
+      const msg = e?.response?.data?.detail || e?.message || null;
+      toast.error('Erro ao salvar campanha', msg ? { description: String(msg) } : undefined);
     } finally {
       setSaving(false);
     }
@@ -240,6 +333,33 @@ const CampaignForm = ({
                   placeholder="Buscar contatos..."
                   className="pl-11"
                 />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  value={selectedKanbanColumnId}
+                  onChange={(e) => setSelectedKanbanColumnId(e.target.value)}
+                  className="h-11 w-full px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  disabled={addingKanbanColumn || kanbanColumns.length === 0}
+                >
+                  {kanbanColumns.length === 0 ? (
+                    <option value="" className="bg-emerald-900">Kanban não configurado</option>
+                  ) : (
+                    kanbanColumns.map((c) => (
+                      <option key={c.id} value={c.id} className="bg-emerald-900">
+                        {c.title}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <GlassButton
+                  type="button"
+                  onClick={addContactsFromKanbanColumn}
+                  disabled={addingKanbanColumn || kanbanColumns.length === 0 || !selectedKanbanColumnId}
+                  className="min-w-[190px]"
+                >
+                  {addingKanbanColumn ? 'Adicionando...' : 'Adicionar da coluna'}
+                </GlassButton>
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
