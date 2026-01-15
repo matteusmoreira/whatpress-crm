@@ -52,6 +52,7 @@ const Sidebar = () => {
       { to: '/superadmin/plans', icon: CreditCard, label: 'Planos' },
       { to: '/superadmin/users', icon: Users, label: 'Usuários' },
       { to: '/superadmin/maintenance', icon: Wrench, label: 'Manutenção' },
+      { to: '/app/automations', icon: Bot, label: 'Disparos Automáticos' },
     ]
     : [
       { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },

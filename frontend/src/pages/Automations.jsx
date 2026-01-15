@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, GlassBadge } from '../components/GlassCard';
 import { useAuthStore } from '../store/authStore';
+import { useAppStore } from '../store/appStore';
 import { AutoMessagesAPI } from '../lib/api';
 import { toast } from '../components/ui/glass-toaster';
 import { cn } from '../lib/utils';
@@ -353,12 +354,21 @@ const AutoMessageForm = ({ isOpen, onClose, onSave, editingMessage }) => {
 
 const Automations = () => {
     const { user } = useAuthStore();
+    const { selectedTenant, tenants, fetchTenants } = useAppStore();
     const [loading, setLoading] = useState(true);
     const [messages, setMessages] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [editingMessage, setEditingMessage] = useState(null);
 
-    const tenantId = user?.tenantId;
+    const isSuperAdmin = user?.role === 'superadmin';
+    const tenantId = isSuperAdmin
+        ? (selectedTenant?.id || tenants?.[0]?.id || null)
+        : (user?.tenantId || null);
+
+    useEffect(() => {
+        if (!isSuperAdmin) return;
+        fetchTenants?.();
+    }, [fetchTenants, isSuperAdmin]);
 
     const loadMessages = useCallback(async () => {
         try {
