@@ -336,6 +336,7 @@ async def ensure_auto_messages_schema():
         created_by UUID REFERENCES users(id) ON DELETE SET NULL,
         name VARCHAR(255) NOT NULL,
         template_body TEXT NOT NULL,
+        connection_id UUID REFERENCES connections(id) ON DELETE SET NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled', 'failed')),
         selection_mode VARCHAR(30) NOT NULL DEFAULT 'explicit' CHECK (selection_mode IN ('explicit', 'kanban_column', 'filters')),
         selection_payload JSONB DEFAULT '{}'::jsonb,
@@ -354,9 +355,18 @@ async def ensure_auto_messages_schema():
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
+    DO $$
+    BEGIN
+      IF to_regclass('public.bulk_campaigns') IS NOT NULL THEN
+        ALTER TABLE bulk_campaigns
+          ADD COLUMN IF NOT EXISTS connection_id UUID REFERENCES connections(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
+
     CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_tenant ON bulk_campaigns(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_next_run ON bulk_campaigns(next_run_at);
     CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_status ON bulk_campaigns(status);
+    CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_connection ON bulk_campaigns(connection_id);
 
     ALTER TABLE bulk_campaigns ENABLE ROW LEVEL SECURITY;
     CREATE POLICY IF NOT EXISTS "Service role has full access bulk_campaigns" ON bulk_campaigns FOR ALL USING (true);
@@ -1041,28 +1051,50 @@ def _bulk_get_contact_row(tenant_id: str, contact_id: Optional[str], phone: Opti
         return None
     return None
 
-def _bulk_get_or_create_conversation(tenant_id: str, phone: str, contact_name: Optional[str], contact_id: Optional[str]) -> dict:
+def _bulk_get_or_create_conversation(tenant_id: str, phone: str, contact_name: Optional[str], contact_id: Optional[str], connection_id: Optional[str] = None) -> dict:
     normalized_phone = _bulk_normalize_phone(phone)
     if not normalized_phone:
         raise Exception("Telefone inválido")
-    existing = supabase.table("conversations").select("*").eq("tenant_id", tenant_id).eq("contact_phone", normalized_phone).limit(1).execute()
+    existing_q = (
+        supabase.table("conversations")
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .eq("contact_phone", normalized_phone)
+    )
+    if connection_id:
+        existing_q = existing_q.eq("connection_id", connection_id)
+    existing = existing_q.limit(1).execute()
     if existing.data:
         return existing.data[0]
 
-    conn_result = (
-        supabase.table("connections")
-        .select("*")
-        .eq("tenant_id", tenant_id)
-        .eq("provider", "evolution")
-        .eq("status", "connected")
-        .limit(1)
-        .execute()
-    )
-    if not conn_result.data:
-        conn_result = supabase.table("connections").select("*").eq("tenant_id", tenant_id).limit(1).execute()
+    if connection_id:
+        conn_result = (
+            supabase.table("connections")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("id", connection_id)
+            .limit(1)
+            .execute()
+        )
+    else:
+        conn_result = (
+            supabase.table("connections")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("provider", "evolution")
+            .eq("status", "connected")
+            .limit(1)
+            .execute()
+        )
+        if not conn_result.data:
+            conn_result = supabase.table("connections").select("*").eq("tenant_id", tenant_id).limit(1).execute()
     if not conn_result.data:
         raise Exception("Nenhuma conexão disponível para iniciar conversa")
     connection = conn_result.data[0]
+    if connection_id:
+        conn_status = str(connection.get("status") or "").strip().lower()
+        if conn_status not in {"connected", "open"}:
+            raise Exception("Conexão selecionada está desconectada")
 
     resolved_name = (contact_name or "").strip()
     if not resolved_name:
@@ -1301,7 +1333,19 @@ async def _bulk_send_recipient_message(recipient_id: str) -> None:
         return
 
     contact_name = (recipient.get("contact_name") or (contact_row.get("name") if isinstance(contact_row, dict) else None) or (contact_row.get("full_name") if isinstance(contact_row, dict) else None))
-    conv = _bulk_get_or_create_conversation(tenant_id, str(contact_phone or ""), contact_name, recipient.get("contact_id"))
+    campaign_connection_id = str(campaign.get("connection_id") or campaign.get("connectionId") or "").strip() or None
+    try:
+        conv = _bulk_get_or_create_conversation(
+            tenant_id,
+            str(contact_phone or ""),
+            contact_name,
+            recipient.get("contact_id"),
+            connection_id=campaign_connection_id,
+        )
+    except Exception as e:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": str(e)[:800], "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
 
     conv_r = supabase.table("conversations").select("*, connections(*)").eq("id", conv.get("id")).limit(1).execute()
     if not conv_r.data:
@@ -1310,12 +1354,12 @@ async def _bulk_send_recipient_message(recipient_id: str) -> None:
         return
     conversation = conv_r.data[0] or {}
     connection = conversation.get("connections") or {}
-    is_evolution = str(connection.get("provider") or "").lower() == "evolution"
     is_connected = str(connection.get("status") or "").lower() in ["connected", "open"]
     instance_name = connection.get("instance_name")
     phone = conversation.get("contact_phone")
 
-    if not (is_evolution and is_connected and instance_name and phone):
+    provider_id = str(connection.get("provider") or "").strip().lower()
+    if not (provider_id and is_connected and instance_name and phone):
         supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Conexão indisponível", "updated_at": now}).eq("id", recipient_id).execute()
         await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
         return
@@ -1351,7 +1395,14 @@ async def _bulk_send_recipient_message(recipient_id: str) -> None:
     except Exception:
         pass
 
-    await send_whatsapp_message(str(instance_name), str(phone), body, "text", str(message_id))
+    conn_ref = ConnectionRef(
+        tenant_id=str(tenant_id or ""),
+        provider=provider_id,
+        instance_name=str(instance_name or ""),
+        phone_number=str(connection.get("phone_number") or "") or None,
+        config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+    )
+    await send_provider_message(conn_ref, str(phone), body, "text", str(message_id))
 
     msg_status = None
     try:
@@ -1643,6 +1694,7 @@ class AutoMessageCreate(BaseModel):
 class BulkCampaignCreate(BaseModel):
     name: str
     template_body: str
+    connection_id: Optional[str] = None
     selection_mode: str = "explicit"
     selection_payload: dict = {}
     delay_seconds: int = 0
@@ -1654,6 +1706,7 @@ class BulkCampaignCreate(BaseModel):
 class BulkCampaignUpdate(BaseModel):
     name: Optional[str] = None
     template_body: Optional[str] = None
+    connection_id: Optional[str] = None
     selection_mode: Optional[str] = None
     selection_payload: Optional[dict] = None
     delay_seconds: Optional[int] = None
@@ -6044,6 +6097,31 @@ async def _execute_flow_for_conversation(
         except Exception:
             pass
 
+    connection_cache: Dict[str, Optional[dict]] = {}
+
+    def _get_node_connection(cfg: dict) -> Optional[dict]:
+        node_connection_id = str(cfg.get("connectionId") or cfg.get("connection_id") or "").strip()
+        if node_connection_id:
+            cached = connection_cache.get(node_connection_id)
+            if cached is not None:
+                return cached
+            try:
+                r = (
+                    supabase.table("connections")
+                    .select("*")
+                    .eq("tenant_id", tenant_id)
+                    .eq("id", node_connection_id)
+                    .limit(1)
+                    .execute()
+                )
+                conn = r.data[0] if r.data and isinstance(r.data[0], dict) else None
+                connection_cache[node_connection_id] = conn
+                return conn
+            except Exception:
+                connection_cache[node_connection_id] = None
+                return None
+        return connection if isinstance(connection, dict) else None
+
     def next_from(node_id: str, *, handle: Optional[str] = None) -> Optional[str]:
         outs = edges_from.get(node_id) or []
         if handle:
@@ -6101,20 +6179,25 @@ async def _execute_flow_for_conversation(
                                 }).eq("id", tenant_id).execute()
                         except Exception:
                             pass
-                        if connection and isinstance(connection, dict):
-                            provider_id = str(connection.get("provider") or "").strip().lower()
-                            connection_status = str(connection.get("status") or "").strip().lower()
-                            is_connected = connection_status in ["connected", "open"]
-                            instance_name = str(connection.get("instance_name") or "").strip()
-                            if provider_id and is_connected and instance_name:
-                                conn_ref = ConnectionRef(
-                                    tenant_id=str(connection.get("tenant_id") or tenant_id or ""),
-                                    provider=provider_id,
-                                    instance_name=instance_name,
-                                    phone_number=str(connection.get("phone_number") or "") or None,
-                                    config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
-                                )
-                                asyncio.create_task(send_provider_message(conn_ref, phone, content, "text", msg_id))
+                        node_conn = _get_node_connection(cfg)
+                        if not node_conn:
+                            supabase.table("messages").update({"status": "failed"}).eq("id", msg_id).execute()
+                            raise Exception("Conexão do nó não encontrada")
+                        provider_id = str(node_conn.get("provider") or "").strip().lower()
+                        connection_status = str(node_conn.get("status") or "").strip().lower()
+                        is_connected = connection_status in ["connected", "open"]
+                        instance_name = str(node_conn.get("instance_name") or "").strip()
+                        if not (provider_id and is_connected and instance_name):
+                            supabase.table("messages").update({"status": "failed"}).eq("id", msg_id).execute()
+                            raise Exception("Conexão do nó indisponível")
+                        conn_ref = ConnectionRef(
+                            tenant_id=str(node_conn.get("tenant_id") or tenant_id or ""),
+                            provider=provider_id,
+                            instance_name=instance_name,
+                            phone_number=str(node_conn.get("phone_number") or "") or None,
+                            config=node_conn.get("config") if isinstance(node_conn.get("config"), dict) else {},
+                        )
+                        asyncio.create_task(send_provider_message(conn_ref, phone, content, "text", msg_id))
                 await log_node(current_id, node_type, "success")
                 current_id = next_from(current_id)
                 continue
@@ -6152,28 +6235,33 @@ async def _execute_flow_for_conversation(
                                 }).eq("id", tenant_id).execute()
                         except Exception:
                             pass
-                        if connection and isinstance(connection, dict):
-                            provider_id = str(connection.get("provider") or "").strip().lower()
-                            connection_status = str(connection.get("status") or "").strip().lower()
-                            is_connected = connection_status in ["connected", "open"]
-                            instance_name = str(connection.get("instance_name") or "").strip()
-                            if provider_id and is_connected and instance_name:
-                                conn_ref = ConnectionRef(
-                                    tenant_id=str(connection.get("tenant_id") or tenant_id or ""),
-                                    provider=provider_id,
-                                    instance_name=instance_name,
-                                    phone_number=str(connection.get("phone_number") or "") or None,
-                                    config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
-                                )
-                                asyncio.create_task(send_provider_message(
-                                    conn_ref,
-                                    phone,
-                                    str(media_url or ""),
-                                    str(media_type or "document"),
-                                    msg_id,
-                                    caption=caption,
-                                    filename="flow_media",
-                                ))
+                        node_conn = _get_node_connection(cfg)
+                        if not node_conn:
+                            supabase.table("messages").update({"status": "failed"}).eq("id", msg_id).execute()
+                            raise Exception("Conexão do nó não encontrada")
+                        provider_id = str(node_conn.get("provider") or "").strip().lower()
+                        connection_status = str(node_conn.get("status") or "").strip().lower()
+                        is_connected = connection_status in ["connected", "open"]
+                        instance_name = str(node_conn.get("instance_name") or "").strip()
+                        if not (provider_id and is_connected and instance_name):
+                            supabase.table("messages").update({"status": "failed"}).eq("id", msg_id).execute()
+                            raise Exception("Conexão do nó indisponível")
+                        conn_ref = ConnectionRef(
+                            tenant_id=str(node_conn.get("tenant_id") or tenant_id or ""),
+                            provider=provider_id,
+                            instance_name=instance_name,
+                            phone_number=str(node_conn.get("phone_number") or "") or None,
+                            config=node_conn.get("config") if isinstance(node_conn.get("config"), dict) else {},
+                        )
+                        asyncio.create_task(send_provider_message(
+                            conn_ref,
+                            phone,
+                            str(media_url or ""),
+                            str(media_type or "document"),
+                            msg_id,
+                            caption=caption,
+                            filename="flow_media",
+                        ))
                 await log_node(current_id, node_type, "success")
                 current_id = next_from(current_id)
                 continue
@@ -7240,6 +7328,7 @@ async def create_bulk_campaign(tenant_id: str, data: BulkCampaignCreate, payload
             "created_by": payload.get("user_id"),
             "name": data.name,
             "template_body": data.template_body,
+            "connection_id": data.connection_id,
             "status": "draft",
             "selection_mode": data.selection_mode,
             "selection_payload": data.selection_payload or {},
@@ -7271,6 +7360,7 @@ async def update_bulk_campaign(campaign_id: str, data: BulkCampaignUpdate, paylo
         for k in (
             "name",
             "template_body",
+            "connection_id",
             "selection_mode",
             "selection_payload",
             "delay_seconds",

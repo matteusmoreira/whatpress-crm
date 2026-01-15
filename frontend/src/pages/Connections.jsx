@@ -287,11 +287,9 @@ const EvolutionInstances = ({ tenantId }) => {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadInstances();
-  }, [tenantId]);
-
-  const loadInstances = async () => {
+  const loadInstances = React.useCallback(async () => {
+    if (!tenantId) return;
+    setLoading(true);
     try {
       const data = await EvolutionAPI.listInstances(tenantId);
       setInstances(data);
@@ -300,7 +298,11 @@ const EvolutionInstances = ({ tenantId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadInstances();
+  }, [loadInstances]);
 
   if (loading) {
     return (

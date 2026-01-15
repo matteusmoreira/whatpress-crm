@@ -76,8 +76,9 @@ export const useTypingIndicator = () => {
 
     // Cleanup on unmount
     React.useEffect(() => {
+        const timeouts = timeoutsRef.current;
         return () => {
-            Object.values(timeoutsRef.current).forEach(clearTimeout);
+            Object.values(timeouts).forEach(clearTimeout);
         };
     }, []);
 

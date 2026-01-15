@@ -53,7 +53,8 @@ const CampaignForm = ({
   onClose,
   onSaved,
   tenantId,
-  editingCampaign
+  editingCampaign,
+  connections
 }) => {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -63,6 +64,7 @@ const CampaignForm = ({
   const [periodUnit, setPeriodUnit] = useState('hour');
   const [startAtLocal, setStartAtLocal] = useState('');
   const [recurrence, setRecurrence] = useState('none');
+  const [connectionId, setConnectionId] = useState('');
 
   const [contactSearch, setContactSearch] = useState('');
   const [contacts, setContacts] = useState([]);
@@ -79,6 +81,7 @@ const CampaignForm = ({
       setName(editingCampaign.name || '');
       setTemplateBody(editingCampaign.template_body || '');
       setDelaySeconds(Number(editingCampaign.delay_seconds || 0));
+      setConnectionId(String(editingCampaign.connection_id || '').trim());
       setMaxMessagesPerPeriod(
         editingCampaign.max_messages_per_period === null || editingCampaign.max_messages_per_period === undefined
           ? ''
@@ -98,6 +101,7 @@ const CampaignForm = ({
       setPeriodUnit('hour');
       setStartAtLocal('');
       setRecurrence('none');
+      setConnectionId('');
       setSelectedIds(new Set());
     }
   }, [editingCampaign, isOpen]);
@@ -244,6 +248,7 @@ const CampaignForm = ({
       const campaignPayload = {
         name: trimmedName,
         templateBody: trimmedBody,
+        connectionId: connectionId ? String(connectionId) : null,
         delaySeconds: Number(delaySeconds) || 0,
         startAt: parsedStart ? parsedStart.toISOString() : null,
         recurrence: recurrence || 'none',
@@ -304,6 +309,22 @@ const CampaignForm = ({
               <div>
                 <label className="text-white/70 text-sm mb-2 block">Nome</label>
                 <GlassInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Promoção Janeiro" />
+              </div>
+
+              <div>
+                <label className="text-white/70 text-sm mb-2 block">Conexão</label>
+                <select
+                  value={connectionId}
+                  onChange={(e) => setConnectionId(e.target.value)}
+                  className="h-11 w-full px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                >
+                  <option value="" className="bg-emerald-900">Automático</option>
+                  {(Array.isArray(connections) ? connections : []).map((conn) => (
+                    <option key={conn.id} value={conn.id} className="bg-emerald-900">
+                      {(conn.phoneNumber || conn.instanceName || conn.id)}{conn.provider && conn.provider !== 'evolution' ? ' (API)' : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -629,7 +650,7 @@ const StatsModal = ({ isOpen, onClose, stats }) => {
 
 const Disparos = () => {
   const { user } = useAuthStore();
-  const { selectedTenant, tenants, fetchTenants } = useAppStore();
+  const { selectedTenant, tenants, fetchTenants, connections, fetchConnections } = useAppStore();
 
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState([]);
@@ -672,6 +693,11 @@ const Disparos = () => {
   useEffect(() => {
     loadCampaigns();
   }, [loadCampaigns]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    fetchConnections?.(tenantId);
+  }, [fetchConnections, tenantId]);
 
   const openCreate = () => {
     setEditingCampaign(null);
@@ -923,6 +949,7 @@ const Disparos = () => {
         onSaved={loadCampaigns}
         tenantId={tenantId}
         editingCampaign={editingCampaign}
+        connections={connections}
       />
 
       <ScheduleModal

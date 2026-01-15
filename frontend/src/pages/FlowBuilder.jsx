@@ -20,6 +20,8 @@ import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { toast } from '../components/ui/glass-toaster';
 import { createNode, DEFAULT_NODE_DATA, validateFlow } from '../lib/flowTypes';
+import { useAuthStore } from '../store/authStore';
+import { useAppStore } from '../store/appStore';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
@@ -97,6 +99,8 @@ const nodeCategories = [
 const FlowBuilderInner = () => {
     const { theme } = useTheme();
     const isDark = theme !== 'light';
+    const { user } = useAuthStore();
+    const { connections, fetchConnections } = useAppStore();
     const [nodes, setNodes] = useNodesState([]);
     const [edges, setEdges] = useEdgesState([]);
     const [selectedNode, setSelectedNodeState] = useState(null);
@@ -118,6 +122,13 @@ const FlowBuilderInner = () => {
     const reactFlowWrapperRef = useRef(null);
     const reactFlowInstanceRef = useRef(null);
     const [nodeConfigDraft, setNodeConfigDraft] = useState({});
+
+    const tenantId = user?.tenantId || null;
+
+    useEffect(() => {
+        if (!tenantId) return;
+        fetchConnections?.(tenantId);
+    }, [fetchConnections, tenantId]);
     const [isRenamingFlow, setIsRenamingFlow] = useState(false);
 
     const {
@@ -577,22 +588,64 @@ const FlowBuilderInner = () => {
                 );
             case 'textMessage':
                 return (
-                    <div className="space-y-2">
-                        <Label>Mensagem</Label>
-                        <Textarea
-                            value={nodeConfigDraft.message || ''}
-                            onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, message: e.target.value })}
-                            placeholder="Digite a mensagem..."
-                            rows={8}
-                        />
-                        <p className={cn("text-xs", isDark ? "text-white/40" : "text-slate-500")}>
-                            Use variáveis com {'{nome_variavel}'}
-                        </p>
-                    </div>
+                    <>
+                        <div className="space-y-2">
+                            <Label>Conexão</Label>
+                            <Select
+                                value={(String(nodeConfigDraft.connectionId || '').trim() || 'auto')}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, connectionId: value === 'auto' ? '' : value })}
+                            >
+                                <SelectTrigger className="h-11 sm:h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="auto">Automático</SelectItem>
+                                    {(Array.isArray(connections) ? connections : []).map((conn) => (
+                                        <SelectItem key={conn.id} value={conn.id}>
+                                            {(conn.phoneNumber || conn.instanceName || conn.id)}{conn.provider && conn.provider !== 'evolution' ? ' (API)' : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Mensagem</Label>
+                            <Textarea
+                                value={nodeConfigDraft.message || ''}
+                                onChange={(e) => updateSelectedNodeConfig({ ...nodeConfigDraft, message: e.target.value })}
+                                placeholder="Digite a mensagem..."
+                                rows={8}
+                            />
+                            <p className={cn("text-xs", isDark ? "text-white/40" : "text-slate-500")}>
+                                Use variáveis com {'{nome_variavel}'}
+                            </p>
+                        </div>
+                    </>
                 );
             case 'mediaMessage':
                 return (
                     <>
+                        <div className="space-y-2">
+                            <Label>Conexão</Label>
+                            <Select
+                                value={(String(nodeConfigDraft.connectionId || '').trim() || 'auto')}
+                                onValueChange={(value) => updateSelectedNodeConfig({ ...nodeConfigDraft, connectionId: value === 'auto' ? '' : value })}
+                            >
+                                <SelectTrigger className="h-11 sm:h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="auto">Automático</SelectItem>
+                                    {(Array.isArray(connections) ? connections : []).map((conn) => (
+                                        <SelectItem key={conn.id} value={conn.id}>
+                                            {(conn.phoneNumber || conn.instanceName || conn.id)}{conn.provider && conn.provider !== 'evolution' ? ' (API)' : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
                         <div className="space-y-2">
                             <Label>Tipo de Mídia</Label>
                             <Select

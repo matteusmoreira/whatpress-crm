@@ -531,6 +531,7 @@ export const BulkCampaignsAPI = {
     const payload = {
       name: data.name,
       template_body: data.templateBody,
+      connection_id: data.connectionId ?? null,
       selection_mode: data.selectionMode || 'explicit',
       selection_payload: data.selectionPayload || {},
       delay_seconds: data.delaySeconds || 0,
@@ -547,6 +548,7 @@ export const BulkCampaignsAPI = {
     const payload = {
       name: data.name,
       template_body: data.templateBody,
+      connection_id: data.connectionId,
       selection_mode: data.selectionMode,
       selection_payload: data.selectionPayload,
       delay_seconds: data.delaySeconds,

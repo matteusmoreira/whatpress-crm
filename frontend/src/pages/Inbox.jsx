@@ -1737,7 +1737,7 @@ const Inbox = () => {
     }
   };
 
-  const normalizeMessageType = (type) => {
+  const normalizeMessageType = useCallback((type) => {
     const raw = String(type || '').trim();
     if (!raw) return 'text';
 
@@ -1753,7 +1753,7 @@ const Inbox = () => {
     if (t === 'sticker' || t === 'figurinha') return 'sticker';
 
     return 'unknown';
-  };
+  }, []);
 
   const imageViewerItems = useMemo(() => {
     const items = [];
@@ -2163,7 +2163,7 @@ const Inbox = () => {
             <option value="all" className="bg-emerald-900">Todas conexões</option>
             {connections.map(conn => (
               <option key={conn.id} value={conn.id} className="bg-emerald-900">
-                {conn.phoneNumber}
+                {conn.phoneNumber}{conn.provider && conn.provider !== 'evolution' ? ` (API: ${String(conn.provider).toUpperCase()})` : ''}
               </option>
             ))}
           </select>

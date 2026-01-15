@@ -244,10 +244,10 @@ const Contacts = () => {
         }
     }, [kanbanStorageKey]);
 
-    const allColumnsForBoard = [
+    const allColumnsForBoard = useMemo(() => ([
         { id: KANBAN_UNASSIGNED_COLUMN_ID, title: 'Sem Coluna', color: 'slate', fixed: true },
         ...(kanbanColumns || [])
-    ];
+    ]), [kanbanColumns]);
 
     const isKnownColumnId = useCallback((columnId) => {
         const id = String(columnId || '');
