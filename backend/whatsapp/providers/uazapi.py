@@ -37,11 +37,47 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         client, cfg = self._build_admin_client(connection)
         endpoints_cfg = cfg.get("endpoints") if isinstance(cfg.get("endpoints"), dict) else {}
         path = str(endpoints_cfg.get("create_instance") or "/admin/instances").strip()
-        payload: dict[str, Any] = {"name": connection.instance_name}
+        base_payload: dict[str, Any] = {
+            "name": connection.instance_name,
+            "instanceName": connection.instance_name,
+            "instance_name": connection.instance_name,
+        }
+        payloads: list[dict[str, Any]] = []
         if webhook_url:
-            payload["webhookUrl"] = webhook_url
+            payloads.append(
+                {
+                    **base_payload,
+                    "webhookUrl": webhook_url,
+                    "webhook_url": webhook_url,
+                    "webhookURL": webhook_url,
+                }
+            )
+        payloads.append(base_payload)
         try:
-            return await client.request("POST", path, json=payload)
+            last: Optional[Exception] = None
+            for p in payloads:
+                try:
+                    return await _request_with_uazapi_fallbacks(
+                        client,
+                        method="POST",
+                        path=path,
+                        json=p,
+                        instance_name=connection.instance_name,
+                    )
+                except ProviderRequestError as e:
+                    last = e
+                    details = e.details or {}
+                    if details.get("status_code") not in {400, 404, 405}:
+                        raise
+            if last:
+                raise last
+            return await _request_with_uazapi_fallbacks(
+                client,
+                method="POST",
+                path=path,
+                json=base_payload,
+                instance_name=connection.instance_name,
+            )
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -56,9 +92,19 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         client, cfg = self._build_admin_client(connection)
         endpoints_cfg = cfg.get("endpoints") if isinstance(cfg.get("endpoints"), dict) else {}
         path = str(endpoints_cfg.get("delete_instance") or "/admin/instances/delete").strip()
-        payload: dict[str, Any] = {"name": connection.instance_name}
+        payload: dict[str, Any] = {
+            "name": connection.instance_name,
+            "instanceName": connection.instance_name,
+            "instance_name": connection.instance_name,
+        }
         try:
-            return await client.request("POST", path, json=payload)
+            return await _request_with_uazapi_fallbacks(
+                client,
+                method="POST",
+                path=path,
+                json=payload,
+                instance_name=connection.instance_name,
+            )
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -75,11 +121,31 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         path = str(endpoints_cfg.get("connect") or "/instance/connect").strip()
         phone = connection.phone_number or ""
         phone_norm = _format_phone(phone) if phone else ""
-        payload: dict[str, Any] = {}
+        payload: dict[str, Any] = {"qrcode": True, "qr": True, "base64": True}
         if phone_norm:
             payload["phone"] = phone_norm
+            payload["phoneNumber"] = phone_norm
+            payload["number"] = phone_norm
         try:
-            return await client.request("POST", path, json=payload)
+            try:
+                return await _request_with_uazapi_fallbacks(
+                    client,
+                    method="POST",
+                    path=path,
+                    json=payload,
+                    instance_name=connection.instance_name,
+                )
+            except ProviderRequestError as e:
+                details = e.details or {}
+                if details.get("status_code") != 405:
+                    raise
+                return await _request_with_uazapi_fallbacks(
+                    client,
+                    method="GET",
+                    path=path,
+                    json=None,
+                    instance_name=connection.instance_name,
+                )
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -95,7 +161,13 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         endpoints_cfg = cfg.get("endpoints") if isinstance(cfg.get("endpoints"), dict) else {}
         path = str(endpoints_cfg.get("get_status") or "/instance/getStatus").strip()
         try:
-            return await client.request("GET", path)
+            return await _request_with_uazapi_fallbacks(
+                client,
+                method="GET",
+                path=path,
+                json=None,
+                instance_name=connection.instance_name,
+            )
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -110,9 +182,15 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         client, cfg = self._build_client(connection)
         endpoints_cfg = cfg.get("endpoints") if isinstance(cfg.get("endpoints"), dict) else {}
         path = str(endpoints_cfg.get("ensure_webhook") or "/instance/webhook").strip()
-        payload = {"url": webhook_url}
+        payload = {"url": webhook_url, "webhookUrl": webhook_url, "webhookURL": webhook_url}
         try:
-            return await client.request("POST", path, json=payload)
+            return await _request_with_uazapi_fallbacks(
+                client,
+                method="POST",
+                path=path,
+                json=payload,
+                instance_name=connection.instance_name,
+            )
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -142,12 +220,24 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         try:
             if kind in {"text", "message", ""}:
                 payload = {"phoneNumber": phone_norm, "message": req.content}
-                return await client.request("POST", send_text_path, json=payload)
+                return await _request_with_uazapi_fallbacks(
+                    client,
+                    method="POST",
+                    path=send_text_path,
+                    json=payload,
+                    instance_name=connection.instance_name,
+                )
 
             media_type = _map_kind_to_media_type(kind)
             if not media_type:
                 payload = {"phoneNumber": phone_norm, "message": req.content}
-                return await client.request("POST", send_text_path, json=payload)
+                return await _request_with_uazapi_fallbacks(
+                    client,
+                    method="POST",
+                    path=send_text_path,
+                    json=payload,
+                    instance_name=connection.instance_name,
+                )
 
             payload: dict[str, Any] = {
                 "phoneNumber": phone_norm,
@@ -163,7 +253,13 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 if req.filename:
                     payload["filename"] = req.filename
 
-            return await client.request("POST", send_media_path, json=payload)
+            return await _request_with_uazapi_fallbacks(
+                client,
+                method="POST",
+                path=send_media_path,
+                json=payload,
+                instance_name=connection.instance_name,
+            )
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -360,4 +456,63 @@ def _map_kind_to_media_type(kind: str) -> Optional[str]:
     if k in {"sticker"}:
         return "sticker"
     return None
+
+
+def _normalize_path(path: str) -> str:
+    p = str(path or "").strip()
+    if not p:
+        return "/"
+    if not p.startswith("/"):
+        return f"/{p}"
+    return p
+
+
+def _candidate_paths(path: str, *, instance_name: Optional[str]) -> list[str]:
+    p = _normalize_path(path)
+    candidates: list[str] = [p]
+
+    if not p.startswith("/api/") and p != "/api":
+        candidates.append(f"/api{p}")
+
+    if instance_name:
+        inst = str(instance_name or "").strip()
+        if inst:
+            expanded: list[str] = []
+            for base in candidates:
+                expanded.append(base)
+                if not base.rstrip("/").endswith(f"/{inst}"):
+                    expanded.append(f"{base.rstrip('/')}/{inst}")
+            candidates = expanded
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in candidates:
+        if c in seen:
+            continue
+        seen.add(c)
+        out.append(c)
+    return out
+
+
+async def _request_with_uazapi_fallbacks(
+    client: HttpClient,
+    *,
+    method: str,
+    path: str,
+    json: Optional[dict[str, Any]],
+    instance_name: Optional[str],
+) -> dict[str, Any]:
+    last: Optional[Exception] = None
+    for candidate_path in _candidate_paths(path, instance_name=instance_name):
+        try:
+            return await client.request(method, candidate_path, json=json)
+        except ProviderRequestError as e:
+            last = e
+            details = e.details or {}
+            status = details.get("status_code")
+            if status not in {400, 404, 405}:
+                raise
+    if last:
+        raise last
+    return await client.request(method, _normalize_path(path), json=json)
 
