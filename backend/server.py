@@ -403,7 +403,6 @@ async def ensure_auto_messages_schema():
         supabase.rpc('exec_sql', {'sql': sql}).execute()
     except Exception as e:
         logger.warning(f"Auto messages schema not ensured (exec_sql unavailable?): {e}")
-        return
     _ensure_offline_flush_task_started()
     _ensure_bulk_worker_task_started()
 
@@ -7169,6 +7168,21 @@ async def bulk_campaign_stats(campaign_id: str, tenant_id: str, payload: dict = 
             "failed": count_status({"campaign_id": campaign_id, "status": "failed"}),
             "skipped": count_status({"campaign_id": campaign_id, "status": "skipped"}),
         }
+
+        if sum(int(v or 0) for v in totals.values()) == 0:
+            selection_mode = str(campaign.get("selection_mode") or "").strip().lower()
+            selection_payload = campaign.get("selection_payload") or {}
+            if selection_mode == "explicit" and isinstance(selection_payload, dict):
+                raw_ids = selection_payload.get("contact_ids") or selection_payload.get("contactIds") or selection_payload.get("contacts") or []
+                planned_ids: List[str] = []
+                if isinstance(raw_ids, list):
+                    for item in raw_ids:
+                        if isinstance(item, str) and item.strip():
+                            planned_ids.append(item.strip())
+                        elif isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("id").strip():
+                            planned_ids.append(item.get("id").strip())
+                planned_ids = list(dict.fromkeys(planned_ids))
+                totals["scheduled"] = len(planned_ids)
 
         run = None
         try:

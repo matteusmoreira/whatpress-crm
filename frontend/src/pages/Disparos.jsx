@@ -28,6 +28,19 @@ const STATUS_STYLES = {
   failed: { label: 'Falhou', color: 'bg-red-500/20 text-red-300 border border-red-500/30' }
 };
 
+const toDateTimeLocalValue = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!date || Number.isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const formatDateTimePtBr = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+};
+
 const CampaignForm = ({
   isOpen,
   onClose,
@@ -426,6 +439,71 @@ const CampaignForm = ({
   );
 };
 
+const ScheduleModal = ({ isOpen, onClose, onConfirm, initialValue }) => {
+  const [value, setValue] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setValue(initialValue || '');
+  }, [initialValue, isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-emerald-950/95 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <Send className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">Agendar disparo</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-white/60">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="text-white/70 text-sm mb-2 block">Data e hora</label>
+            <GlassInput
+              type="datetime-local"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setValue(toDateTimeLocalValue(new Date()))}
+                className="text-sm text-emerald-300 hover:text-emerald-200 transition-colors"
+              >
+                Usar agora
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-11 px-5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 transition-colors"
+            >
+              Cancelar
+            </button>
+            <GlassButton
+              type="button"
+              onClick={() => onConfirm?.(value)}
+              className="min-w-[160px]"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Agendar
+            </GlassButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StatsModal = ({ isOpen, onClose, stats }) => {
   if (!isOpen) return null;
   const totals = stats?.totals || {};
@@ -488,6 +566,10 @@ const Disparos = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [stats, setStats] = useState(null);
 
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleCampaign, setScheduleCampaign] = useState(null);
+  const [scheduleInitialValue, setScheduleInitialValue] = useState('');
+
   const isSuperAdmin = user?.role === 'superadmin';
   const tenantId = isSuperAdmin
     ? (selectedTenant?.id || tenants?.[0]?.id || null)
@@ -526,18 +608,32 @@ const Disparos = () => {
     setShowForm(true);
   };
 
-  const scheduleNow = async (campaign) => {
-    if (!tenantId) return;
-    if (!window.confirm('Agendar envio agora?')) return;
+  const openSchedule = (campaign) => {
+    setScheduleCampaign(campaign);
+    const initial = campaign?.next_run_at || campaign?.start_at || null;
+    setScheduleInitialValue(toDateTimeLocalValue(initial || new Date()));
+    setScheduleOpen(true);
+  };
+
+  const confirmSchedule = async (datetimeLocalValue) => {
+    if (!tenantId || !scheduleCampaign?.id) return;
+    const parsed = datetimeLocalValue ? new Date(datetimeLocalValue) : new Date();
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      toast.error('Data/hora inválida');
+      return;
+    }
+
     try {
-      await BulkCampaignsAPI.schedule(tenantId, campaign.id, {
-        startAt: new Date().toISOString(),
-        recurrence: campaign.recurrence || 'none',
-        delaySeconds: campaign.delay_seconds || 0,
-        maxMessagesPerPeriod: campaign.max_messages_per_period,
-        periodUnit: campaign.period_unit
+      await BulkCampaignsAPI.schedule(tenantId, scheduleCampaign.id, {
+        startAt: parsed.toISOString(),
+        recurrence: scheduleCampaign.recurrence || 'none',
+        delaySeconds: scheduleCampaign.delay_seconds || 0,
+        maxMessagesPerPeriod: scheduleCampaign.max_messages_per_period,
+        periodUnit: scheduleCampaign.period_unit
       });
       toast.success('Disparo agendado');
+      setScheduleOpen(false);
+      setScheduleCampaign(null);
       loadCampaigns();
     } catch (e) {
       toast.error('Erro ao agendar disparo');
@@ -652,6 +748,9 @@ const Disparos = () => {
             const st = STATUS_STYLES[statusKey] || STATUS_STYLES.draft;
             const isSchedulable = ['draft', 'paused', 'completed', 'cancelled', 'failed'].includes(statusKey);
             const isRunning = statusKey === 'running' || statusKey === 'scheduled';
+            const scheduledLabel = statusKey === 'scheduled'
+              ? (formatDateTimePtBr(c.next_run_at || c.start_at) || '')
+              : '';
             return (
               <GlassCard key={c.id} className="p-5">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
@@ -670,6 +769,12 @@ const Disparos = () => {
                         <Clock className="w-4 h-4 text-emerald-400" />
                         <span>Delay: {Number(c.delay_seconds || 0)}s</span>
                       </div>
+                      {scheduledLabel ? (
+                        <div className="inline-flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-emerald-400" />
+                          <span>Agendado: {scheduledLabel}</span>
+                        </div>
+                      ) : null}
                       <div className="inline-flex items-center gap-2">
                         <BarChart3 className="w-4 h-4 text-emerald-400" />
                         <span>
@@ -692,9 +797,9 @@ const Disparos = () => {
                       Editar
                     </GlassButton>
                     {isSchedulable ? (
-                      <GlassButton onClick={() => scheduleNow(c)} className="h-10">
+                      <GlassButton onClick={() => openSchedule(c)} className="h-10">
                         <Send className="w-4 h-4 mr-2" />
-                        Agendar agora
+                        Agendar
                       </GlassButton>
                     ) : null}
                     {statusKey === 'paused' ? (
@@ -735,6 +840,16 @@ const Disparos = () => {
         onSaved={loadCampaigns}
         tenantId={tenantId}
         editingCampaign={editingCampaign}
+      />
+
+      <ScheduleModal
+        isOpen={scheduleOpen}
+        onClose={() => {
+          setScheduleOpen(false);
+          setScheduleCampaign(null);
+        }}
+        onConfirm={confirmSchedule}
+        initialValue={scheduleInitialValue}
       />
 
       <StatsModal
