@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any, Tuple, Set
@@ -138,7 +139,13 @@ async def health_check():
                 return {"ok": False, "error": "db_unavailable"}
             return {"ok": False, "error": "db_error"}
 
-    db = await _check_db()
+    timeout_s = float(
+        (os.getenv("HEALTHCHECK_DB_TIMEOUT_SECONDS") or "2").strip() or "2"
+    )
+    try:
+        db = await asyncio.wait_for(_check_db(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        db = {"ok": False, "error": "db_timeout"}
     config = {
         "supabase_url_configured": bool(SUPABASE_URL),
         "supabase_service_role_key_configured": bool(SUPABASE_SERVICE_ROLE_KEY),
@@ -680,7 +687,6 @@ security = HTTPBearer(auto_error=False)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 def _get_whatsapp_container():
     return get_whatsapp_container()

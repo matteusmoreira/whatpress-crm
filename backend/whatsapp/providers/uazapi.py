@@ -270,12 +270,16 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
 
     def _build_client(self, connection: ConnectionRef) -> tuple[HttpClient, dict[str, Any]]:
         cfg = connection.config or {}
-        base_url_raw = str(cfg.get("base_url") or cfg.get("url") or cfg.get("baseUrl") or "").strip()
+        base_url_raw = str(
+            cfg.get("base_url") or cfg.get("url") or cfg.get("baseUrl") or ""
+        ).strip()
         subdomain = str(cfg.get("subdomain") or "").strip()
         if not base_url_raw and subdomain:
             base_url_raw = f"https://{subdomain}.uazapi.com"
         base_url = base_url_raw.rstrip("/")
-        token = str(cfg.get("token") or cfg.get("instance_token") or "").strip()
+        token = str(
+            cfg.get("token") or cfg.get("instance_token") or ""
+        ).strip()
         if not token:
             raise AuthError("Uazapi não configurada (token).", transient=False)
         if not base_url:
@@ -295,18 +299,25 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
 
     def _build_admin_client(self, connection: ConnectionRef) -> tuple[HttpClient, dict[str, Any]]:
         cfg = connection.config or {}
-        base_url_raw = str(cfg.get("base_url") or cfg.get("url") or cfg.get("baseUrl") or "").strip()
+        base_url_raw = str(
+            cfg.get("base_url") or cfg.get("url") or cfg.get("baseUrl") or ""
+        ).strip()
         subdomain = str(cfg.get("subdomain") or "").strip()
         if not base_url_raw and subdomain:
             base_url_raw = f"https://{subdomain}.uazapi.com"
         base_url = base_url_raw.rstrip("/")
         if not base_url:
             base_url = self._default_base_url.rstrip("/")
-        admin_token = str(cfg.get("admintoken") or cfg.get("admin_token") or "").strip()
+        admin_token = str(
+            cfg.get("admintoken") or cfg.get("admin_token") or ""
+        ).strip()
         if not admin_token:
             admin_token = self._default_admin_token
         if not admin_token:
-            raise AuthError("Uazapi não configurada (admintoken).", transient=False)
+            raise AuthError(
+                "Uazapi não configurada (admintoken).",
+                transient=False,
+            )
         if not base_url:
             raise ProviderRequestError(
                 "Uazapi não configurada (base_url ou subdomain).",
@@ -315,7 +326,10 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
         client = HttpClient(
             config=HttpClientConfig(base_url=base_url),
-            auth=ApiKeyHeaderAuth(header_name="admintoken", api_key=admin_token),
+            auth=ApiKeyHeaderAuth(
+                header_name="admintoken",
+                api_key=admin_token,
+            ),
             provider="uazapi",
         )
         return client, cfg
