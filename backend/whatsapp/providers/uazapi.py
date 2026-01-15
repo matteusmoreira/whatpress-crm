@@ -137,7 +137,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 )
             except ProviderRequestError as e:
                 details = e.details or {}
-                if details.get("status_code") not in {400, 405}:
+                if details.get("status_code") not in {400, 404, 405}:
                     raise
                 return await _request_with_uazapi_fallbacks(
                     client,
@@ -473,6 +473,14 @@ def _candidate_paths(path: str, *, instance_name: Optional[str]) -> list[str]:
 
     if not p.startswith("/api/") and p != "/api":
         candidates.append(f"/api{p}")
+
+    if not p.startswith("/v1/") and not p.startswith("/api/v1/") and p not in {"/v1", "/api/v1"}:
+        candidates.append(f"/v1{p}")
+        candidates.append(f"/api/v1{p}")
+
+    if not p.startswith("/v2/") and not p.startswith("/api/v2/") and p not in {"/v2", "/api/v2"}:
+        candidates.append(f"/v2{p}")
+        candidates.append(f"/api/v2{p}")
 
     if instance_name:
         inst = str(instance_name or "").strip()
