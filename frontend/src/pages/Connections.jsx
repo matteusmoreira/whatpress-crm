@@ -387,6 +387,7 @@ const Connections = () => {
     provider: 'evolution',
     instanceName: '',
     phoneNumber: '',
+    uazapiMode: 'existing',
     config: {
       base_url: '',
       subdomain: '',
@@ -405,20 +406,55 @@ const Connections = () => {
   const handleCreateConnection = async (e) => {
     e.preventDefault();
     if (newConnection.provider === 'uazapi') {
-      const token = newConnection.config?.token?.trim();
-      if (!token) {
-        toast.error('Informe o token da instância Uazapi');
+      const cfg = newConnection.config || {};
+      const baseUrl = String(cfg.base_url || '').trim();
+      const subdomain = String(cfg.subdomain || '').trim();
+      if (!baseUrl && !subdomain) {
+        toast.error('Informe o subdomínio ou a Base URL da Uazapi');
         return;
+      }
+
+      const mode = String(newConnection.uazapiMode || 'existing');
+      if (mode === 'create') {
+        const adminToken = String(cfg.admintoken || '').trim();
+        if (!adminToken) {
+          toast.error('Informe o admin token (admintoken) para criar instância');
+          return;
+        }
+      } else {
+        const token = String(cfg.token || '').trim();
+        if (!token) {
+          toast.error('Informe o token da instância Uazapi');
+          return;
+        }
       }
     }
     try {
-      await createConnection({
+      const created = await createConnection({
         tenantId,
         ...newConnection
       });
       setShowCreateModal(false);
-      setNewConnection({ provider: 'evolution', instanceName: '', phoneNumber: '' });
       toast.success('Conexão criada!', { description: 'Configure-a para começar a receber mensagens.' });
+
+      if (newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'create') {
+        try {
+          const result = await testConnection(created.id);
+          if (result?.qrcode) {
+            handleShowQR(result.qrcode, result.pairingCode);
+          }
+        } catch (error) {
+          toast.error('Erro ao gerar QR Code', { description: error.response?.data?.detail || error.message });
+        }
+      }
+
+      setNewConnection({
+        provider: 'evolution',
+        instanceName: '',
+        phoneNumber: '',
+        uazapiMode: 'existing',
+        config: { base_url: '', subdomain: '', token: '', admintoken: '' }
+      });
     } catch (error) {
       toast.error('Erro ao criar conexão', { description: error.message });
     }
@@ -545,8 +581,9 @@ const Connections = () => {
 
       {/* Create Connection Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <GlassCard className="w-full max-w-lg" hover={false}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 p-4 overflow-y-auto">
+          <div className="min-h-full flex items-start justify-center">
+            <GlassCard className="w-full max-w-lg my-8" hover={false}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-white">Nova Conexão</h2>
               <button
@@ -613,6 +650,35 @@ const Connections = () => {
               {newConnection.provider === 'uazapi' && (
                 <div className="space-y-4">
                   <div>
+                    <label className="text-white/80 text-sm font-medium block mb-3">Modo</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setNewConnection(prev => ({ ...prev, uazapiMode: 'existing' }))}
+                        className={cn(
+                          'p-3 rounded-xl text-center transition-all border text-sm',
+                          newConnection.uazapiMode === 'existing'
+                            ? 'bg-emerald-500/30 border-emerald-500 text-white'
+                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                        )}
+                      >
+                        Instância existente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewConnection(prev => ({ ...prev, uazapiMode: 'create' }))}
+                        className={cn(
+                          'p-3 rounded-xl text-center transition-all border text-sm',
+                          newConnection.uazapiMode === 'create'
+                            ? 'bg-emerald-500/30 border-emerald-500 text-white'
+                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                        )}
+                      >
+                        Criar e escanear QR
+                      </button>
+                    </div>
+                  </div>
+                  <div>
                     <label className="text-white/80 text-sm font-medium block mb-2">Subdomínio Uazapi</label>
                     <GlassInput
                       type="text"
@@ -640,26 +706,32 @@ const Connections = () => {
                       }
                     />
                   </div>
-                  <div>
-                    <label className="text-white/80 text-sm font-medium block mb-2">Token da instância (token)</label>
-                    <GlassInput
-                      type="text"
-                      placeholder="Copie o token da instância na Uazapi"
-                      value={newConnection.config?.token || ''}
-                      onChange={(e) =>
-                        setNewConnection(prev => ({
-                          ...prev,
-                          config: { ...prev.config, token: e.target.value }
-                        }))
-                      }
-                      required={newConnection.provider === 'uazapi'}
-                    />
-                  </div>
+                  {newConnection.uazapiMode === 'existing' && (
+                    <div>
+                      <label className="text-white/80 text-sm font-medium block mb-2">Token da instância (token)</label>
+                      <GlassInput
+                        type="text"
+                        placeholder="Copie o token da instância na Uazapi"
+                        value={newConnection.config?.token || ''}
+                        onChange={(e) =>
+                          setNewConnection(prev => ({
+                            ...prev,
+                            config: { ...prev.config, token: e.target.value }
+                          }))
+                        }
+                        required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'existing'}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="text-white/80 text-sm font-medium block mb-2">Admin token (admintoken)</label>
                     <GlassInput
                       type="text"
-                      placeholder="Opcional, usado para criar/deletar instâncias via painel"
+                      placeholder={
+                        newConnection.uazapiMode === 'create'
+                          ? 'Obrigatório para criar instância'
+                          : 'Opcional, usado para criar/deletar instâncias via painel'
+                      }
                       value={newConnection.config?.admintoken || ''}
                       onChange={(e) =>
                         setNewConnection(prev => ({
@@ -667,6 +739,7 @@ const Connections = () => {
                           config: { ...prev.config, admintoken: e.target.value }
                         }))
                       }
+                      required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'create'}
                     />
                   </div>
                 </div>
@@ -687,7 +760,8 @@ const Connections = () => {
                 </GlassButton>
               </div>
             </form>
-          </GlassCard>
+            </GlassCard>
+          </div>
         </div>
       )}
     </div>

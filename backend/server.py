@@ -748,6 +748,39 @@ def _is_connected_state(provider: str, state: dict) -> bool:
         return str(status or "").strip().lower() in {"connected", "open"}
     return False
 
+def _extract_uazapi_instance_token(obj: Any) -> Optional[str]:
+    token_keys = {
+        "token",
+        "instance_token",
+        "instancetoken",
+        "instance-token",
+        "api_token",
+        "apitoken",
+    }
+
+    def walk(value: Any, depth: int) -> Optional[str]:
+        if depth > 6:
+            return None
+        if isinstance(value, dict):
+            for k, v in value.items():
+                k_norm = str(k or "").strip().lower()
+                if "admin" not in k_norm and k_norm in token_keys:
+                    if isinstance(v, str) and v.strip():
+                        return v.strip()
+                found = walk(v, depth + 1)
+                if found:
+                    return found
+            return None
+        if isinstance(value, list):
+            for item in value:
+                found = walk(item, depth + 1)
+                if found:
+                    return found
+            return None
+        return None
+
+    return walk(obj, 0)
+
 def _whatsapp_http_error(e: Exception) -> HTTPException:
     if isinstance(e, ProviderNotFoundError):
         return HTTPException(status_code=400, detail=str(e))
@@ -2913,11 +2946,39 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
         try:
             webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
             create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
+            if provider_id == "uazapi":
+                token = _extract_uazapi_instance_token(create_result)
+                if token:
+                    merged_cfg = dict(conn_ref.config or {})
+                    merged_cfg["token"] = token
+                    supabase.table("connections").update({"config": merged_cfg}).eq("id", connection_id).execute()
+                    conn_ref = ConnectionRef(
+                        tenant_id=conn_ref.tenant_id,
+                        provider=conn_ref.provider,
+                        instance_name=conn_ref.instance_name,
+                        phone_number=conn_ref.phone_number,
+                        config=merged_cfg,
+                    )
+
             qrcode = (create_result.get("qrcode", {}) or {}).get("base64") or create_result.get("base64")
+            if not qrcode:
+                qr_result = await container.connections.connect_with_retries(
+                    provider, connection=conn_ref, correlation_id=f"connect_after_create:{connection_id}"
+                )
+                qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+                pairing_code = qr_result.get("pairingCode")
+            else:
+                pairing_code = create_result.get("pairingCode")
+
+            if not qrcode:
+                raise HTTPException(status_code=502, detail="Instância criada, mas não foi possível obter o QR Code.")
+
+            supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
             return {
                 "success": True,
                 "message": "Instância criada! Escaneie o QR Code para conectar",
                 "qrcode": qrcode,
+                "pairingCode": pairing_code,
             }
         except Exception as e:
             raise _whatsapp_http_error(e)
