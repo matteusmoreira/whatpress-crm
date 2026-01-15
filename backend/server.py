@@ -1347,6 +1347,18 @@ def _auto_messages_missing_table_http() -> HTTPException:
         ),
     )
 
+
+def _bulk_campaigns_missing_table_http(table: str) -> HTTPException:
+    t = str(table or "bulk_campaigns").strip() or "bulk_campaigns"
+    return HTTPException(
+        status_code=503,
+        detail=(
+            f"Configuração do Supabase incompleta: a tabela public.{t} não existe. "
+            "Crie as tabelas de Disparos (bulk_campaigns, bulk_campaign_recipients, bulk_campaign_runs) "
+            "no SQL Editor do Supabase e tente novamente."
+        ),
+    )
+
 # ==================== MODELS ====================
 # Note: LoginRequest and LoginResponse are defined at the top of the file
 
@@ -6923,6 +6935,8 @@ async def list_bulk_campaigns(tenant_id: str, payload: dict = Depends(verify_tok
         )
         return result.data or []
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/bulk-campaigns")
@@ -6953,6 +6967,8 @@ async def create_bulk_campaign(tenant_id: str, data: BulkCampaignCreate, payload
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.put("/bulk-campaigns/{campaign_id}")
@@ -6982,6 +6998,8 @@ async def update_bulk_campaign(campaign_id: str, data: BulkCampaignUpdate, paylo
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.delete("/bulk-campaigns/{campaign_id}")
@@ -6990,6 +7008,8 @@ async def delete_bulk_campaign(campaign_id: str, payload: dict = Depends(verify_
         supabase.table("bulk_campaigns").delete().eq("id", campaign_id).execute()
         return {"success": True}
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/bulk-campaigns/{campaign_id}/recipients")
@@ -7015,6 +7035,8 @@ async def set_bulk_campaign_recipients(campaign_id: str, tenant_id: str, data: B
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/bulk-campaigns/{campaign_id}/schedule")
@@ -7051,6 +7073,8 @@ async def schedule_bulk_campaign(campaign_id: str, tenant_id: str, data: BulkCam
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/bulk-campaigns/{campaign_id}/pause")
@@ -7070,6 +7094,8 @@ async def pause_bulk_campaign(campaign_id: str, tenant_id: str, payload: dict = 
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/bulk-campaigns/{campaign_id}/resume")
@@ -7090,6 +7116,8 @@ async def resume_bulk_campaign(campaign_id: str, tenant_id: str, payload: dict =
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/bulk-campaigns/{campaign_id}/cancel")
@@ -7113,6 +7141,10 @@ async def cancel_bulk_campaign(campaign_id: str, tenant_id: str, payload: dict =
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
+        if _is_missing_table_error(e, "bulk_campaign_recipients"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaign_recipients")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/bulk-campaigns/{campaign_id}/stats")
@@ -7150,6 +7182,12 @@ async def bulk_campaign_stats(campaign_id: str, tenant_id: str, payload: dict = 
     except HTTPException:
         raise
     except Exception as e:
+        if _is_missing_table_error(e, "bulk_campaigns"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaigns")
+        if _is_missing_table_error(e, "bulk_campaign_recipients"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaign_recipients")
+        if _is_missing_table_error(e, "bulk_campaign_runs"):
+            raise _bulk_campaigns_missing_table_http("bulk_campaign_runs")
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== WEBHOOKS ====================

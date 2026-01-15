@@ -505,7 +505,8 @@ const Disparos = () => {
       const data = await BulkCampaignsAPI.list(tenantId);
       setCampaigns(Array.isArray(data) ? data : []);
     } catch (e) {
-      toast.error('Erro ao carregar disparos');
+      const msg = e?.response?.data?.detail || e?.message || null;
+      toast.error('Erro ao carregar disparos', msg ? { description: String(msg) } : undefined);
     } finally {
       setLoading(false);
     }
