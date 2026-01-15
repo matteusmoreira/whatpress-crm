@@ -203,8 +203,12 @@ export const ConnectionsAPI = {
       instance_name: data.instanceName,
       phone_number: data.phoneNumber || ''
     };
-    if (data.config && typeof data.config === 'object' && Object.keys(data.config).length > 0) {
-      payload.config = data.config;
+    let config = (data.config && typeof data.config === 'object') ? data.config : null;
+    if (data.provider === 'uazapi' && data.uazapiMode) {
+      config = { ...(config || {}), uazapiMode: data.uazapiMode };
+    }
+    if (config && Object.keys(config).length > 0) {
+      payload.config = config;
     }
     const response = await apiClient.post('/connections', payload);
     return response.data;

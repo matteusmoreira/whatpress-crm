@@ -786,7 +786,20 @@ def _whatsapp_http_error(e: Exception) -> HTTPException:
         return HTTPException(status_code=400, detail=str(e))
     if isinstance(e, WhatsAppError):
         status = 502 if e.transient else 400
-        return HTTPException(status_code=status, detail=str(e))
+        detail = str(e)
+        details = e.details if isinstance(e.details, dict) else {}
+        provider = str(details.get("provider") or "").strip()
+        provider_status = details.get("status_code")
+        body = details.get("body")
+        if provider and body:
+            body_str = str(body)
+            if len(body_str) > 1200:
+                body_str = body_str[:1200]
+            if provider_status is not None:
+                detail = f"{detail} ({provider} {provider_status}): {body_str}"
+            else:
+                detail = f"{detail} ({provider}): {body_str}"
+        return HTTPException(status_code=status, detail=detail)
     return HTTPException(status_code=400, detail=str(e))
 
 _DB_WRITE_QUEUE_MAX = int(os.getenv("DB_WRITE_QUEUE_MAX", "2000") or "2000")
@@ -2923,65 +2936,93 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
     )
     provider = _get_whatsapp_provider(provider_id)
 
-    try:
-        state = await provider.get_connection_state(ctx, connection=conn_ref)
-        if _is_connected_state(provider_id, state):
-            webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
-            try:
-                await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=webhook_url)
-            except Exception as e:
-                logger.warning(f"Could not set webhook for {instance_name}: {e}")
-            supabase.table("connections").update({"status": "connected", "webhook_url": webhook_url}).eq("id", connection_id).execute()
-            return {"success": True, "message": "Conexão estabelecida com sucesso!"}
+    cfg = conn_ref.config or {}
+    token_present = bool(str(cfg.get("token") or cfg.get("instance_token") or "").strip())
+    uazapi_mode = ""
+    if provider_id == "uazapi":
+        uazapi_mode = str(cfg.get("uazapi_mode") or cfg.get("uazapiMode") or cfg.get("mode") or "").strip().lower()
+    allow_create = provider_id == "uazapi" and (uazapi_mode == "create" or bool(str(cfg.get("admintoken") or cfg.get("admin_token") or "").strip()))
 
-        qr_result = await container.connections.connect_with_retries(provider, connection=conn_ref, correlation_id=f"connect:{connection_id}")
-        qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+    async def _create_and_get_qr() -> dict[str, Any]:
+        webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
+        create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
+        local_conn_ref = conn_ref
+        if provider_id == "uazapi":
+            token = _extract_uazapi_instance_token(create_result)
+            if token:
+                merged_cfg = dict(local_conn_ref.config or {})
+                merged_cfg["token"] = token
+                supabase.table("connections").update({"config": merged_cfg}).eq("id", connection_id).execute()
+                local_conn_ref = ConnectionRef(
+                    tenant_id=local_conn_ref.tenant_id,
+                    provider=local_conn_ref.provider,
+                    instance_name=local_conn_ref.instance_name,
+                    phone_number=local_conn_ref.phone_number,
+                    config=merged_cfg,
+                )
+
+        qrcode = (create_result.get("qrcode", {}) or {}).get("base64") or create_result.get("base64")
+        pairing_code = create_result.get("pairingCode")
+        if not qrcode:
+            qr_result = await container.connections.connect_with_retries(
+                provider, connection=local_conn_ref, correlation_id=f"connect_after_create:{connection_id}"
+            )
+            qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+            pairing_code = qr_result.get("pairingCode")
+
+        if not qrcode:
+            raise HTTPException(status_code=502, detail="Instância criada, mas não foi possível obter o QR Code.")
+
+        supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
         return {
             "success": True,
-            "message": "Escaneie o QR Code para conectar",
+            "message": "Instância criada! Escaneie o QR Code para conectar",
             "qrcode": qrcode,
-            "pairingCode": qr_result.get("pairingCode"),
+            "pairingCode": pairing_code,
         }
-    except Exception:
+
+    state: Optional[dict[str, Any]] = None
+    if provider_id != "uazapi" or token_present:
         try:
-            webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
-            create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
-            if provider_id == "uazapi":
-                token = _extract_uazapi_instance_token(create_result)
-                if token:
-                    merged_cfg = dict(conn_ref.config or {})
-                    merged_cfg["token"] = token
-                    supabase.table("connections").update({"config": merged_cfg}).eq("id", connection_id).execute()
-                    conn_ref = ConnectionRef(
-                        tenant_id=conn_ref.tenant_id,
-                        provider=conn_ref.provider,
-                        instance_name=conn_ref.instance_name,
-                        phone_number=conn_ref.phone_number,
-                        config=merged_cfg,
-                    )
-
-            qrcode = (create_result.get("qrcode", {}) or {}).get("base64") or create_result.get("base64")
-            if not qrcode:
-                qr_result = await container.connections.connect_with_retries(
-                    provider, connection=conn_ref, correlation_id=f"connect_after_create:{connection_id}"
-                )
-                qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
-                pairing_code = qr_result.get("pairingCode")
-            else:
-                pairing_code = create_result.get("pairingCode")
-
-            if not qrcode:
-                raise HTTPException(status_code=502, detail="Instância criada, mas não foi possível obter o QR Code.")
-
-            supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
-            return {
-                "success": True,
-                "message": "Instância criada! Escaneie o QR Code para conectar",
-                "qrcode": qrcode,
-                "pairingCode": pairing_code,
-            }
+            state = await provider.get_connection_state(ctx, connection=conn_ref)
         except Exception as e:
-            raise _whatsapp_http_error(e)
+            logger.warning(f"Could not get connection state for {instance_name}: {e}")
+
+    if isinstance(state, dict) and _is_connected_state(provider_id, state):
+        webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
+        try:
+            await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=webhook_url)
+        except Exception as e:
+            logger.warning(f"Could not set webhook for {instance_name}: {e}")
+        supabase.table("connections").update({"status": "connected", "webhook_url": webhook_url}).eq("id", connection_id).execute()
+        return {"success": True, "message": "Conexão estabelecida com sucesso!"}
+
+    if not token_present and provider_id == "uazapi" and not allow_create:
+        raise HTTPException(status_code=400, detail="Uazapi não configurada (token).")
+
+    try:
+        if token_present:
+            qr_result = await container.connections.connect_with_retries(
+                provider, connection=conn_ref, correlation_id=f"connect:{connection_id}"
+            )
+            qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+            if qrcode:
+                return {
+                    "success": True,
+                    "message": "Escaneie o QR Code para conectar",
+                    "qrcode": qrcode,
+                    "pairingCode": qr_result.get("pairingCode"),
+                }
+        if allow_create:
+            return await _create_and_get_qr()
+        raise HTTPException(status_code=502, detail="Não foi possível obter o QR Code.")
+    except Exception as e:
+        if allow_create and not token_present:
+            try:
+                return await _create_and_get_qr()
+            except Exception as e2:
+                raise _whatsapp_http_error(e2)
+        raise _whatsapp_http_error(e)
 
 @api_router.get("/connections/{connection_id}/qrcode")
 async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):

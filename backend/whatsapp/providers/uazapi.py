@@ -137,7 +137,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 )
             except ProviderRequestError as e:
                 details = e.details or {}
-                if details.get("status_code") != 405:
+                if details.get("status_code") not in {400, 405}:
                     raise
                 return await _request_with_uazapi_fallbacks(
                     client,
