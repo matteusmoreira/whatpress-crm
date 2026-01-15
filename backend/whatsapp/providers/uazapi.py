@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ...evolution_api import EvolutionAPI
+try:
+    from ...evolution_api import EvolutionAPI
+except ImportError:
+    from evolution_api import EvolutionAPI
 from ..auth import ApiKeyHeaderAuth
 from ..errors import AuthError, ConnectionError, ProviderRequestError
 from ..http import HttpClient, HttpClientConfig

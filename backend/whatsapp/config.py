@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from strictyaml import YAMLValidationError, load as load_yaml
 
@@ -82,4 +82,3 @@ def _parse_plugins(data: dict[str, Any]) -> list[PluginSpec]:
         if provider_id and import_path:
             specs.append(PluginSpec(provider_id=provider_id, import_path=import_path))
     return specs
-

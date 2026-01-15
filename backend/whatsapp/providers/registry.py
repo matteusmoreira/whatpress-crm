@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from typing import Any, Optional
 
 from ..errors import ConfigError, ProviderNotFoundError
 from .base import WhatsAppProvider
@@ -36,11 +35,17 @@ class ProviderRegistry:
     def load_plugins(self, specs: list[PluginSpec]) -> None:
         for spec in specs:
             provider = _import_provider(spec.import_path)
-            capabilities_id = provider.capabilities().provider_id.strip().lower()
-            if capabilities_id and capabilities_id != spec.provider_id.strip().lower():
+            caps = provider.capabilities()
+            capabilities_id = caps.provider_id.strip().lower()
+            spec_id = spec.provider_id.strip().lower()
+            if capabilities_id and capabilities_id != spec_id:
                 raise ConfigError(
                     "Plugin provider_id diverge do spec.",
-                    details={"spec": spec.provider_id, "capabilities": capabilities_id, "path": spec.import_path},
+                    details={
+                        "spec": spec.provider_id,
+                        "capabilities": capabilities_id,
+                        "path": spec.import_path,
+                    },
                 )
             self.register(provider)
 
@@ -48,16 +53,24 @@ class ProviderRegistry:
 def _import_provider(path: str) -> WhatsAppProvider:
     raw = (path or "").strip()
     if ":" not in raw:
-        raise ConfigError("Plugin import_path inválido (use modulo:objeto).", details={"import_path": raw})
+        raise ConfigError(
+            "Plugin import_path inválido (use modulo:objeto).",
+            details={"import_path": raw},
+        )
     module_name, attr = raw.split(":", 1)
     try:
         module = importlib.import_module(module_name)
     except Exception as e:
-        raise ConfigError("Falha ao importar módulo do plugin.", details={"module": module_name, "error": str(e)})
+        raise ConfigError(
+            "Falha ao importar módulo do plugin.",
+            details={"module": module_name, "error": str(e)},
+        )
     if not hasattr(module, attr):
-        raise ConfigError("Atributo do plugin não encontrado.", details={"module": module_name, "attr": attr})
+        raise ConfigError(
+            "Atributo do plugin não encontrado.",
+            details={"module": module_name, "attr": attr},
+        )
     obj = getattr(module, attr)
     if callable(obj):
         return obj()
     return obj
-

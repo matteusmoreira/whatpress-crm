@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 logger = logging.getLogger(__name__)
+import concurrent.futures
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any, Tuple, Set
@@ -49,6 +50,7 @@ import asyncio
 import re
 import time
 import hashlib
+import tempfile
 from collections import deque
 from dataclasses import dataclass
 from typing import Callable
@@ -1745,7 +1747,15 @@ def _sanitize_html_basic(value: Any) -> str:
     s = re.sub(r"(?is)\\son\\w+\\s*=\\s*'[^']*'", "", s)
     return s.strip()
 
+_SCHEMA_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=int((os.getenv("SCHEMA_EXECUTOR_WORKERS") or "2").strip() or "2")
+)
+_SYSTEM_SETTINGS_SCHEMA_ENSURED = False
+
 def _ensure_system_settings_schema() -> None:
+    global _SYSTEM_SETTINGS_SCHEMA_ENSURED
+    if _SYSTEM_SETTINGS_SCHEMA_ENSURED:
+        return
     sql = """
     CREATE TABLE IF NOT EXISTS system_settings (
         key TEXT PRIMARY KEY,
@@ -1757,7 +1767,19 @@ def _ensure_system_settings_schema() -> None:
     CREATE POLICY "Service role full access system_settings" ON system_settings FOR ALL USING (true) WITH CHECK (true);
     """
     try:
-        supabase.rpc('exec_sql', {'sql': sql}).execute()
+        timeout_s = float(
+            (
+                os.getenv("SYSTEM_SETTINGS_SCHEMA_TIMEOUT_SECONDS")
+                or os.getenv("STARTUP_SCHEMA_TIMEOUT_SECONDS")
+                or "3"
+            ).strip()
+            or "3"
+        )
+        future = _SCHEMA_EXECUTOR.submit(
+            lambda: supabase.rpc("exec_sql", {"sql": sql}).execute()
+        )
+        future.result(timeout=timeout_s)
+        _SYSTEM_SETTINGS_SCHEMA_ENSURED = True
     except Exception:
         return
 
@@ -9498,8 +9520,13 @@ async def proxy_whatsapp_media(
         raise HTTPException(status_code=502, detail="Erro ao obter mídia.")
 
 # Mount uploads directory for static file serving
-uploads_path = ROOT_DIR / "uploads"
-uploads_path.mkdir(exist_ok=True)
+uploads_dir = (os.getenv("UPLOADS_DIR") or "").strip()
+uploads_path = Path(uploads_dir) if uploads_dir else (ROOT_DIR / "uploads")
+try:
+    uploads_path.mkdir(parents=True, exist_ok=True)
+except Exception:
+    uploads_path = Path(tempfile.gettempdir()) / "uploads"
+    uploads_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
 # Include the router in the main app
@@ -9509,8 +9536,9 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
+    timeout_s = float((os.getenv("STARTUP_SCHEMA_TIMEOUT_SECONDS") or "10").strip() or "10")
     try:
-        _ensure_system_settings_schema()
+        await asyncio.wait_for(asyncio.to_thread(_ensure_system_settings_schema), timeout=timeout_s)
     except Exception:
         pass
     sql = """
@@ -9523,7 +9551,10 @@ async def startup_event():
     ALTER TABLE messages ALTER COLUMN media_url TYPE TEXT;
     """
     try:
-        supabase.rpc('exec_sql', {'sql': sql}).execute()
+        await asyncio.wait_for(
+            asyncio.to_thread(lambda: supabase.rpc("exec_sql", {"sql": sql}).execute()),
+            timeout=timeout_s,
+        )
     except Exception:
         pass
     logger.info("WhatsApp CRM API v2.0 started successfully")
