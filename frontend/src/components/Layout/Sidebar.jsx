@@ -52,13 +52,13 @@ const Sidebar = () => {
       { to: '/superadmin/plans', icon: CreditCard, label: 'Planos' },
       { to: '/superadmin/users', icon: Users, label: 'Usuários' },
       { to: '/superadmin/maintenance', icon: Wrench, label: 'Manutenção' },
-      { to: '/app/automations', icon: Bot, label: 'Disparos Automáticos' },
+      { to: '/app/automations', icon: Bot, label: 'Disparos' },
     ]
     : [
       { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/app/inbox', icon: MessageSquare, label: 'Bate Papo' },
       { to: '/app/contacts', icon: Users, label: 'Contatos' },
-      { to: '/app/automations', icon: Bot, label: 'Automações' },
+      { to: '/app/automations', icon: Bot, label: 'Disparos' },
       { to: '/app/flows', icon: Workflow, label: 'Fluxos' },
       ...(canManageConnections ? [{ to: '/app/settings/connections', icon: Plug, label: 'Conexões' }] : []),
       { to: '/app/settings', icon: Settings, label: 'Configurações', end: true },
