@@ -407,8 +407,12 @@ async def ensure_auto_messages_schema():
       END IF;
     END $$;
     """
+    timeout_seconds = float((os.getenv("STARTUP_SCHEMA_TIMEOUT_SECONDS") or "10").strip() or "10")
     try:
-        supabase.rpc('exec_sql', {'sql': sql}).execute()
+        await asyncio.wait_for(
+            asyncio.to_thread(lambda: supabase.rpc("exec_sql", {"sql": sql}).execute()),
+            timeout=timeout_seconds,
+        )
     except Exception as e:
         logger.warning(f"Auto messages schema not ensured (exec_sql unavailable?): {e}")
     _ensure_offline_flush_task_started()
