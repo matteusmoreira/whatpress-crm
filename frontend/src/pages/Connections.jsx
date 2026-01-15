@@ -408,9 +408,8 @@ const Connections = () => {
     if (newConnection.provider === 'uazapi') {
       const cfg = newConnection.config || {};
       const baseUrl = String(cfg.base_url || '').trim();
-      const subdomain = String(cfg.subdomain || '').trim();
-      if (!baseUrl && !subdomain) {
-        toast.error('Informe o subdomínio ou a Base URL da Uazapi');
+      if (!baseUrl) {
+        toast.error('Informe o Server URL da Uazapi');
         return;
       }
 
@@ -679,24 +678,10 @@ const Connections = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-white/80 text-sm font-medium block mb-2">Subdomínio Uazapi</label>
+                    <label className="text-white/80 text-sm font-medium block mb-2">Server URL Uazapi</label>
                     <GlassInput
                       type="text"
-                      placeholder="ex: minhaempresa (gera https://minhaempresa.uazapi.com)"
-                      value={newConnection.config?.subdomain || ''}
-                      onChange={(e) =>
-                        setNewConnection(prev => ({
-                          ...prev,
-                          config: { ...prev.config, subdomain: e.target.value }
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-white/80 text-sm font-medium block mb-2">Base URL Uazapi</label>
-                    <GlassInput
-                      type="text"
-                      placeholder="https://minhaempresa.uazapi.com"
+                      placeholder="Ex: https://whatpress.uazapi.com"
                       value={newConnection.config?.base_url || ''}
                       onChange={(e) =>
                         setNewConnection(prev => ({
