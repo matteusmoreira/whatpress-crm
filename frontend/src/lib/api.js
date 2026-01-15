@@ -515,6 +515,89 @@ export const AutoMessagesAPI = {
   }
 };
 
+export const BulkCampaignsAPI = {
+  async list(tenantId) {
+    const response = await apiClient.get('/bulk-campaigns', { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async create(tenantId, data) {
+    const payload = {
+      name: data.name,
+      template_body: data.templateBody,
+      selection_mode: data.selectionMode || 'explicit',
+      selection_payload: data.selectionPayload || {},
+      delay_seconds: data.delaySeconds || 0,
+      start_at: data.startAt || null,
+      recurrence: data.recurrence || 'none',
+      max_messages_per_period: data.maxMessagesPerPeriod ?? null,
+      period_unit: data.periodUnit ?? null
+    };
+    const response = await apiClient.post('/bulk-campaigns', payload, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async update(campaignId, data) {
+    const payload = {
+      name: data.name,
+      template_body: data.templateBody,
+      selection_mode: data.selectionMode,
+      selection_payload: data.selectionPayload,
+      delay_seconds: data.delaySeconds,
+      start_at: data.startAt,
+      recurrence: data.recurrence,
+      max_messages_per_period: data.maxMessagesPerPeriod,
+      period_unit: data.periodUnit,
+      status: data.status
+    };
+    const response = await apiClient.put(`/bulk-campaigns/${campaignId}`, payload);
+    return response.data;
+  },
+
+  async delete(campaignId) {
+    const response = await apiClient.delete(`/bulk-campaigns/${campaignId}`);
+    return response.data;
+  },
+
+  async setRecipients(tenantId, campaignId, contactIds) {
+    const payload = { contact_ids: contactIds || [] };
+    const response = await apiClient.post(`/bulk-campaigns/${campaignId}/recipients`, payload, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async schedule(tenantId, campaignId, data = {}) {
+    const payload = {
+      start_at: data.startAt || null,
+      recurrence: data.recurrence || null,
+      delay_seconds: data.delaySeconds ?? null,
+      max_messages_per_period: data.maxMessagesPerPeriod ?? null,
+      period_unit: data.periodUnit ?? null
+    };
+    const response = await apiClient.post(`/bulk-campaigns/${campaignId}/schedule`, payload, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async pause(tenantId, campaignId) {
+    const response = await apiClient.post(`/bulk-campaigns/${campaignId}/pause`, null, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async resume(tenantId, campaignId) {
+    const response = await apiClient.post(`/bulk-campaigns/${campaignId}/resume`, null, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async cancel(tenantId, campaignId) {
+    const response = await apiClient.post(`/bulk-campaigns/${campaignId}/cancel`, null, { params: { tenant_id: tenantId } });
+    return response.data;
+  },
+
+  async stats(tenantId, campaignId) {
+    const response = await apiClient.get(`/bulk-campaigns/${campaignId}/stats`, { params: { tenant_id: tenantId } });
+    return response.data;
+  }
+};
+
 // Webhooks API
 export const WebhooksAPI = {
   async list(tenantId) {

@@ -438,7 +438,7 @@ const Automations = () => {
                 <div>
                     <h1 className="wa-page-title flex items-center gap-2">
                         <Bot className="w-8 h-8 text-emerald-400" />
-                        Disparos Automáticos
+                        Automações
                     </h1>
                     <p className="wa-page-subtitle">Configure mensagens automáticas para seu atendimento</p>
                 </div>

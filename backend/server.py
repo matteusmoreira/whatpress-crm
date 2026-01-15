@@ -873,6 +873,380 @@ async def _bulk_campaign_worker_tick() -> None:
             except Exception:
                 pass
 
+def _bulk_parse_dt(value: Any) -> Optional[datetime]:
+    s = str(value or "").strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
+
+def _bulk_normalize_phone(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    digits = re.sub(r"\D", "", raw)
+    return digits or raw
+
+def _bulk_get_contact_row(tenant_id: str, contact_id: Optional[str], phone: Optional[str]) -> Optional[dict]:
+    try:
+        if contact_id:
+            r = supabase.table("contacts").select("*").eq("id", contact_id).limit(1).execute()
+            if r.data and (r.data[0].get("tenant_id") == tenant_id):
+                return r.data[0]
+    except Exception:
+        pass
+    p = _bulk_normalize_phone(phone)
+    if not p:
+        return None
+    try:
+        r = supabase.table("contacts").select("*").eq("tenant_id", tenant_id).eq("phone", p).limit(1).execute()
+        if r.data:
+            return r.data[0]
+    except Exception:
+        return None
+    return None
+
+def _bulk_get_or_create_conversation(tenant_id: str, phone: str, contact_name: Optional[str], contact_id: Optional[str]) -> dict:
+    normalized_phone = _bulk_normalize_phone(phone)
+    if not normalized_phone:
+        raise Exception("Telefone inválido")
+    existing = supabase.table("conversations").select("*").eq("tenant_id", tenant_id).eq("contact_phone", normalized_phone).limit(1).execute()
+    if existing.data:
+        return existing.data[0]
+
+    conn_result = (
+        supabase.table("connections")
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .eq("provider", "evolution")
+        .eq("status", "connected")
+        .limit(1)
+        .execute()
+    )
+    if not conn_result.data:
+        conn_result = supabase.table("connections").select("*").eq("tenant_id", tenant_id).limit(1).execute()
+    if not conn_result.data:
+        raise Exception("Nenhuma conexão disponível para iniciar conversa")
+    connection = conn_result.data[0]
+
+    resolved_name = (contact_name or "").strip()
+    if not resolved_name:
+        resolved_name = normalized_phone
+
+    now = datetime.utcnow().isoformat()
+    conv_data = {
+        "tenant_id": tenant_id,
+        "connection_id": connection.get("id"),
+        "contact_phone": normalized_phone,
+        "contact_name": resolved_name,
+        "contact_avatar": None,
+        "status": "open",
+        "unread_count": 0,
+        "last_message_at": now,
+        "last_message_preview": "",
+    }
+    created = supabase.table("conversations").insert(conv_data).execute()
+    if not created.data:
+        raise Exception("Erro ao criar conversa")
+    return created.data[0]
+
+async def _bulk_begin_campaign_run(campaign_id: str) -> None:
+    now_dt = datetime.utcnow()
+    now = now_dt.isoformat()
+
+    locked = (
+        supabase.table("bulk_campaigns")
+        .update({"status": "running", "last_run_at": now, "updated_at": now})
+        .eq("id", campaign_id)
+        .eq("status", "scheduled")
+        .execute()
+    )
+    if not (getattr(locked, "data", None) or []):
+        return
+
+    camp_r = supabase.table("bulk_campaigns").select("*").eq("id", campaign_id).limit(1).execute()
+    if not camp_r.data:
+        return
+    campaign = camp_r.data[0]
+    tenant_id = str(campaign.get("tenant_id") or "").strip()
+    if not tenant_id:
+        return
+
+    start_dt = _bulk_parse_dt(campaign.get("start_at")) or now_dt
+    scheduled_for = campaign.get("next_run_at") or start_dt.isoformat()
+
+    run_r = (
+        supabase.table("bulk_campaign_runs")
+        .insert({
+            "tenant_id": tenant_id,
+            "campaign_id": campaign_id,
+            "scheduled_for": scheduled_for,
+            "started_at": now,
+            "status": "running",
+        })
+        .execute()
+    )
+    if not run_r.data:
+        return
+    run_id = run_r.data[0].get("id")
+
+    selection_mode = str(campaign.get("selection_mode") or "explicit").strip().lower()
+    selection_payload = campaign.get("selection_payload") or {}
+    if not isinstance(selection_payload, dict):
+        selection_payload = {}
+
+    contacts: List[dict] = []
+    if selection_mode == "explicit":
+        raw_ids = selection_payload.get("contact_ids") or selection_payload.get("contactIds") or selection_payload.get("contacts")
+        ids: List[str] = []
+        if isinstance(raw_ids, list):
+            for item in raw_ids:
+                if isinstance(item, str) and item.strip():
+                    ids.append(item.strip())
+                elif isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("id").strip():
+                    ids.append(item.get("id").strip())
+        ids = list(dict.fromkeys(ids))
+        if ids:
+            try:
+                c_r = (
+                    supabase.table("contacts")
+                    .select("*")
+                    .eq("tenant_id", tenant_id)
+                    .in_("id", ids)
+                    .limit(min(5000, max(50, len(ids))))
+                    .execute()
+                )
+                contacts = [row for row in (c_r.data or []) if isinstance(row, dict)]
+            except Exception:
+                contacts = []
+
+    if not contacts:
+        try:
+            supabase.table("bulk_campaign_runs").update({"status": "completed", "finished_at": now}).eq("id", run_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase.table("bulk_campaigns").update({"status": "completed", "completed_at": now, "next_run_at": None, "updated_at": now}).eq("id", campaign_id).execute()
+        except Exception:
+            pass
+        return
+
+    schedule = _bulk_build_schedule(
+        start_dt,
+        len(contacts),
+        delay_seconds=int(campaign.get("delay_seconds") or 0),
+        max_messages_per_period=campaign.get("max_messages_per_period"),
+        period_unit=campaign.get("period_unit"),
+    )
+
+    rows: List[dict] = []
+    for idx, contact in enumerate(contacts):
+        when = schedule[idx] if idx < len(schedule) else start_dt
+        phone = _bulk_normalize_phone(contact.get("phone"))
+        if not phone:
+            continue
+        rows.append({
+            "tenant_id": tenant_id,
+            "campaign_id": campaign_id,
+            "run_id": run_id,
+            "contact_id": contact.get("id"),
+            "contact_phone": phone,
+            "contact_name": (contact.get("name") or contact.get("full_name") or "").strip() or None,
+            "status": "scheduled",
+            "scheduled_at": when.isoformat(),
+            "created_at": now,
+            "updated_at": now,
+        })
+
+    if not rows:
+        try:
+            supabase.table("bulk_campaign_runs").update({"status": "completed", "finished_at": now}).eq("id", run_id).execute()
+        except Exception:
+            pass
+        try:
+            supabase.table("bulk_campaigns").update({"status": "completed", "completed_at": now, "next_run_at": None, "updated_at": now}).eq("id", campaign_id).execute()
+        except Exception:
+            pass
+        return
+
+    for i in range(0, len(rows), 200):
+        supabase.table("bulk_campaign_recipients").insert(rows[i:i + 200]).execute()
+
+    next_dt = _bulk_compute_next_run_at(campaign.get("recurrence"), start_dt)
+    try:
+        supabase.table("bulk_campaigns").update({
+            "next_run_at": (next_dt.isoformat() if next_dt else None),
+            "updated_at": now,
+        }).eq("id", campaign_id).execute()
+    except Exception:
+        pass
+
+async def _bulk_maybe_finalize_run(run_id: Optional[str], campaign_id: Optional[str]) -> None:
+    rid = str(run_id or "").strip()
+    cid = str(campaign_id or "").strip()
+    if not rid or not cid:
+        return
+    try:
+        remaining = (
+            supabase.table("bulk_campaign_recipients")
+            .select("id", count="exact")
+            .eq("run_id", rid)
+            .in_("status", ["scheduled", "sending"])
+            .limit(1)
+            .execute()
+        )
+        if int(getattr(remaining, "count", 0) or 0) > 0:
+            return
+    except Exception:
+        return
+
+    now = datetime.utcnow().isoformat()
+    try:
+        supabase.table("bulk_campaign_runs").update({"status": "completed", "finished_at": now}).eq("id", rid).execute()
+    except Exception:
+        pass
+
+    try:
+        camp_r = supabase.table("bulk_campaigns").select("status, next_run_at").eq("id", cid).limit(1).execute()
+        if not camp_r.data:
+            return
+        current = camp_r.data[0] or {}
+        status = str(current.get("status") or "").strip().lower()
+        next_run_at = current.get("next_run_at")
+        if status in {"cancelled", "paused"}:
+            return
+        if next_run_at:
+            supabase.table("bulk_campaigns").update({"status": "scheduled", "updated_at": now}).eq("id", cid).execute()
+        else:
+            supabase.table("bulk_campaigns").update({"status": "completed", "completed_at": now, "updated_at": now}).eq("id", cid).execute()
+    except Exception:
+        return
+
+async def _bulk_send_recipient_message(recipient_id: str) -> None:
+    now = datetime.utcnow().isoformat()
+    rec_r = supabase.table("bulk_campaign_recipients").select("*").eq("id", recipient_id).limit(1).execute()
+    if not rec_r.data:
+        return
+    recipient = rec_r.data[0] or {}
+    if str(recipient.get("status") or "").strip().lower() != "sending":
+        return
+
+    campaign_id = recipient.get("campaign_id")
+    camp_r = supabase.table("bulk_campaigns").select("*").eq("id", campaign_id).limit(1).execute()
+    if not camp_r.data:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Campanha não encontrada", "updated_at": now}).eq("id", recipient_id).execute()
+        return
+    campaign = camp_r.data[0] or {}
+
+    camp_status = str(campaign.get("status") or "").strip().lower()
+    if camp_status in {"paused", "cancelled"}:
+        supabase.table("bulk_campaign_recipients").update({"status": "skipped", "error": f"Campanha {camp_status}", "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
+
+    tenant_id = str(recipient.get("tenant_id") or campaign.get("tenant_id") or "").strip()
+    if not tenant_id:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Tenant inválido", "updated_at": now}).eq("id", recipient_id).execute()
+        return
+
+    contact_phone = recipient.get("contact_phone")
+    contact_row = _bulk_get_contact_row(tenant_id, recipient.get("contact_id"), contact_phone)
+    ctx = _bulk_template_ctx_from_contact(contact_row or {"name": recipient.get("contact_name"), "phone": contact_phone})
+    body = _render_template_text(str(campaign.get("template_body") or ""), ctx).strip()
+    if not body:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Mensagem vazia após template", "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
+
+    try:
+        _enforce_messages_limit(tenant_id)
+    except Exception as e:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": str(e)[:800], "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
+
+    contact_name = (recipient.get("contact_name") or (contact_row.get("name") if isinstance(contact_row, dict) else None) or (contact_row.get("full_name") if isinstance(contact_row, dict) else None))
+    conv = _bulk_get_or_create_conversation(tenant_id, str(contact_phone or ""), contact_name, recipient.get("contact_id"))
+
+    conv_r = supabase.table("conversations").select("*, connections(*)").eq("id", conv.get("id")).limit(1).execute()
+    if not conv_r.data:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Conversa não encontrada", "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
+    conversation = conv_r.data[0] or {}
+    connection = conversation.get("connections") or {}
+    is_evolution = str(connection.get("provider") or "").lower() == "evolution"
+    is_connected = str(connection.get("status") or "").lower() in ["connected", "open"]
+    instance_name = connection.get("instance_name")
+    phone = conversation.get("contact_phone")
+
+    if not (is_evolution and is_connected and instance_name and phone):
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Conexão indisponível", "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
+
+    data = {
+        "conversation_id": conversation.get("id"),
+        "content": body,
+        "type": "text",
+        "direction": "outbound",
+        "status": "sent",
+    }
+    inserted = supabase.table("messages").insert(data).execute()
+    if not inserted.data:
+        supabase.table("bulk_campaign_recipients").update({"status": "failed", "error": "Falha ao salvar mensagem", "updated_at": now}).eq("id", recipient_id).execute()
+        await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+        return
+    message_id = inserted.data[0].get("id")
+
+    try:
+        supabase.table("conversations").update({
+            "last_message_at": datetime.utcnow().isoformat(),
+            "last_message_preview": body[:50],
+        }).eq("id", conversation.get("id")).execute()
+    except Exception:
+        pass
+
+    try:
+        if tenant_id:
+            tenant = supabase.table("tenants").select("messages_this_month").eq("id", tenant_id).limit(1).execute()
+            if tenant.data:
+                new_count = int(tenant.data[0].get("messages_this_month") or 0) + 1
+                supabase.table("tenants").update({"messages_this_month": new_count}).eq("id", tenant_id).execute()
+    except Exception:
+        pass
+
+    await send_whatsapp_message(str(instance_name), str(phone), body, "text", str(message_id))
+
+    msg_status = None
+    try:
+        st_r = supabase.table("messages").select("status").eq("id", message_id).limit(1).execute()
+        if st_r.data:
+            msg_status = st_r.data[0].get("status")
+    except Exception:
+        msg_status = None
+
+    if str(msg_status or "").strip().lower() in {"delivered", "sent"}:
+        supabase.table("bulk_campaign_recipients").update({
+            "status": "sent",
+            "message_id": message_id,
+            "sent_at": now,
+            "updated_at": now,
+        }).eq("id", recipient_id).execute()
+    else:
+        supabase.table("bulk_campaign_recipients").update({
+            "status": "failed",
+            "message_id": message_id,
+            "error": "Falha no envio",
+            "updated_at": now,
+        }).eq("id", recipient_id).execute()
+
+    await _bulk_maybe_finalize_run(recipient.get("run_id"), campaign_id)
+
 def _ensure_offline_flush_task_started() -> None:
     global _OFFLINE_FLUSH_TASK_STARTED
     if _OFFLINE_FLUSH_TASK_STARTED:
@@ -1119,6 +1493,39 @@ class AutoMessageCreate(BaseModel):
     schedule_end: Optional[str] = None
     schedule_days: Optional[List[int]] = None  # 0-6, 0=Sunday
     delay_seconds: int = 0
+
+class BulkCampaignCreate(BaseModel):
+    name: str
+    template_body: str
+    selection_mode: str = "explicit"
+    selection_payload: dict = {}
+    delay_seconds: int = 0
+    start_at: Optional[str] = None
+    recurrence: str = "none"
+    max_messages_per_period: Optional[int] = None
+    period_unit: Optional[str] = None
+
+class BulkCampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    template_body: Optional[str] = None
+    selection_mode: Optional[str] = None
+    selection_payload: Optional[dict] = None
+    delay_seconds: Optional[int] = None
+    start_at: Optional[str] = None
+    recurrence: Optional[str] = None
+    max_messages_per_period: Optional[int] = None
+    period_unit: Optional[str] = None
+    status: Optional[str] = None
+
+class BulkCampaignRecipientsSet(BaseModel):
+    contact_ids: List[str] = Field(default_factory=list)
+
+class BulkCampaignSchedule(BaseModel):
+    start_at: Optional[str] = None
+    recurrence: Optional[str] = None
+    delay_seconds: Optional[int] = None
+    max_messages_per_period: Optional[int] = None
+    period_unit: Optional[str] = None
 
 class WebhookCreate(BaseModel):
     name: str
@@ -6501,6 +6908,248 @@ async def toggle_auto_message(message_id: str, payload: dict = Depends(verify_to
     except Exception as e:
         if _is_missing_table_error(e, "auto_messages"):
             raise _auto_messages_missing_table_http()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/bulk-campaigns")
+async def list_bulk_campaigns(tenant_id: str, payload: dict = Depends(verify_token)):
+    try:
+        result = (
+            supabase.table("bulk_campaigns")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .order("created_at", desc=True)
+            .limit(200)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bulk-campaigns")
+async def create_bulk_campaign(tenant_id: str, data: BulkCampaignCreate, payload: dict = Depends(verify_token)):
+    try:
+        now = datetime.utcnow().isoformat()
+        row = {
+            "tenant_id": tenant_id,
+            "created_by": payload.get("user_id"),
+            "name": data.name,
+            "template_body": data.template_body,
+            "status": "draft",
+            "selection_mode": data.selection_mode,
+            "selection_payload": data.selection_payload or {},
+            "delay_seconds": int(data.delay_seconds or 0),
+            "start_at": data.start_at,
+            "recurrence": data.recurrence or "none",
+            "next_run_at": None,
+            "max_messages_per_period": data.max_messages_per_period,
+            "period_unit": data.period_unit,
+            "created_at": now,
+            "updated_at": now,
+        }
+        result = supabase.table("bulk_campaigns").insert(row).execute()
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Erro ao criar campanha")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/bulk-campaigns/{campaign_id}")
+async def update_bulk_campaign(campaign_id: str, data: BulkCampaignUpdate, payload: dict = Depends(verify_token)):
+    try:
+        now = datetime.utcnow().isoformat()
+        update_data: Dict[str, Any] = {"updated_at": now}
+        for k in (
+            "name",
+            "template_body",
+            "selection_mode",
+            "selection_payload",
+            "delay_seconds",
+            "start_at",
+            "recurrence",
+            "max_messages_per_period",
+            "period_unit",
+            "status",
+        ):
+            v = getattr(data, k)
+            if v is not None:
+                update_data[k] = v
+        result = supabase.table("bulk_campaigns").update(update_data).eq("id", campaign_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/bulk-campaigns/{campaign_id}")
+async def delete_bulk_campaign(campaign_id: str, payload: dict = Depends(verify_token)):
+    try:
+        supabase.table("bulk_campaigns").delete().eq("id", campaign_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bulk-campaigns/{campaign_id}/recipients")
+async def set_bulk_campaign_recipients(campaign_id: str, tenant_id: str, data: BulkCampaignRecipientsSet, payload: dict = Depends(verify_token)):
+    try:
+        now = datetime.utcnow().isoformat()
+        ids = [str(x).strip() for x in (data.contact_ids or []) if str(x).strip()]
+        ids = list(dict.fromkeys(ids))
+        result = (
+            supabase.table("bulk_campaigns")
+            .update({
+                "selection_mode": "explicit",
+                "selection_payload": {"contact_ids": ids},
+                "updated_at": now,
+            })
+            .eq("id", campaign_id)
+            .eq("tenant_id", tenant_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bulk-campaigns/{campaign_id}/schedule")
+async def schedule_bulk_campaign(campaign_id: str, tenant_id: str, data: BulkCampaignSchedule, payload: dict = Depends(verify_token)):
+    try:
+        now_dt = datetime.utcnow()
+        now = now_dt.isoformat()
+        start_dt = _bulk_parse_dt(data.start_at) or now_dt
+        next_run_at = start_dt.isoformat()
+        update_data: Dict[str, Any] = {
+            "status": "scheduled",
+            "start_at": start_dt.isoformat(),
+            "next_run_at": next_run_at,
+            "updated_at": now,
+        }
+        if data.recurrence is not None:
+            update_data["recurrence"] = data.recurrence
+        if data.delay_seconds is not None:
+            update_data["delay_seconds"] = int(data.delay_seconds or 0)
+        if data.max_messages_per_period is not None:
+            update_data["max_messages_per_period"] = data.max_messages_per_period
+        if data.period_unit is not None:
+            update_data["period_unit"] = data.period_unit
+        result = (
+            supabase.table("bulk_campaigns")
+            .update(update_data)
+            .eq("id", campaign_id)
+            .eq("tenant_id", tenant_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bulk-campaigns/{campaign_id}/pause")
+async def pause_bulk_campaign(campaign_id: str, tenant_id: str, payload: dict = Depends(verify_token)):
+    try:
+        now = datetime.utcnow().isoformat()
+        result = (
+            supabase.table("bulk_campaigns")
+            .update({"status": "paused", "paused_at": now, "updated_at": now})
+            .eq("id", campaign_id)
+            .eq("tenant_id", tenant_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bulk-campaigns/{campaign_id}/resume")
+async def resume_bulk_campaign(campaign_id: str, tenant_id: str, payload: dict = Depends(verify_token)):
+    try:
+        now_dt = datetime.utcnow()
+        now = now_dt.isoformat()
+        result = (
+            supabase.table("bulk_campaigns")
+            .update({"status": "scheduled", "paused_at": None, "next_run_at": now, "updated_at": now})
+            .eq("id", campaign_id)
+            .eq("tenant_id", tenant_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bulk-campaigns/{campaign_id}/cancel")
+async def cancel_bulk_campaign(campaign_id: str, tenant_id: str, payload: dict = Depends(verify_token)):
+    try:
+        now = datetime.utcnow().isoformat()
+        result = (
+            supabase.table("bulk_campaigns")
+            .update({"status": "cancelled", "cancelled_at": now, "updated_at": now})
+            .eq("id", campaign_id)
+            .eq("tenant_id", tenant_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        try:
+            supabase.table("bulk_campaign_recipients").update({"status": "skipped", "error": "Campanha cancelada", "updated_at": now}).eq("campaign_id", campaign_id).eq("status", "scheduled").execute()
+        except Exception:
+            pass
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/bulk-campaigns/{campaign_id}/stats")
+async def bulk_campaign_stats(campaign_id: str, tenant_id: str, payload: dict = Depends(verify_token)):
+    try:
+        campaign_r = supabase.table("bulk_campaigns").select("*").eq("id", campaign_id).eq("tenant_id", tenant_id).limit(1).execute()
+        if not campaign_r.data:
+            raise HTTPException(status_code=404, detail="Campanha não encontrada")
+        campaign = campaign_r.data[0]
+
+        def count_status(where: Dict[str, Any]) -> int:
+            q = supabase.table("bulk_campaign_recipients").select("id", count="exact")
+            for k, v in where.items():
+                q = q.eq(k, v)
+            r = q.execute()
+            return int(getattr(r, "count", 0) or 0)
+
+        totals = {
+            "scheduled": count_status({"campaign_id": campaign_id, "status": "scheduled"}),
+            "sending": count_status({"campaign_id": campaign_id, "status": "sending"}),
+            "sent": count_status({"campaign_id": campaign_id, "status": "sent"}),
+            "failed": count_status({"campaign_id": campaign_id, "status": "failed"}),
+            "skipped": count_status({"campaign_id": campaign_id, "status": "skipped"}),
+        }
+
+        run = None
+        try:
+            run_r = supabase.table("bulk_campaign_runs").select("*").eq("campaign_id", campaign_id).order("created_at", desc=True).limit(1).execute()
+            if run_r.data:
+                run = run_r.data[0]
+        except Exception:
+            run = None
+
+        return {"campaign": campaign, "totals": totals, "lastRun": run}
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== WEBHOOKS ====================

@@ -22,6 +22,7 @@ const MaintenancePage = lazy(() => import("./pages/MaintenancePage"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Inbox = lazy(() => import("./pages/Inbox"));
 const Automations = lazy(() => import("./pages/Automations"));
+const Disparos = lazy(() => import("./pages/Disparos"));
 const Connections = lazy(() => import("./pages/Connections"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -149,6 +150,7 @@ function App() {
                   <Route path="inbox" element={<Inbox />} />
                   <Route path="contacts" element={<Contacts />} />
                   <Route path="automations" element={<Automations />} />
+                  <Route path="disparos" element={<Disparos />} />
                   <Route path="flows" element={<FlowBuilder />} />
                   <Route
                     path="settings/connections"
