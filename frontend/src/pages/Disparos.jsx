@@ -18,6 +18,13 @@ const PERIOD_UNITS = [
   { value: 'month', label: 'Mês' }
 ];
 
+const RECURRENCE_OPTIONS = [
+  { value: 'none', label: 'Sem recorrência' },
+  { value: 'daily', label: 'Diária' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'monthly', label: 'Mensal' }
+];
+
 const STATUS_STYLES = {
   draft: { label: 'Rascunho', color: 'bg-white/10 text-white/70' },
   scheduled: { label: 'Agendado', color: 'bg-blue-500/20 text-blue-300 border border-blue-500/30' },
@@ -54,6 +61,8 @@ const CampaignForm = ({
   const [delaySeconds, setDelaySeconds] = useState(0);
   const [maxMessagesPerPeriod, setMaxMessagesPerPeriod] = useState('');
   const [periodUnit, setPeriodUnit] = useState('hour');
+  const [startAtLocal, setStartAtLocal] = useState('');
+  const [recurrence, setRecurrence] = useState('none');
 
   const [contactSearch, setContactSearch] = useState('');
   const [contacts, setContacts] = useState([]);
@@ -76,6 +85,8 @@ const CampaignForm = ({
           : String(editingCampaign.max_messages_per_period)
       );
       setPeriodUnit(editingCampaign.period_unit || 'hour');
+      setStartAtLocal(toDateTimeLocalValue(editingCampaign.start_at || editingCampaign.next_run_at || ''));
+      setRecurrence(editingCampaign.recurrence || 'none');
       const payload = editingCampaign.selection_payload || {};
       const ids = payload.contact_ids || payload.contactIds || [];
       setSelectedIds(new Set((Array.isArray(ids) ? ids : []).map((x) => String(x))));
@@ -85,6 +96,8 @@ const CampaignForm = ({
       setDelaySeconds(0);
       setMaxMessagesPerPeriod('');
       setPeriodUnit('hour');
+      setStartAtLocal('');
+      setRecurrence('none');
       setSelectedIds(new Set());
     }
   }, [editingCampaign, isOpen]);
@@ -222,10 +235,18 @@ const CampaignForm = ({
 
     setSaving(true);
     try {
+      const parsedStart = startAtLocal ? new Date(startAtLocal) : null;
+      if (startAtLocal && (!parsedStart || Number.isNaN(parsedStart.getTime()))) {
+        toast.error('Data/hora inválida');
+        return;
+      }
+
       const campaignPayload = {
         name: trimmedName,
         templateBody: trimmedBody,
         delaySeconds: Number(delaySeconds) || 0,
+        startAt: parsedStart ? parsedStart.toISOString() : null,
+        recurrence: recurrence || 'none',
         maxMessagesPerPeriod: maxMessagesPerPeriod === '' ? null : Math.max(0, Number(maxMessagesPerPeriod) || 0),
         periodUnit: periodUnit || 'hour'
       };
@@ -238,6 +259,15 @@ const CampaignForm = ({
       }
 
       await BulkCampaignsAPI.setRecipients(tenantId, saved.id, Array.from(selectedIds));
+      if (campaignPayload.startAt) {
+        await BulkCampaignsAPI.schedule(tenantId, saved.id, {
+          startAt: campaignPayload.startAt,
+          recurrence: campaignPayload.recurrence,
+          delaySeconds: campaignPayload.delaySeconds,
+          maxMessagesPerPeriod: campaignPayload.maxMessagesPerPeriod,
+          periodUnit: campaignPayload.periodUnit
+        });
+      }
       toast.success(editingCampaign ? 'Campanha atualizada' : 'Campanha criada');
       onSaved?.();
       onClose?.();
@@ -289,6 +319,31 @@ const CampaignForm = ({
                 />
                 <div className="text-xs text-white/40 mt-2">
                   Variáveis: {'{nome}'} {'{telefone}'} {'{email}'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-white/70 text-sm mb-2 block">Data e hora do disparo</label>
+                  <GlassInput
+                    type="datetime-local"
+                    value={startAtLocal}
+                    onChange={(e) => setStartAtLocal(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-white/70 text-sm mb-2 block">Recorrência</label>
+                  <select
+                    value={recurrence}
+                    onChange={(e) => setRecurrence(e.target.value)}
+                    className="h-11 w-full px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  >
+                    {RECURRENCE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value} className="bg-emerald-900">
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -439,13 +494,15 @@ const CampaignForm = ({
   );
 };
 
-const ScheduleModal = ({ isOpen, onClose, onConfirm, initialValue }) => {
+const ScheduleModal = ({ isOpen, onClose, onConfirm, initialValue, initialRecurrence }) => {
   const [value, setValue] = useState('');
+  const [recurrence, setRecurrence] = useState('none');
 
   useEffect(() => {
     if (!isOpen) return;
     setValue(initialValue || '');
-  }, [initialValue, isOpen]);
+    setRecurrence(initialRecurrence || 'none');
+  }, [initialRecurrence, initialValue, isOpen]);
 
   if (!isOpen) return null;
 
@@ -463,7 +520,8 @@ const ScheduleModal = ({ isOpen, onClose, onConfirm, initialValue }) => {
         </div>
 
         <div className="p-4 space-y-4">
-          <div>
+          <div className="grid grid-cols-1 gap-4">
+            <div>
             <label className="text-white/70 text-sm mb-2 block">Data e hora</label>
             <GlassInput
               type="datetime-local"
@@ -479,6 +537,22 @@ const ScheduleModal = ({ isOpen, onClose, onConfirm, initialValue }) => {
                 Usar agora
               </button>
             </div>
+            </div>
+
+            <div>
+              <label className="text-white/70 text-sm mb-2 block">Recorrência</label>
+              <select
+                value={recurrence}
+                onChange={(e) => setRecurrence(e.target.value)}
+                className="h-11 w-full px-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              >
+                {RECURRENCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} className="bg-emerald-900">
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -491,7 +565,7 @@ const ScheduleModal = ({ isOpen, onClose, onConfirm, initialValue }) => {
             </button>
             <GlassButton
               type="button"
-              onClick={() => onConfirm?.(value)}
+              onClick={() => onConfirm?.({ datetimeLocalValue: value, recurrence })}
               className="min-w-[160px]"
             >
               <Send className="w-4 h-4 mr-2" />
@@ -569,6 +643,7 @@ const Disparos = () => {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleCampaign, setScheduleCampaign] = useState(null);
   const [scheduleInitialValue, setScheduleInitialValue] = useState('');
+  const [scheduleInitialRecurrence, setScheduleInitialRecurrence] = useState('none');
 
   const isSuperAdmin = user?.role === 'superadmin';
   const tenantId = isSuperAdmin
@@ -612,10 +687,11 @@ const Disparos = () => {
     setScheduleCampaign(campaign);
     const initial = campaign?.next_run_at || campaign?.start_at || null;
     setScheduleInitialValue(toDateTimeLocalValue(initial || new Date()));
+    setScheduleInitialRecurrence(campaign?.recurrence || 'none');
     setScheduleOpen(true);
   };
 
-  const confirmSchedule = async (datetimeLocalValue) => {
+  const confirmSchedule = async ({ datetimeLocalValue, recurrence }) => {
     if (!tenantId || !scheduleCampaign?.id) return;
     const parsed = datetimeLocalValue ? new Date(datetimeLocalValue) : new Date();
     if (!parsed || Number.isNaN(parsed.getTime())) {
@@ -626,7 +702,7 @@ const Disparos = () => {
     try {
       await BulkCampaignsAPI.schedule(tenantId, scheduleCampaign.id, {
         startAt: parsed.toISOString(),
-        recurrence: scheduleCampaign.recurrence || 'none',
+        recurrence: recurrence || 'none',
         delaySeconds: scheduleCampaign.delay_seconds || 0,
         maxMessagesPerPeriod: scheduleCampaign.max_messages_per_period,
         periodUnit: scheduleCampaign.period_unit
@@ -751,6 +827,7 @@ const Disparos = () => {
             const scheduledLabel = statusKey === 'scheduled'
               ? (formatDateTimePtBr(c.next_run_at || c.start_at) || '')
               : '';
+            const recurrenceLabel = (RECURRENCE_OPTIONS.find((o) => o.value === (c.recurrence || 'none'))?.label || '').trim();
             return (
               <GlassCard key={c.id} className="p-5">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
@@ -773,6 +850,12 @@ const Disparos = () => {
                         <div className="inline-flex items-center gap-2">
                           <Clock className="w-4 h-4 text-emerald-400" />
                           <span>Agendado: {scheduledLabel}</span>
+                        </div>
+                      ) : null}
+                      {recurrenceLabel && recurrenceLabel !== 'Sem recorrência' ? (
+                        <div className="inline-flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-emerald-400" />
+                          <span>{recurrenceLabel}</span>
                         </div>
                       ) : null}
                       <div className="inline-flex items-center gap-2">
@@ -850,6 +933,7 @@ const Disparos = () => {
         }}
         onConfirm={confirmSchedule}
         initialValue={scheduleInitialValue}
+        initialRecurrence={scheduleInitialRecurrence}
       />
 
       <StatsModal
