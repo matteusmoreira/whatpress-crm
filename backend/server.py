@@ -801,6 +801,8 @@ def _whatsapp_http_error(e: Exception) -> HTTPException:
         provider = str(details.get("provider") or "").strip()
         provider_status = details.get("status_code")
         body = details.get("body")
+        method = str(details.get("method") or "").strip().upper()
+        url = str(details.get("url") or "").strip()
         if provider and body:
             body_str = str(body)
             if len(body_str) > 1200:
@@ -809,6 +811,11 @@ def _whatsapp_http_error(e: Exception) -> HTTPException:
                 detail = f"{detail} ({provider} {provider_status}): {body_str}"
             else:
                 detail = f"{detail} ({provider}): {body_str}"
+        if provider and url:
+            suffix = f"{method} {url}" if method else url
+            if len(suffix) > 380:
+                suffix = suffix[:380]
+            detail = f"{detail} [{suffix}]"
         return HTTPException(status_code=status, detail=detail)
     return HTTPException(status_code=400, detail=str(e))
 

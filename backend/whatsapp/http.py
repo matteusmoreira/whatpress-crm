@@ -48,7 +48,12 @@ class HttpClient:
                 provider=self._provider,
                 status_code=resp.status_code,
                 transient=resp.status_code >= 500,
-                details={"body": _safe_text(resp)},
+                details={
+                    "body": _safe_text(resp),
+                    "method": str(method or "").upper(),
+                    "url": url,
+                    "path": path,
+                },
             )
 
         try:
@@ -62,4 +67,3 @@ def _safe_text(resp: httpx.Response, limit: int = 4000) -> str:
         return (resp.text or "")[:limit]
     except Exception:
         return ""
-
