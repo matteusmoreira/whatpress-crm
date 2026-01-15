@@ -78,6 +78,12 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
           color: 'from-green-500/30 to-emerald-600/30',
           icon: <Globe className="w-4 h-4" />
         };
+      case 'uazapi':
+        return {
+          name: 'Uazapi',
+          color: 'from-emerald-500/30 to-teal-600/30',
+          icon: <Smartphone className="w-4 h-4" />
+        };
       case 'wuzapi':
         return {
           name: 'Wuzapi',
@@ -192,7 +198,7 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
             loading={testing}
             className="flex-1 flex items-center justify-center gap-2"
           >
-            {connection.provider === 'evolution' ? (
+            {['evolution', 'uazapi'].includes(connection.provider) ? (
               <>
                 <QrCode className="w-4 h-4" />
                 Conectar
@@ -380,7 +386,13 @@ const Connections = () => {
   const [newConnection, setNewConnection] = useState({
     provider: 'evolution',
     instanceName: '',
-    phoneNumber: ''
+    phoneNumber: '',
+    config: {
+      base_url: '',
+      subdomain: '',
+      token: '',
+      admintoken: ''
+    }
   });
 
   const tenantId = user?.tenantId;
@@ -392,6 +404,13 @@ const Connections = () => {
 
   const handleCreateConnection = async (e) => {
     e.preventDefault();
+    if (newConnection.provider === 'uazapi') {
+      const token = newConnection.config?.token?.trim();
+      if (!token) {
+        toast.error('Informe o token da instância Uazapi');
+        return;
+      }
+    }
     try {
       await createConnection({
         tenantId,
@@ -419,6 +438,7 @@ const Connections = () => {
 
   const providers = [
     { id: 'evolution', name: 'Evolution API', description: 'API oficial para WhatsApp' },
+    { id: 'uazapi', name: 'Uazapi', description: 'API premium para WhatsApp' },
     { id: 'wuzapi', name: 'Wuzapi', description: 'Solução alternativa' },
     { id: 'pastorini', name: 'Pastorini', description: 'Gateway brasileiro' }
   ];
@@ -575,7 +595,7 @@ const Connections = () => {
               {/* Phone Number - Opcional para Evolution API */}
               <div>
                 <label className="text-white/80 text-sm font-medium block mb-2">
-                  Número WhatsApp <span className="text-white/40">(opcional para Evolution API)</span>
+                  Número WhatsApp <span className="text-white/40">(opcional para Evolution API e Uazapi)</span>
                 </label>
                 <GlassInput
                   type="tel"
@@ -583,12 +603,74 @@ const Connections = () => {
                   value={newConnection.phoneNumber}
                   onChange={(e) => setNewConnection(prev => ({ ...prev, phoneNumber: e.target.value }))}
                 />
-                {newConnection.provider === 'evolution' && (
+                {['evolution', 'uazapi'].includes(newConnection.provider) && (
                   <p className="text-white/40 text-xs mt-1">
                     O número será associado automaticamente após escanear o QR Code
                   </p>
                 )}
               </div>
+
+              {newConnection.provider === 'uazapi' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-white/80 text-sm font-medium block mb-2">Subdomínio Uazapi</label>
+                    <GlassInput
+                      type="text"
+                      placeholder="ex: minhaempresa (gera https://minhaempresa.uazapi.com)"
+                      value={newConnection.config?.subdomain || ''}
+                      onChange={(e) =>
+                        setNewConnection(prev => ({
+                          ...prev,
+                          config: { ...prev.config, subdomain: e.target.value }
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-white/80 text-sm font-medium block mb-2">Base URL Uazapi</label>
+                    <GlassInput
+                      type="text"
+                      placeholder="https://minhaempresa.uazapi.com"
+                      value={newConnection.config?.base_url || ''}
+                      onChange={(e) =>
+                        setNewConnection(prev => ({
+                          ...prev,
+                          config: { ...prev.config, base_url: e.target.value }
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-white/80 text-sm font-medium block mb-2">Token da instância (token)</label>
+                    <GlassInput
+                      type="text"
+                      placeholder="Copie o token da instância na Uazapi"
+                      value={newConnection.config?.token || ''}
+                      onChange={(e) =>
+                        setNewConnection(prev => ({
+                          ...prev,
+                          config: { ...prev.config, token: e.target.value }
+                        }))
+                      }
+                      required={newConnection.provider === 'uazapi'}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-white/80 text-sm font-medium block mb-2">Admin token (admintoken)</label>
+                    <GlassInput
+                      type="text"
+                      placeholder="Opcional, usado para criar/deletar instâncias via painel"
+                      value={newConnection.config?.admintoken || ''}
+                      onChange={(e) =>
+                        setNewConnection(prev => ({
+                          ...prev,
+                          config: { ...prev.config, admintoken: e.target.value }
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-3 pt-4">

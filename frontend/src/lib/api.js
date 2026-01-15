@@ -197,13 +197,15 @@ export const ConnectionsAPI = {
   },
 
   async create(data) {
-    // Converter camelCase para snake_case para o backend
     const payload = {
       tenant_id: data.tenantId,
       provider: data.provider,
       instance_name: data.instanceName,
       phone_number: data.phoneNumber || ''
     };
+    if (data.config && typeof data.config === 'object' && Object.keys(data.config).length > 0) {
+      payload.config = data.config;
+    }
     const response = await apiClient.post('/connections', payload);
     return response.data;
   },

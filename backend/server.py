@@ -22,6 +22,10 @@ try:
     from .evolution_api import evolution_api, EvolutionAPI
     from .media_detection import detect_media_kind
     from .features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
+    from .whatsapp import get_whatsapp_container
+    from .whatsapp.errors import WhatsAppError, ProviderNotFoundError
+    from .whatsapp.observability import LogContext
+    from .whatsapp.providers.base import ConnectionRef, ProviderContext, SendMessageRequest
 except Exception:
     from supabase_client import (
         supabase,
@@ -33,6 +37,10 @@ except Exception:
     from evolution_api import evolution_api, EvolutionAPI
     from media_detection import detect_media_kind
     from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
+    from whatsapp import get_whatsapp_container
+    from whatsapp.errors import WhatsAppError, ProviderNotFoundError
+    from whatsapp.observability import LogContext
+    from whatsapp.providers.base import ConnectionRef, ProviderContext, SendMessageRequest
 import jwt
 import json
 import base64
@@ -669,6 +677,72 @@ security = HTTPBearer(auto_error=False)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def _get_whatsapp_container():
+    return get_whatsapp_container()
+
+def _get_whatsapp_provider(provider_id: str):
+    return _get_whatsapp_container().registry.get(provider_id)
+
+def _make_provider_ctx(*, tenant_id: str, provider: str, instance_name: str, correlation_id: str = None):
+    container = _get_whatsapp_container()
+    log_ctx = LogContext(
+        tenant_id=str(tenant_id or ""),
+        provider=str(provider or ""),
+        instance_name=str(instance_name or ""),
+        correlation_id=str(correlation_id) if correlation_id else None,
+    )
+    return container, ProviderContext(obs=container.obs, log_ctx=log_ctx)
+
+
+def _parse_provider_webhook(provider: str, instance_name: str, payload: dict) -> dict:
+    provider_id = str(provider or "").strip().lower()
+    if not provider_id:
+        return evolution_api.parse_webhook_message(payload)
+    try:
+        container, ctx = _make_provider_ctx(
+            tenant_id="",
+            provider=provider_id,
+            instance_name=instance_name,
+            correlation_id="webhook",
+        )
+        provider_obj = container.registry.get(provider_id)
+        event = provider_obj.parse_webhook(ctx, payload)
+        data = event.data
+        if isinstance(data, dict):
+            return data
+        return {"event": event.event, "instance": event.instance, "data": data}
+    except Exception:
+        if provider_id == "evolution":
+            return evolution_api.parse_webhook_message(payload)
+        return {"event": str(payload.get("event") or "unknown"), "instance": instance_name, "data": payload}
+
+def _resolve_provider_webhook_url(request: Request, provider: str, instance_name: str) -> str:
+    base = resolve_public_base_url(request)
+    return f"{base}/api/webhooks/{provider}/{instance_name}"
+
+def _is_connected_state(provider: str, state: dict) -> bool:
+    pid = str(provider or "").strip().lower()
+    if pid == "evolution":
+        instance_state = (state.get("instance", {}) or {}).get("state", "")
+        return str(instance_state or "").strip().lower() in {"open", "connected"}
+    if pid == "uazapi":
+        status = (
+            state.get("status")
+            or state.get("connectionStatus")
+            or (state.get("instance", {}) or {}).get("status")
+            or (state.get("instance", {}) or {}).get("state")
+        )
+        return str(status or "").strip().lower() in {"connected", "open"}
+    return False
+
+def _whatsapp_http_error(e: Exception) -> HTTPException:
+    if isinstance(e, ProviderNotFoundError):
+        return HTTPException(status_code=400, detail=str(e))
+    if isinstance(e, WhatsAppError):
+        status = 502 if e.transient else 400
+        return HTTPException(status_code=status, detail=str(e))
+    return HTTPException(status_code=400, detail=str(e))
 
 _DB_WRITE_QUEUE_MAX = int(os.getenv("DB_WRITE_QUEUE_MAX", "2000") or "2000")
 _DB_WRITE_QUEUE: "deque[dict]" = deque(maxlen=max(100, _DB_WRITE_QUEUE_MAX))
@@ -1418,6 +1492,7 @@ class ConnectionCreate(BaseModel):
     provider: str
     instance_name: str
     phone_number: Optional[str] = ""
+    config: Optional[dict] = None
 
 class ConnectionStatusUpdate(BaseModel):
     status: str
@@ -1435,11 +1510,13 @@ class MessageCreate(BaseModel):
     type: str = "text"
 
 class SendWhatsAppMessage(BaseModel):
+    provider: Optional[str] = "evolution"
     instance_name: str
     phone: str
     message: str
     type: str = "text"
     media_url: Optional[str] = None
+    config: Optional[dict] = None
 
 class QuickReplyCreate(BaseModel):
     title: str
@@ -2717,6 +2794,7 @@ async def create_connection(connection: ConnectionCreate, payload: dict = Depend
         if connection.tenant_id != user_tenant_id:
             raise HTTPException(status_code=403, detail="Acesso negado")
     _enforce_connections_limit(connection.tenant_id)
+    cfg = connection.config if isinstance(connection.config, dict) else {}
     data = {
         'tenant_id': connection.tenant_id,
         'provider': connection.provider,
@@ -2724,7 +2802,7 @@ async def create_connection(connection: ConnectionCreate, payload: dict = Depend
         'phone_number': connection.phone_number or '',
         'status': 'disconnected',
         'webhook_url': '',
-        'config': {}
+        'config': cfg,
     }
     
     result = supabase.table('connections').insert(data).execute()
@@ -2762,64 +2840,59 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
     if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
     
-    if connection['provider'] == 'evolution':
-        try:
-            # Check if instance exists in Evolution API
-            state = await evolution_api.get_connection_state(connection['instance_name'])
-            
-            if state.get('instance', {}).get('state') == 'open':
-                # Already connected
-                webhook_url = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{connection['instance_name']}"
-                try:
-                    await evolution_api.set_webhook(connection['instance_name'], webhook_url)
-                except Exception as e:
-                    logger.warning(f"Could not set webhook for {connection['instance_name']}: {e}")
-                supabase.table('connections').update({
-                    'status': 'connected',
-                    'webhook_url': webhook_url
-                }).eq('id', connection_id).execute()
-                
-                return {"success": True, "message": "Conexão estabelecida com sucesso!"}
-            else:
-                # Need to connect - get QR code
-                qr_result = await evolution_api.connect_instance(connection['instance_name'])
-                return {
-                    "success": True, 
-                    "message": "Escaneie o QR Code para conectar",
-                    "qrcode": qr_result.get('base64'),
-                    "pairingCode": qr_result.get('pairingCode')
-                }
-        except Exception as e:
-            # Instance might not exist, try to create it
+    provider_id = str(connection.get("provider") or "").strip().lower()
+    instance_name = str(connection.get("instance_name") or "").strip()
+    conn_ref = ConnectionRef(
+        tenant_id=str(connection.get("tenant_id") or ""),
+        provider=provider_id,
+        instance_name=instance_name,
+        phone_number=str(connection.get("phone_number") or "") or None,
+        config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+    )
+
+    container, ctx = _make_provider_ctx(
+        tenant_id=conn_ref.tenant_id,
+        provider=provider_id,
+        instance_name=instance_name,
+        correlation_id=f"conn_test:{connection_id}",
+    )
+    provider = _get_whatsapp_provider(provider_id)
+
+    try:
+        state = await provider.get_connection_state(ctx, connection=conn_ref)
+        if _is_connected_state(provider_id, state):
+            webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
             try:
-                webhook_url = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{connection['instance_name']}"
-                create_result = await evolution_api.create_instance(
-                    connection['instance_name'],
-                    webhook_url
-                )
-                return {
-                    "success": True,
-                    "message": "Instância criada! Escaneie o QR Code para conectar",
-                    "qrcode": create_result.get('qrcode', {}).get('base64')
-                }
-            except Exception as create_error:
-                raise HTTPException(status_code=400, detail=f"Erro ao conectar: {str(create_error)}")
-    else:
-        # Simulated test for other providers
-        import random
-        success = random.random() > 0.3
-        
-        if not success:
-            raise HTTPException(status_code=400, detail="Falha ao conectar. Verifique as credenciais.")
-        
-        webhook_url = f"https://api.whatsappcrm.com/webhooks/{connection['instance_name']}"
-        supabase.table('connections').update({'status': 'connected', 'webhook_url': webhook_url}).eq('id', connection_id).execute()
-        
-        return {"success": True, "message": "Conexão estabelecida com sucesso!"}
+                await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=webhook_url)
+            except Exception as e:
+                logger.warning(f"Could not set webhook for {instance_name}: {e}")
+            supabase.table("connections").update({"status": "connected", "webhook_url": webhook_url}).eq("id", connection_id).execute()
+            return {"success": True, "message": "Conexão estabelecida com sucesso!"}
+
+        qr_result = await container.connections.connect_with_retries(provider, connection=conn_ref, correlation_id=f"connect:{connection_id}")
+        qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+        return {
+            "success": True,
+            "message": "Escaneie o QR Code para conectar",
+            "qrcode": qrcode,
+            "pairingCode": qr_result.get("pairingCode"),
+        }
+    except Exception:
+        try:
+            webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
+            create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
+            qrcode = (create_result.get("qrcode", {}) or {}).get("base64") or create_result.get("base64")
+            return {
+                "success": True,
+                "message": "Instância criada! Escaneie o QR Code para conectar",
+                "qrcode": qrcode,
+            }
+        except Exception as e:
+            raise _whatsapp_http_error(e)
 
 @api_router.get("/connections/{connection_id}/qrcode")
 async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
-    """Get QR code for Evolution API connection"""
+    """Get QR code for a provider connection"""
     if payload.get('role') not in ['admin', 'superadmin']:
         raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
@@ -2830,23 +2903,34 @@ async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
     user_tenant_id = get_user_tenant_id(payload)
     if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    if connection['provider'] != 'evolution':
-        raise HTTPException(status_code=400, detail="QR Code disponível apenas para Evolution API")
-    
+
+    provider_id = str(connection.get("provider") or "").strip().lower()
+    instance_name = str(connection.get("instance_name") or "").strip()
+    conn_ref = ConnectionRef(
+        tenant_id=str(connection.get("tenant_id") or ""),
+        provider=provider_id,
+        instance_name=instance_name,
+        phone_number=str(connection.get("phone_number") or "") or None,
+        config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+    )
+    container, ctx = _make_provider_ctx(
+        tenant_id=conn_ref.tenant_id,
+        provider=provider_id,
+        instance_name=instance_name,
+        correlation_id=f"qrcode:{connection_id}",
+    )
+
     try:
-        qr_result = await evolution_api.connect_instance(connection['instance_name'])
-        return {
-            "qrcode": qr_result.get('base64'),
-            "pairingCode": qr_result.get('pairingCode'),
-            "code": qr_result.get('code')
-        }
+        provider = _get_whatsapp_provider(provider_id)
+        qr_result = await container.connections.connect_with_retries(provider, connection=conn_ref, correlation_id=f"connect:{connection_id}")
+        qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+        return {"qrcode": qrcode, "pairingCode": qr_result.get("pairingCode"), "code": qr_result.get("code")}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _whatsapp_http_error(e)
 
 @api_router.post("/connections/{connection_id}/sync")
 async def sync_connection_status(connection_id: str, request: Request, payload: dict = Depends(verify_token)):
-    """Sincronizar status da conexão com a Evolution API"""
+    """Sincronizar status da conexão com o provedor"""
     if payload.get('role') not in ['admin', 'superadmin']:
         raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
@@ -2857,44 +2941,52 @@ async def sync_connection_status(connection_id: str, request: Request, payload: 
     user_tenant_id = get_user_tenant_id(payload)
     if payload.get('role') != 'superadmin' and user_tenant_id and connection.get('tenant_id') != user_tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    if connection['provider'] != 'evolution':
-        raise HTTPException(status_code=400, detail="Sincronização disponível apenas para Evolution API")
-    
+
+    provider_id = str(connection.get("provider") or "").strip().lower()
+    instance_name = str(connection.get("instance_name") or "").strip()
+    conn_ref = ConnectionRef(
+        tenant_id=str(connection.get("tenant_id") or ""),
+        provider=provider_id,
+        instance_name=instance_name,
+        phone_number=str(connection.get("phone_number") or "") or None,
+        config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+    )
+    _container, ctx = _make_provider_ctx(
+        tenant_id=conn_ref.tenant_id,
+        provider=provider_id,
+        instance_name=instance_name,
+        correlation_id=f"sync:{connection_id}",
+    )
+
     try:
-        # Verificar estado atual na Evolution API
-        state = await evolution_api.get_connection_state(connection['instance_name'])
-        logger.info(f"Evolution API state for {connection['instance_name']}: {state}")
-        
-        # Determinar se está conectado
-        instance_state = state.get('instance', {}).get('state', '')
-        is_connected = instance_state.lower() in ['open', 'connected']
-        
+        provider = _get_whatsapp_provider(provider_id)
+        state = await provider.get_connection_state(ctx, connection=conn_ref)
+        is_connected = _is_connected_state(provider_id, state)
         new_status = 'connected' if is_connected else 'disconnected'
         
         # Atualizar banco de dados
         update_data = {'status': new_status}
         if is_connected:
-            update_data['webhook_url'] = f"{resolve_public_base_url(request)}/api/webhooks/evolution/{connection['instance_name']}"
+            update_data['webhook_url'] = _resolve_provider_webhook_url(request, provider_id, instance_name)
             try:
-                await evolution_api.set_webhook(connection['instance_name'], update_data['webhook_url'])
+                await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=update_data['webhook_url'])
             except Exception as e:
-                logger.warning(f"Could not set webhook for {connection['instance_name']}: {e}")
+                logger.warning(f"Could not set webhook for {instance_name}: {e}")
             
             # Tentar obter o número do telefone se conectado
-            try:
-                instances = await evolution_api.fetch_instances()
-                for inst in instances:
-                    if inst.get('name') == connection['instance_name']:
-                        owner_jid = inst.get('owner', inst.get('ownerJid', ''))
-                        if owner_jid:
-                            # Extrair número do JID (formato: 5521999998888@s.whatsapp.net)
-                            phone_number = owner_jid.split('@')[0] if '@' in owner_jid else owner_jid
-                            if phone_number:
-                                update_data['phone_number'] = phone_number
-                        break
-            except Exception as e:
-                logger.warning(f"Could not get phone number: {e}")
+            if provider_id == "evolution":
+                try:
+                    instances = await evolution_api.fetch_instances()
+                    for inst in instances:
+                        if inst.get('name') == instance_name:
+                            owner_jid = inst.get('owner', inst.get('ownerJid', ''))
+                            if owner_jid:
+                                phone_number = owner_jid.split('@')[0] if '@' in owner_jid else owner_jid
+                                if phone_number:
+                                    update_data['phone_number'] = phone_number
+                            break
+                except Exception as e:
+                    logger.warning(f"Could not get phone number: {e}")
         
         result = supabase.table('connections').update(update_data).eq('id', connection_id).execute()
         
@@ -2902,14 +2994,14 @@ async def sync_connection_status(connection_id: str, request: Request, payload: 
         return {
             'id': c['id'],
             'status': new_status,
-            'instanceState': instance_state,
+            'instanceState': (state.get('instance', {}) or {}).get('state', '') if isinstance(state, dict) else '',
             'phoneNumber': c.get('phone_number'),
             'message': f"Status atualizado para: {new_status}"
         }
         
     except Exception as e:
         logger.error(f"Error syncing connection status: {e}")
-        raise HTTPException(status_code=400, detail=f"Erro ao sincronizar: {str(e)}")
+        raise _whatsapp_http_error(e)
 
 @api_router.patch("/connections/{connection_id}/status")
 async def update_connection_status(connection_id: str, status_update: ConnectionStatusUpdate, payload: dict = Depends(verify_token)):
@@ -2946,7 +3038,7 @@ async def update_connection_status(connection_id: str, status_update: Connection
 
 @api_router.delete("/connections/{connection_id}")
 async def delete_connection(connection_id: str, payload: dict = Depends(verify_token)):
-    """Delete a connection and its instance from Evolution API"""
+    """Delete a connection and its provider instance (when supported)"""
     if payload.get('role') not in ['admin', 'superadmin']:
         raise HTTPException(status_code=403, detail="Acesso negado")
     conn = supabase.table('connections').select('*').eq('id', connection_id).execute()
@@ -2960,14 +3052,28 @@ async def delete_connection(connection_id: str, payload: dict = Depends(verify_t
         raise HTTPException(status_code=403, detail="Acesso negado")
     tenant_id = connection['tenant_id']
     
-    # Deletar instância na Evolution API se for provider evolution
-    if connection['provider'] == 'evolution' and connection.get('instance_name'):
+    provider_id = str(connection.get("provider") or "").strip().lower()
+    instance_name = str(connection.get("instance_name") or "").strip()
+    if provider_id and instance_name:
+        conn_ref = ConnectionRef(
+            tenant_id=str(connection.get("tenant_id") or ""),
+            provider=provider_id,
+            instance_name=instance_name,
+            phone_number=str(connection.get("phone_number") or "") or None,
+            config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+        )
+        _container, ctx = _make_provider_ctx(
+            tenant_id=conn_ref.tenant_id,
+            provider=provider_id,
+            instance_name=instance_name,
+            correlation_id=f"conn_delete:{connection_id}",
+        )
         try:
-            await evolution_api.delete_instance(connection['instance_name'])
-            logger.info(f"Evolution instance {connection['instance_name']} deleted")
+            provider = _get_whatsapp_provider(provider_id)
+            await provider.delete_instance(ctx, connection=conn_ref)
+            logger.info(f"Provider instance deleted: provider={provider_id} instance={instance_name}")
         except Exception as e:
-            logger.warning(f"Could not delete Evolution instance: {e}")
-            # Continua mesmo se falhar a exclusão na Evolution API
+            logger.warning(f"Could not delete provider instance: provider={provider_id} instance={instance_name} err={e}")
     
     # Atualizar contador do tenant
     tenant = supabase.table('tenants').select('connections_count').eq('id', tenant_id).execute()
@@ -5272,26 +5378,35 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
         metadata={'conversation_id': message.conversation_id, 'type': message.type}
     )
     
-    connection_provider = (connection.get('provider') if isinstance(connection, dict) else None)
-    connection_status = (connection.get('status') if isinstance(connection, dict) else None)
-    is_evolution = str(connection_provider or '').lower() == 'evolution'
-    is_connected = str(connection_status or '').lower() in ['connected', 'open']
-
     status = 'sent'
 
-    # Send via WhatsApp if Evolution API connection
-    if connection and is_evolution and is_connected:
-        background_tasks.add_task(
-            send_whatsapp_message,
-            connection['instance_name'],
-            conversation['contact_phone'],
-            content,
-            message.type,
-            result.data[0]['id']
-        )
+    if connection and isinstance(connection, dict):
+        provider_id = str(connection.get("provider") or "").strip().lower()
+        connection_status = str(connection.get("status") or "").strip().lower()
+        is_connected = connection_status in ["connected", "open"]
+        instance_name = str(connection.get("instance_name") or "").strip()
+        if provider_id and is_connected and instance_name:
+            conn_ref = ConnectionRef(
+                tenant_id=str(conversation.get("tenant_id") or ""),
+                provider=provider_id,
+                instance_name=instance_name,
+                phone_number=str(connection.get("phone_number") or "") or None,
+                config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+            )
+            background_tasks.add_task(
+                send_provider_message,
+                conn_ref,
+                conversation["contact_phone"],
+                content,
+                message.type,
+                result.data[0]["id"],
+            )
+        else:
+            supabase.table("messages").update({"status": "failed"}).eq("id", result.data[0]["id"]).execute()
+            status = "failed"
     else:
-        supabase.table('messages').update({'status': 'failed'}).eq('id', result.data[0]['id']).execute()
-        status = 'failed'
+        supabase.table("messages").update({"status": "failed"}).eq("id", result.data[0]["id"]).execute()
+        status = "failed"
     
     m = result.data[0]
     return {
@@ -5305,109 +5420,135 @@ async def send_message(message: MessageCreate, background_tasks: BackgroundTasks
         'timestamp': m['timestamp']
     }
 
-async def send_whatsapp_message(instance_name: str, phone: str, content: str, msg_type: str, message_id: str):
-    """Background task to send WhatsApp message"""
-    try:
-        def _extract_sent_message_id(obj: Any) -> Optional[str]:
-            seen: Set[int] = set()
+def _extract_sent_message_id(obj: Any) -> Optional[str]:
+    seen: Set[int] = set()
 
-            def _walk(node: Any, depth: int = 0) -> Optional[str]:
-                if node is None or depth > 6:
-                    return None
-                try:
-                    node_id = id(node)
-                    if node_id in seen:
-                        return None
-                    seen.add(node_id)
-                except Exception:
-                    pass
-
-                if isinstance(node, dict):
-                    key = node.get("key")
-                    if isinstance(key, dict):
-                        v = key.get("id")
-                        if isinstance(v, str) and v.strip():
-                            return v.strip()
-                    for k in ("message_id", "messageId", "stanzaId", "id"):
-                        v = node.get(k)
-                        if isinstance(v, str) and v.strip():
-                            return v.strip()
-                    for k in ("data", "message", "result", "response"):
-                        if k in node:
-                            found = _walk(node.get(k), depth + 1)
-                            if found:
-                                return found
-                    for v in node.values():
-                        found = _walk(v, depth + 1)
-                        if found:
-                            return found
-                    return None
-
-                if isinstance(node, list):
-                    for v in node:
-                        found = _walk(v, depth + 1)
-                        if found:
-                            return found
-                    return None
-
+    def _walk(node: Any, depth: int = 0) -> Optional[str]:
+        if node is None or depth > 6:
+            return None
+        try:
+            node_id = id(node)
+            if node_id in seen:
                 return None
+            seen.add(node_id)
+        except Exception:
+            pass
 
-            return _walk(obj, 0)
+        if isinstance(node, dict):
+            key = node.get("key")
+            if isinstance(key, dict):
+                v = key.get("id")
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            for k in ("message_id", "messageId", "stanzaId", "id"):
+                v = node.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            for k in ("data", "message", "result", "response"):
+                if k in node:
+                    found = _walk(node.get(k), depth + 1)
+                    if found:
+                        return found
+            for v in node.values():
+                found = _walk(v, depth + 1)
+                if found:
+                    return found
+            return None
 
-        def _read_message_metadata() -> dict:
-            try:
-                row = supabase.table("messages").select("metadata").eq("id", message_id).limit(1).execute()
-                if row.data and isinstance(row.data[0].get("metadata"), dict):
-                    return row.data[0].get("metadata") or {}
-            except Exception:
-                return {}
-            return {}
+        if isinstance(node, list):
+            for v in node:
+                found = _walk(v, depth + 1)
+                if found:
+                    return found
+            return None
 
-        result = None
-        if msg_type == 'text':
-            result = await evolution_api.send_text(instance_name, phone, content)
-        elif msg_type == 'image':
-            result = await evolution_api.send_media(instance_name, phone, 'image', media_url=content)
-        elif msg_type == 'audio':
-            result = await evolution_api.send_audio(instance_name, phone, content)
-        elif msg_type == 'document':
-            result = await evolution_api.send_media(instance_name, phone, 'document', media_url=content)
-        elif msg_type == 'sticker':
-            result = await evolution_api.send_sticker(instance_name, phone, content)
-        
+        return None
+
+    return _walk(obj, 0)
+
+def _read_message_metadata(message_id: str) -> dict:
+    try:
+        row = supabase.table("messages").select("metadata").eq("id", message_id).limit(1).execute()
+        if row.data and isinstance(row.data[0].get("metadata"), dict):
+            return row.data[0].get("metadata") or {}
+    except Exception:
+        return {}
+    return {}
+
+async def send_provider_message(connection: ConnectionRef, phone: str, content: str, msg_type: str, message_id: str, *, caption: str = None, filename: str = None):
+    try:
+        _container, ctx = _make_provider_ctx(
+            tenant_id=connection.tenant_id,
+            provider=connection.provider,
+            instance_name=connection.instance_name,
+            correlation_id=f"send:{message_id}",
+        )
+        provider = _get_whatsapp_provider(connection.provider)
+        req = SendMessageRequest(
+            instance_name=connection.instance_name,
+            phone=phone,
+            kind=msg_type,
+            content=content,
+            caption=caption,
+            filename=filename,
+        )
+        result = await provider.send_message(ctx, connection=connection, req=req)
+
         external_id = _extract_sent_message_id(result)
         if external_id:
-            current_meta = _read_message_metadata()
+            current_meta = _read_message_metadata(message_id)
             next_meta = {**current_meta, "message_id": external_id}
-            supabase.table('messages').update({'status': 'delivered', 'external_id': external_id, 'metadata': next_meta}).eq('id', message_id).execute()
+            supabase.table("messages").update({"status": "delivered", "external_id": external_id, "metadata": next_meta}).eq("id", message_id).execute()
         else:
-            supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
+            supabase.table("messages").update({"status": "delivered"}).eq("id", message_id).execute()
     except Exception as e:
-        logger.error(f"Failed to send WhatsApp message: {e}")
-        supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
+        logger.error(f"Failed to send provider message: {e}")
+        try:
+            supabase.table("messages").update({"status": "failed"}).eq("id", message_id).execute()
+        except Exception:
+            pass
+
+async def send_whatsapp_message(instance_name: str, phone: str, content: str, msg_type: str, message_id: str):
+    conn_ref = ConnectionRef(tenant_id="", provider="evolution", instance_name=instance_name, config={})
+    await send_provider_message(conn_ref, phone, content, msg_type, message_id)
 
 # ==================== WHATSAPP DIRECT ROUTES ====================
 
 @api_router.post("/whatsapp/send")
 async def send_whatsapp_direct(data: SendWhatsAppMessage, payload: dict = Depends(verify_token)):
-    """Send WhatsApp message directly via Evolution API"""
     try:
-        if data.type == 'text':
-            result = await evolution_api.send_text(data.instance_name, data.phone, data.message)
-        elif data.type == 'image':
-            result = await evolution_api.send_media(data.instance_name, data.phone, 'image', 
-                                                     media_url=data.media_url, caption=data.message)
-        elif data.type == 'audio':
-            result = await evolution_api.send_audio(data.instance_name, data.phone, data.media_url or data.message)
-        elif data.type == 'document':
-            result = await evolution_api.send_media(data.instance_name, data.phone, 'document',
-                                                     media_url=data.media_url, filename=data.message)
-        else:
-            result = await evolution_api.send_text(data.instance_name, data.phone, data.message)
-        
+        provider_id = str(data.provider or "evolution").strip().lower()
+        instance_name = str(data.instance_name or "").strip()
+        conn_ref = ConnectionRef(
+            tenant_id=str(get_user_tenant_id(payload) or ""),
+            provider=provider_id,
+            instance_name=instance_name,
+            config=data.config if isinstance(data.config, dict) else {},
+        )
+        _container, ctx = _make_provider_ctx(
+            tenant_id=conn_ref.tenant_id,
+            provider=provider_id,
+            instance_name=instance_name,
+            correlation_id="whatsapp_direct",
+        )
+        provider = _get_whatsapp_provider(provider_id)
+
+        kind = str(data.type or "text").strip().lower()
+        content = str(data.message or "").strip()
+        media_url = str(data.media_url or "").strip() or None
+
+        req = SendMessageRequest(
+            instance_name=instance_name,
+            phone=data.phone,
+            kind=kind,
+            content=media_url or content,
+            caption=(content if kind in {"image", "video", "document"} else None),
+            filename=(content if kind in {"document", "file"} else None),
+        )
+        result = await provider.send_message(ctx, connection=conn_ref, req=req)
         return {"success": True, "result": result}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _whatsapp_http_error(e)
 
 @api_router.post("/whatsapp/typing")
 async def send_typing_indicator(instance_name: str, phone: str, payload: dict = Depends(verify_token)):
@@ -5826,12 +5967,20 @@ async def _execute_flow_for_conversation(
                                 }).eq("id", tenant_id).execute()
                         except Exception:
                             pass
-                        connection_provider = (connection.get("provider") if isinstance(connection, dict) else None)
-                        connection_status = (connection.get("status") if isinstance(connection, dict) else None)
-                        is_evolution = str(connection_provider or "").lower() == "evolution"
-                        is_connected = str(connection_status or "").lower() in ["connected", "open"]
-                        if is_evolution and is_connected and connection.get("instance_name"):
-                            asyncio.create_task(send_whatsapp_message(connection["instance_name"], phone, content, "text", msg_id))
+                        if connection and isinstance(connection, dict):
+                            provider_id = str(connection.get("provider") or "").strip().lower()
+                            connection_status = str(connection.get("status") or "").strip().lower()
+                            is_connected = connection_status in ["connected", "open"]
+                            instance_name = str(connection.get("instance_name") or "").strip()
+                            if provider_id and is_connected and instance_name:
+                                conn_ref = ConnectionRef(
+                                    tenant_id=str(connection.get("tenant_id") or tenant_id or ""),
+                                    provider=provider_id,
+                                    instance_name=instance_name,
+                                    phone_number=str(connection.get("phone_number") or "") or None,
+                                    config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+                                )
+                                asyncio.create_task(send_provider_message(conn_ref, phone, content, "text", msg_id))
                 await log_node(current_id, node_type, "success")
                 current_id = next_from(current_id)
                 continue
@@ -5869,20 +6018,28 @@ async def _execute_flow_for_conversation(
                                 }).eq("id", tenant_id).execute()
                         except Exception:
                             pass
-                        connection_provider = (connection.get("provider") if isinstance(connection, dict) else None)
-                        connection_status = (connection.get("status") if isinstance(connection, dict) else None)
-                        is_evolution = str(connection_provider or "").lower() == "evolution"
-                        is_connected = str(connection_status or "").lower() in ["connected", "open"]
-                        if is_evolution and is_connected and connection.get("instance_name"):
-                            asyncio.create_task(send_whatsapp_media(
-                                connection["instance_name"],
-                                phone,
-                                media_type,
-                                media_url,
-                                caption,
-                                "flow_media",
-                                msg_id,
-                            ))
+                        if connection and isinstance(connection, dict):
+                            provider_id = str(connection.get("provider") or "").strip().lower()
+                            connection_status = str(connection.get("status") or "").strip().lower()
+                            is_connected = connection_status in ["connected", "open"]
+                            instance_name = str(connection.get("instance_name") or "").strip()
+                            if provider_id and is_connected and instance_name:
+                                conn_ref = ConnectionRef(
+                                    tenant_id=str(connection.get("tenant_id") or tenant_id or ""),
+                                    provider=provider_id,
+                                    instance_name=instance_name,
+                                    phone_number=str(connection.get("phone_number") or "") or None,
+                                    config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+                                )
+                                asyncio.create_task(send_provider_message(
+                                    conn_ref,
+                                    phone,
+                                    str(media_url or ""),
+                                    str(media_type or "document"),
+                                    msg_id,
+                                    caption=caption,
+                                    filename="flow_media",
+                                ))
                 await log_node(current_id, node_type, "success")
                 current_id = next_from(current_id)
                 continue
@@ -5932,21 +6089,31 @@ async def _execute_flow_for_conversation(
 
 # ==================== WEBHOOKS ====================
 
+@api_router.post("/api/webhooks/{provider}/{instance_name}")
+async def provider_webhook(provider: str, instance_name: str, payload: dict):
+    provider_id = str(provider or "").strip().lower()
+    if provider_id == "evolution":
+        return await _process_evolution_webhook(instance_name, payload, from_queue=False)
+    if provider_id == "uazapi":
+        return await _process_uazapi_webhook(instance_name, payload, from_queue=False)
+    logger.warning(
+        f"Webhook for unsupported provider '{provider_id}' - currently only 'evolution' and 'uazapi' are implemented."
+    )
+    return {"success": True, "ignored": "unsupported_provider"}
+
 @api_router.post("/webhooks/evolution/{instance_name}")
 async def evolution_webhook(instance_name: str, payload: dict):
     return await _process_evolution_webhook(instance_name, payload, from_queue=False)
 
 
-async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
-    logger.info(f"Webhook received for {instance_name}: {payload.get('event')}")
-    
-    # DEBUG: Log full payload for investigation
+async def _process_generic_webhook(provider: str, instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+    provider_id = str(provider or "").strip().lower()
+    logger.info(f"Webhook received for provider={provider_id} instance={instance_name}: {payload.get('event')}")
     logger.info(f"Full webhook payload: {json.dumps(payload, indent=2, default=str)[:2000]}")
 
     try:
-        parsed = evolution_api.parse_webhook_message(payload)
-        
-        # DEBUG: Log parsed push_name
+        parsed = _parse_provider_webhook(provider_id, instance_name, payload)
+
         if parsed.get('event') == 'message':
             logger.info(f"DEBUG - Parsed pushName: '{parsed.get('push_name')}' | Phone: {parsed.get('remote_jid')}")
 
@@ -5970,7 +6137,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                 )
             except Exception as e:
                 if _is_transient_db_error(e):
-                    if not from_queue:
+                    if (provider_id == "evolution") and (not from_queue):
                         _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
                         return {"success": True, "queued": True}
                     raise
@@ -6001,7 +6168,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                     first_contact_dt = datetime.utcnow()
                 first_contact_at_iso = first_contact_dt.isoformat()
 
-                if is_placeholder_text(parsed.get('content') or ''):
+                if (provider_id == "evolution") and is_placeholder_text(parsed.get('content') or ''):
                     try:
                         fetched = await evolution_api.fetch_messages(instance_name, phone, count=25)
                         messages = []
@@ -6041,7 +6208,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                     parsed = {**parsed, **reparsed}
                     except Exception as e:
                         logger.warning(f"Fallback fetch_messages failed for {instance_name}: {e}")
-                
+
                 if is_placeholder_text(parsed.get('content') or ''):
                     data_obj = payload.get('data')
                     data_type = type(data_obj).__name__
@@ -6050,11 +6217,9 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         f"Placeholder message content for {instance_name}: "
                         f"msg_id={parsed.get('message_id')} data_type={data_type} data_keys={data_keys}"
                     )
-                
-                # Determine message direction based on fromMe flag
+
                 direction = 'outbound' if is_from_me else 'inbound'
-                
-                # Find or create conversation
+
                 is_new_conversation = False
                 try:
                     conv = _db_call_with_retry(
@@ -6068,17 +6233,16 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         )
                 except Exception as e:
                     if _is_transient_db_error(e):
-                        if not from_queue:
+                        if (provider_id == "evolution") and (not from_queue):
                             _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
                             return {"success": True, "queued": True}
                         raise
                     raise
-                
+
                 if conv.data:
                     conversation = conv.data[0]
                     preview = '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
-                    
-                    # Only increment unread_count for INBOUND messages (not from_me)
+
                     update_data = {
                         'last_message_at': datetime.utcnow().isoformat(),
                         'last_message_preview': preview
@@ -6089,7 +6253,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                             existing_name = (conversation.get('contact_name') or '').strip()
                             if (not existing_name) or existing_name == phone or _looks_like_system_user_name(existing_name, tenant_id):
                                 update_data['contact_name'] = contact_push_name
-                    
+
                     try:
                         _db_call_with_retry(
                             "conversations.update_last_message",
@@ -6106,18 +6270,17 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         else:
                             raise
                 else:
-                    # Create new conversation
                     avatar_url = None
-                    try:
-                        data = await evolution_api.get_profile_picture(instance_name, phone)
-                        avatar_url = extract_profile_picture_url(data)
-                    except Exception:
-                        avatar_url = None
-                    
-                    # DEBUG: Log contact name being used
+                    if provider_id == "evolution":
+                        try:
+                            data = await evolution_api.get_profile_picture(instance_name, phone)
+                            avatar_url = extract_profile_picture_url(data)
+                        except Exception:
+                            avatar_url = None
+
                     contact_name_to_use = contact_push_name or phone
                     logger.info(f"DEBUG - Creating conversation with contact_name: '{contact_name_to_use}' | push_name from parsed: '{parsed.get('push_name')}' | phone: {phone}")
-                    
+
                     conv_data = {
                         'tenant_id': tenant_id,
                         'connection_id': connection['id'],
@@ -6125,7 +6288,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         'contact_name': contact_name_to_use,
                         'contact_avatar': avatar_url,
                         'status': 'open',
-                        'unread_count': 0 if is_from_me else 1,  # Don't count as unread if from_me
+                        'unread_count': 0 if is_from_me else 1,
                         'last_message_preview': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or '')[:50]
                     }
                     try:
@@ -6137,7 +6300,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         is_new_conversation = True
                     except Exception as e:
                         if _is_transient_db_error(e):
-                            if not from_queue:
+                            if (provider_id == "evolution") and (not from_queue):
                                 _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
                                 return {"success": True, "queued": True}
                             raise
@@ -6225,10 +6388,9 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                 pass
                         else:
                             push_name = (contact_push_name or '').strip() or None
-                            
-                            # DEBUG: Log auto-contact creation
+
                             logger.info(f"DEBUG - Auto-creating contact | push_name: '{push_name}' | phone: {phone} | tenant: {tenant_id}")
-                            
+
                             try:
                                 insert_data = {
                                     'tenant_id': tenant_id,
@@ -6277,8 +6439,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         logger.warning(f"Auto-create contact failed for {tenant_id} phone={phone}: {e}")
                         if _is_transient_db_error(e):
                             pass
-                
-                # Save message with correct direction
+
                 parsed_type_raw = parsed.get('type') or 'text'
                 parsed_kind_raw = parsed.get('media_kind')
                 parsed_type = str(parsed_type_raw or '').strip().lower() or 'text'
@@ -6288,7 +6449,6 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                 if message_type_to_store not in allowed_message_types:
                     message_type_to_store = 'text'
 
-                # Process media: convert temporary WhatsApp URLs to permanent Supabase Storage URLs
                 media_url_final = parsed.get('media_url')
                 detected_mime_type = parsed.get('mime_type')
 
@@ -6354,32 +6514,27 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                 else parsed.get('content')
                             )
 
-                if message_type_to_store in ['image', 'video', 'audio', 'document', 'sticker'] and parsed.get('message_id'):
+                if provider_id == "evolution" and message_type_to_store in ['image', 'video', 'audio', 'document', 'sticker'] and parsed.get('message_id'):
                     try:
-                        # Fetch base64 media from Evolution API
                         base64_result = await evolution_api.get_base64_from_media_message(
                             instance_name=instance_name,
                             message_id=parsed.get('message_id'),
                             remote_jid=parsed.get('remote_jid_raw') or f"{phone}@s.whatsapp.net",
                             from_me=is_from_me
                         )
-                        
+
                         if base64_result:
                             base64_data = base64_result.get('base64') or (base64_result.get('data', {}) or {}).get('base64')
                             mimetype = base64_result.get('mimetype') or (base64_result.get('data', {}) or {}).get('mimetype') or detected_mime_type or 'application/octet-stream'
-                            
+
                             if base64_data:
-                                # Generate unique filename
                                 import uuid as uuid_mod
-                                # Extract file extension from mimetype
                                 mime_parts = mimetype.split('/')
                                 file_ext = mime_parts[-1].split(';')[0] if len(mime_parts) > 1 else 'bin'
-                                # Normalize common audio formats
                                 if file_ext in ['ogg; codecs=opus', 'ogg;codecs=opus']:
                                     file_ext = 'ogg'
                                 unique_filename = f"{uuid_mod.uuid4()}.{file_ext}"
-                                
-                                # Determine folder based on media type
+
                                 if 'image' in mimetype or message_type_to_store in ['image', 'sticker']:
                                     folder = 'images'
                                 elif 'video' in mimetype or message_type_to_store == 'video':
@@ -6388,30 +6543,27 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                     folder = 'audios'
                                 else:
                                     folder = 'documents'
-                                
+
                                 storage_path = f"media-messages/{folder}/{unique_filename}"
-                                
-                                # Decode and upload to Supabase Storage
+
                                 file_content = base64.b64decode(base64_data)
                                 supabase.storage.from_('uploads').upload(
                                     storage_path,
                                     file_content,
                                     file_options={"content-type": mimetype}
                                 )
-                                
-                                # Get permanent public URL
+
                                 media_url_final = supabase.storage.from_('uploads').get_public_url(storage_path)
                                 detected_mime_type = mimetype
                                 logger.info(f"Media saved to storage: {storage_path} for message {parsed.get('message_id')}")
                     except Exception as e:
                         logger.warning(f"Failed to process media for message {parsed.get('message_id')}: {e}")
-                        # Keep original URL as fallback
 
                 msg_data = {
                     'conversation_id': conversation['id'],
                     'content': '' if is_placeholder_text(parsed.get('content') or '') else (parsed.get('content') or ''),
                     'type': message_type_to_store,
-                    'direction': direction,  # 'inbound' for received, 'outbound' for sent
+                    'direction': direction,
                     'status': 'read' if is_from_me else 'delivered',
                     'media_url': media_url_final,
                     'external_id': parsed.get('message_id'),
@@ -6431,8 +6583,7 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                         _queue_db_write({"kind": "insert", "table": "messages", "data": msg_data})
                     else:
                         raise
-                
-                # Update tenant message count
+
                 tenant = _db_call_with_retry(
                     "tenants.get_message_count",
                     lambda: supabase.table('tenants').select('messages_this_month').eq('id', tenant_id).execute()
@@ -6617,11 +6768,19 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                         'messages_this_month': tenant_row.data[0]['messages_this_month'] + 1
                                     }).eq('id', tenant_id).execute()
 
-                            if is_evolution and is_connected:
+                            if is_connected:
+                                provider_conn = str(connection_provider or '').strip().lower() or 'evolution'
                                 if delay_seconds and delay_seconds > 0:
                                     await asyncio.sleep(delay_seconds)
-                                await send_whatsapp_message(
-                                    connection['instance_name'],
+                                conn_ref = ConnectionRef(
+                                    tenant_id=str(tenant_id or ""),
+                                    provider=provider_conn,
+                                    instance_name=str(connection.get("instance_name") or instance_name or ""),
+                                    phone_number=str(connection.get("phone_number") or "") or None,
+                                    config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
+                                )
+                                await send_provider_message(
+                                    conn_ref,
                                     phone,
                                     content,
                                     'text',
@@ -6701,56 +6860,56 @@ async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_
                                 phone=phone,
                                 incoming_text=incoming_text,
                             ))
-        
-        elif parsed['event'] == 'connection':
-            # Update connection status
+
+        elif parsed['event'] == 'connection' and provider_id == "evolution":
             logger.info(f"Processing connection event for {instance_name}: state={parsed.get('state')}, raw_data={parsed.get('raw_data')}")
-            
-            # Detectar estados de conexão válidos
+
             connection_state = parsed.get('state', '').lower()
             is_connected = connection_state in ['open', 'connected']
-            
+
             status = 'connected' if is_connected else 'disconnected'
-            
-            # Atualizar também o número do telefone se disponível
+
             update_data = {'status': status}
             if is_connected:
                 update_data['webhook_url'] = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{instance_name}"
-            
+
             result = supabase.table('connections').update(update_data).eq('instance_name', instance_name).execute()
             logger.info(f"Connection status updated for {instance_name}: {status}, result: {result.data}")
-        
+
         elif parsed['event'] == 'presence':
-            # Handle typing indicator - broadcast via Supabase Realtime
             phone = parsed.get('remote_jid')
-            presence = parsed.get('presence')  # 'composing', 'paused', etc.
-            
+            presence = parsed.get('presence')
+
             if phone and presence:
-                # Find the connection and conversation
                 conn = supabase.table('connections').select('tenant_id').eq('instance_name', instance_name).execute()
                 if conn.data:
                     tenant_id = conn.data[0]['tenant_id']
                     conv = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('contact_phone', phone).execute()
-                    
+
                     if conv.data:
-                        # Insert a typing event that will be picked up by realtime subscription
-                        # This is a lightweight way to broadcast typing status
                         typing_data = {
                             'conversation_id': conv.data[0]['id'],
                             'phone': phone,
                             'is_typing': presence == 'composing',
                             'timestamp': datetime.utcnow().isoformat()
                         }
-                        # Use Supabase realtime broadcast via a temporary record
                         try:
                             supabase.table('typing_events').upsert(typing_data, on_conflict='conversation_id').execute()
                         except:
-                            pass  # Table might not exist yet, ignore
-    
+                            pass
+
     except Exception as e:
         logger.error(f"Webhook processing error: {e}")
-    
+
     return {"success": True}
+
+
+async def _process_evolution_webhook(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+    return await _process_generic_webhook("evolution", instance_name, payload, from_queue=from_queue)
+
+
+async def _process_uazapi_webhook(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+    return await _process_generic_webhook("uazapi", instance_name, payload, from_queue=from_queue)
 
 # ==================== QUICK REPLIES & LABELS ====================
 
@@ -8939,31 +9098,46 @@ async def send_media_message(
     )
     
     status = 'sent'
-    if connection and is_evolution and is_connected and connection.get('instance_name'):
-        if background_tasks:
-            background_tasks.add_task(
-                send_whatsapp_media,
-                connection['instance_name'],
-                conversation['contact_phone'],
-                media_type,
-                media_url,
-                message_content,
-                media_name,
-                result.data[0]['id']
+    if connection and isinstance(connection, dict):
+        provider_id = str(connection.get("provider") or "").strip().lower()
+        connection_status = str(connection.get("status") or "").strip().lower()
+        is_connected = connection_status in ["connected", "open"]
+        instance_name = str(connection.get("instance_name") or "").strip()
+        if provider_id and is_connected and instance_name:
+            conn_ref = ConnectionRef(
+                tenant_id=str(conversation.get("tenant_id") or ""),
+                provider=provider_id,
+                instance_name=instance_name,
+                phone_number=str(connection.get("phone_number") or "") or None,
+                config=connection.get("config") if isinstance(connection.get("config"), dict) else {},
             )
+            if background_tasks:
+                background_tasks.add_task(
+                    send_provider_message,
+                    conn_ref,
+                    conversation["contact_phone"],
+                    str(media_url or ""),
+                    media_type,
+                    result.data[0]["id"],
+                    caption=message_content,
+                    filename=media_name,
+                )
+            else:
+                await send_provider_message(
+                    conn_ref,
+                    conversation["contact_phone"],
+                    str(media_url or ""),
+                    media_type,
+                    result.data[0]["id"],
+                    caption=message_content,
+                    filename=media_name,
+                )
         else:
-            await send_whatsapp_media(
-                connection['instance_name'],
-                conversation['contact_phone'],
-                media_type,
-                media_url,
-                message_content,
-                media_name,
-                result.data[0]['id']
-            )
+            supabase.table("messages").update({"status": "failed"}).eq("id", result.data[0]["id"]).execute()
+            status = "failed"
     else:
-        supabase.table('messages').update({'status': 'failed'}).eq('id', result.data[0]['id']).execute()
-        status = 'failed'
+        supabase.table("messages").update({"status": "failed"}).eq("id", result.data[0]["id"]).execute()
+        status = "failed"
     
     m = result.data[0]
     return {
@@ -8979,124 +9153,25 @@ async def send_media_message(
 
 async def send_whatsapp_media(instance_name: str, phone: str, media_type: str, media_url: str, caption: str, *rest):
     """Background task to send WhatsApp media"""
-    try:
-        def _extract_sent_message_id(obj: Any) -> Optional[str]:
-            seen: Set[int] = set()
+    filename = None
+    message_id = None
+    if len(rest) == 1:
+        message_id = rest[0]
+    elif len(rest) == 2:
+        filename, message_id = rest
+    else:
+        raise TypeError("send_whatsapp_media recebeu argumentos inválidos")
 
-            def _walk(node: Any, depth: int = 0) -> Optional[str]:
-                if node is None or depth > 6:
-                    return None
-                try:
-                    node_id = id(node)
-                    if node_id in seen:
-                        return None
-                    seen.add(node_id)
-                except Exception:
-                    pass
-
-                if isinstance(node, dict):
-                    key = node.get("key")
-                    if isinstance(key, dict):
-                        v = key.get("id")
-                        if isinstance(v, str) and v.strip():
-                            return v.strip()
-                    for k in ("message_id", "messageId", "stanzaId", "id"):
-                        v = node.get(k)
-                        if isinstance(v, str) and v.strip():
-                            return v.strip()
-                    for k in ("data", "message", "result", "response"):
-                        if k in node:
-                            found = _walk(node.get(k), depth + 1)
-                            if found:
-                                return found
-                    for v in node.values():
-                        found = _walk(v, depth + 1)
-                        if found:
-                            return found
-                    return None
-
-                if isinstance(node, list):
-                    for v in node:
-                        found = _walk(v, depth + 1)
-                        if found:
-                            return found
-                    return None
-
-                return None
-
-            return _walk(obj, 0)
-
-        def _read_message_metadata(message_id: str) -> dict:
-            try:
-                row = supabase.table("messages").select("metadata").eq("id", message_id).limit(1).execute()
-                if row.data and isinstance(row.data[0].get("metadata"), dict):
-                    return row.data[0].get("metadata") or {}
-            except Exception:
-                return {}
-            return {}
-
-        filename = None
-        message_id = None
-        if len(rest) == 1:
-            message_id = rest[0]
-        elif len(rest) == 2:
-            filename, message_id = rest
-        else:
-            raise TypeError("send_whatsapp_media recebeu argumentos inválidos")
-
-        mt = (media_type or '').lower()
-        media_str = str(media_url or '').strip()
-
-        base64_payload = None
-        if media_str.startswith('data:') and ';base64,' in media_str:
-            try:
-                base64_payload = media_str.split(';base64,', 1)[1].strip()
-            except Exception:
-                base64_payload = None
-
-        result = None
-        if mt == 'sticker':
-            result = await evolution_api.send_sticker(instance_name, phone, base64_payload or media_str)
-        elif mt == 'audio':
-            if base64_payload:
-                result = await evolution_api.send_media(instance_name, phone, 'audio', media_base64=base64_payload, caption=caption or '', filename=filename)
-            else:
-                result = await evolution_api.send_audio(instance_name, phone, media_str)
-        else:
-            send_kwargs = {
-                "instance_name": instance_name,
-                "phone": phone,
-                "media_type": mt or 'document',
-                "caption": caption or '',
-            }
-            if base64_payload:
-                send_kwargs["media_base64"] = base64_payload
-            else:
-                send_kwargs["media_url"] = media_str
-            if filename:
-                send_kwargs["filename"] = filename
-            result = await evolution_api.send_media(**send_kwargs)
-
-        if message_id:
-            external_id = _extract_sent_message_id(result)
-            if external_id:
-                current_meta = _read_message_metadata(message_id)
-                next_meta = {**current_meta, "message_id": external_id}
-                supabase.table('messages').update({'status': 'delivered', 'external_id': external_id, 'metadata': next_meta}).eq('id', message_id).execute()
-            else:
-                supabase.table('messages').update({'status': 'delivered'}).eq('id', message_id).execute()
-    except Exception as e:
-        logger.error(f"Failed to send WhatsApp media: {e}")
-        try:
-            message_id = None
-            if len(rest) == 1:
-                message_id = rest[0]
-            elif len(rest) == 2:
-                message_id = rest[1]
-            if message_id:
-                supabase.table('messages').update({'status': 'failed'}).eq('id', message_id).execute()
-        except Exception:
-            pass
+    conn_ref = ConnectionRef(tenant_id="", provider="evolution", instance_name=instance_name, config={})
+    await send_provider_message(
+        conn_ref,
+        phone,
+        str(media_url or ""),
+        str(media_type or "document"),
+        str(message_id),
+        caption=caption or "",
+        filename=filename,
+    )
 
 # ==================== MEDIA PROXY ====================
 
