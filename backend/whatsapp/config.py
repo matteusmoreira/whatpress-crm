@@ -3,9 +3,21 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from strictyaml import YAMLValidationError, load as load_yaml
+if TYPE_CHECKING:
+    from typing import Protocol
+
+    class YAMLValidationError(Exception):
+        pass
+
+    class _YamlDoc(Protocol):
+        data: Any
+
+    def load_yaml(_text: str) -> _YamlDoc:
+        raise NotImplementedError
+else:
+    from strictyaml import YAMLValidationError, load as load_yaml
 
 from .errors import ConfigError
 from .providers.registry import PluginSpec

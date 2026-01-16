@@ -66,5 +66,8 @@ class WhatsAppProvider(Protocol):
     async def send_message(self, ctx: ProviderContext, *, connection: ConnectionRef, req: SendMessageRequest) -> dict[str, Any]:
         raise NotImplementedError
 
+    async def send_presence(self, ctx: ProviderContext, *, connection: ConnectionRef, phone: str, presence: str = "composing") -> dict[str, Any]:
+        raise NotImplementedError
+
     def parse_webhook(self, ctx: ProviderContext, payload: dict[str, Any]) -> ProviderWebhookEvent:
         raise NotImplementedError

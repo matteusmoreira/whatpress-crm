@@ -20,7 +20,7 @@ class EvolutionAPI:
             'Content-Type': 'application/json'
         }
     
-    async def _request(self, method: str, endpoint: str, data: dict = None) -> dict:
+    async def _request(self, method: str, endpoint: str, data: Optional[dict] = None) -> Any:
         """Make HTTP request to Evolution API"""
         if not self.base_url:
             raise Exception("Evolution API não configurada (EVOLUTION_API_BASE_URL).")
@@ -32,7 +32,7 @@ class EvolutionAPI:
         if last_segment != 'v2':
             candidates.append(f"{self.base_url}/v2{endpoint}")
         async with httpx.AsyncClient(timeout=30) as client:
-            last_error = None
+            last_error: Optional[Exception] = None
             for idx, candidate_url in enumerate(candidates):
                 try:
                     if method == 'GET':
@@ -66,7 +66,7 @@ class EvolutionAPI:
     
     # ==================== INSTANCE MANAGEMENT ====================
     
-    async def create_instance(self, instance_name: str, webhook_url: str = None) -> dict:
+    async def create_instance(self, instance_name: str, webhook_url: Optional[str] = None) -> dict:
         """Create a new WhatsApp instance"""
         data = {
             'instanceName': instance_name,
@@ -104,7 +104,7 @@ class EvolutionAPI:
         """Fetch all instances"""
         return await self._request('GET', '/instance/fetchInstances')
     
-    async def get_instance(self, instance_name: str) -> dict:
+    async def get_instance(self, instance_name: str) -> Optional[dict]:
         """Get specific instance"""
         instances = await self.fetch_instances()
         for inst in instances:
@@ -153,9 +153,9 @@ class EvolutionAPI:
         
         return await self._request('POST', f'/message/sendText/{instance_name}', data)
     
-    async def send_media(self, instance_name: str, phone: str, media_type: str, 
-                         media_url: str = None, media_base64: str = None,
-                         caption: str = None, filename: str = None) -> dict:
+    async def send_media(self, instance_name: str, phone: str, media_type: str,
+                         media_url: Optional[str] = None, media_base64: Optional[str] = None,
+                         caption: Optional[str] = None, filename: Optional[str] = None) -> dict:
         """Send media message (image, audio, video, document)"""
         number = self._format_phone(phone)
         
@@ -195,9 +195,9 @@ class EvolutionAPI:
 
         return await self._request('POST', f'/message/sendSticker/{instance_name}', data)
     
-    async def send_location(self, instance_name: str, phone: str, 
+    async def send_location(self, instance_name: str, phone: str,
                             latitude: float, longitude: float,
-                            name: str = None, address: str = None) -> dict:
+                            name: Optional[str] = None, address: Optional[str] = None) -> dict:
         """Send location"""
         number = self._format_phone(phone)
         
@@ -227,9 +227,9 @@ class EvolutionAPI:
         
         return await self._request('POST', f'/message/sendContact/{instance_name}', data)
     
-    async def send_buttons(self, instance_name: str, phone: str, 
-                           text: str, buttons: List[Dict], 
-                           title: str = None, footer: str = None) -> dict:
+    async def send_buttons(self, instance_name: str, phone: str,
+                           text: str, buttons: List[Dict],
+                           title: Optional[str] = None, footer: Optional[str] = None) -> dict:
         """Send interactive buttons"""
         number = self._format_phone(phone)
         
@@ -245,7 +245,7 @@ class EvolutionAPI:
     
     async def send_list(self, instance_name: str, phone: str,
                         title: str, description: str, button_text: str,
-                        sections: List[Dict], footer: str = None) -> dict:
+                        sections: List[Dict], footer: Optional[str] = None) -> dict:
         """Send list message"""
         number = self._format_phone(phone)
         
@@ -344,7 +344,7 @@ class EvolutionAPI:
     
     # ==================== WEBHOOK ====================
     
-    async def set_webhook(self, instance_name: str, webhook_url: str, events: list = None) -> dict:
+    async def set_webhook(self, instance_name: str, webhook_url: str, events: Optional[List[str]] = None) -> dict:
         """Configure webhook for instance"""
         if events is None:
             events = [
@@ -469,7 +469,7 @@ class EvolutionAPI:
                 data = inner
 
         if normalized_event == 'messages.upsert':
-            messages = []
+            messages: List[Any] = []
             if isinstance(data, dict) and isinstance(data.get('messages'), list):
                 messages = data.get('messages') or []
             elif isinstance(data, dict) and isinstance(data.get('message'), dict):
@@ -493,33 +493,53 @@ class EvolutionAPI:
                             return {}
 
                         ephemeral = cur.get('ephemeralMessage')
-                        if isinstance(ephemeral, dict) and isinstance(ephemeral.get('message'), dict):
-                            cur = ephemeral.get('message')
+                        ephemeral_msg = (
+                            ephemeral.get('message') if isinstance(ephemeral, dict) else None
+                        )
+                        if isinstance(ephemeral_msg, dict):
+                            cur = ephemeral_msg
                             continue
 
                         view_once = cur.get('viewOnceMessage')
-                        if isinstance(view_once, dict) and isinstance(view_once.get('message'), dict):
-                            cur = view_once.get('message')
+                        view_once_msg = (
+                            view_once.get('message') if isinstance(view_once, dict) else None
+                        )
+                        if isinstance(view_once_msg, dict):
+                            cur = view_once_msg
                             continue
 
                         view_once_v2 = cur.get('viewOnceMessageV2')
-                        if isinstance(view_once_v2, dict) and isinstance(view_once_v2.get('message'), dict):
-                            cur = view_once_v2.get('message')
+                        view_once_v2_msg = (
+                            view_once_v2.get('message') if isinstance(view_once_v2, dict) else None
+                        )
+                        if isinstance(view_once_v2_msg, dict):
+                            cur = view_once_v2_msg
                             continue
 
                         view_once_v2_ext = cur.get('viewOnceMessageV2Extension')
-                        if isinstance(view_once_v2_ext, dict) and isinstance(view_once_v2_ext.get('message'), dict):
-                            cur = view_once_v2_ext.get('message')
+                        view_once_v2_ext_msg = (
+                            view_once_v2_ext.get('message')
+                            if isinstance(view_once_v2_ext, dict)
+                            else None
+                        )
+                        if isinstance(view_once_v2_ext_msg, dict):
+                            cur = view_once_v2_ext_msg
                             continue
 
                         document_with_caption = cur.get('documentWithCaptionMessage')
-                        if isinstance(document_with_caption, dict) and isinstance(document_with_caption.get('message'), dict):
-                            cur = document_with_caption.get('message')
+                        document_with_caption_msg = (
+                            document_with_caption.get('message')
+                            if isinstance(document_with_caption, dict)
+                            else None
+                        )
+                        if isinstance(document_with_caption_msg, dict):
+                            cur = document_with_caption_msg
                             continue
 
                         edited = cur.get('editedMessage')
-                        if isinstance(edited, dict) and isinstance(edited.get('message'), dict):
-                            cur = edited.get('message')
+                        edited_msg = edited.get('message') if isinstance(edited, dict) else None
+                        if isinstance(edited_msg, dict):
+                            cur = edited_msg
                             continue
 
                         return cur if isinstance(cur, dict) else {}
@@ -572,12 +592,14 @@ class EvolutionAPI:
                             return v
 
                     nested = cur.get('textMessage')
-                    if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
-                        return nested.get('text')
+                    nested_text = nested.get('text') if isinstance(nested, dict) else None
+                    if isinstance(nested_text, str) and nested_text.strip():
+                        return nested_text
 
                     nested = cur.get('extendedTextMessage')
-                    if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
-                        return nested.get('text')
+                    nested_text = nested.get('text') if isinstance(nested, dict) else None
+                    if isinstance(nested_text, str) and nested_text.strip():
+                        return nested_text
 
                     nested = cur.get('buttonsResponseMessage')
                     if isinstance(nested, dict):
@@ -591,8 +613,11 @@ class EvolutionAPI:
                         if isinstance(v, str) and v.strip():
                             return v
                         ssr = nested.get('singleSelectReply')
-                        if isinstance(ssr, dict) and isinstance(ssr.get('selectedRowId'), str) and ssr.get('selectedRowId').strip():
-                            return ssr.get('selectedRowId')
+                        selected_row_id = (
+                            ssr.get('selectedRowId') if isinstance(ssr, dict) else None
+                        )
+                        if isinstance(selected_row_id, str) and selected_row_id.strip():
+                            return selected_row_id
 
                     nested = cur.get('templateButtonReplyMessage')
                     if isinstance(nested, dict):
@@ -601,8 +626,9 @@ class EvolutionAPI:
                             return v
 
                     nested = cur.get('reactionMessage')
-                    if isinstance(nested, dict) and isinstance(nested.get('text'), str) and nested.get('text').strip():
-                        return nested.get('text')
+                    nested_text = nested.get('text') if isinstance(nested, dict) else None
+                    if isinstance(nested_text, str) and nested_text.strip():
+                        return nested_text
 
                     for k, v in cur.items():
                         if k in ignored:

@@ -31,5 +31,8 @@ class StubWhatsAppProvider(WhatsAppProvider):
     async def send_message(self, ctx: ProviderContext, *, connection: ConnectionRef, req: SendMessageRequest) -> dict[str, Any]:
         raise ProviderRequestError("Provedor ainda não implementado.", provider=self._provider_id, transient=False)
 
+    async def send_presence(self, ctx: ProviderContext, *, connection: ConnectionRef, phone: str, presence: str = "composing") -> dict[str, Any]:
+        raise ProviderRequestError("Provedor ainda não implementado.", provider=self._provider_id, transient=False)
+
     def parse_webhook(self, ctx: ProviderContext, payload: dict[str, Any]) -> ProviderWebhookEvent:
         return ProviderWebhookEvent(event="unknown", instance=None, data={"raw": payload})

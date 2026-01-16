@@ -1,11 +1,41 @@
 """Quick Replies and Templates for WhatsApp CRM"""
 
-from typing import List, Dict
-try:
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+
+if TYPE_CHECKING:
     from .supabase_client import supabase
-except Exception:
-    from supabase_client import supabase
+else:
+    try:
+        from .supabase_client import supabase
+    except Exception:
+        from supabase_client import supabase
 from datetime import datetime
+
+
+def _as_list_of_dicts(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            out.append(cast(Dict[str, Any], item))
+    return out
+
+
+def _first_dict(value: Any) -> Optional[Dict[str, Any]]:
+    items = _as_list_of_dicts(value)
+    return items[0] if items else None
+
+
+def _as_str_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    out: List[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            out.append(item)
+    return out
+
 
 # Default quick replies
 DEFAULT_QUICK_REPLIES = [
@@ -68,15 +98,16 @@ class QuickRepliesService:
         """Get quick replies for a tenant"""
         try:
             result = supabase.table('quick_replies').select('*').eq('tenant_id', tenant_id).execute()
-            if result.data:
-                return result.data
+            rows = _as_list_of_dicts(result.data)
+            if rows:
+                return rows
             # Return defaults if none exist
             return DEFAULT_QUICK_REPLIES
         except:
             return DEFAULT_QUICK_REPLIES
     
     @staticmethod
-    async def create_quick_reply(tenant_id: str, title: str, content: str, category: str = 'custom') -> Dict:
+    async def create_quick_reply(tenant_id: str, title: str, content: str, category: str = 'custom') -> Optional[Dict[str, Any]]:
         """Create a new quick reply"""
         data = {
             'tenant_id': tenant_id,
@@ -85,7 +116,7 @@ class QuickRepliesService:
             'category': category
         }
         result = supabase.table('quick_replies').insert(data).execute()
-        return result.data[0] if result.data else None
+        return _first_dict(result.data)
     
     @staticmethod
     async def delete_quick_reply(reply_id: str) -> bool:
@@ -102,14 +133,15 @@ class LabelsService:
         """Get labels for a tenant"""
         try:
             result = supabase.table('labels').select('*').eq('tenant_id', tenant_id).execute()
-            if result.data:
-                return result.data
+            rows = _as_list_of_dicts(result.data)
+            if rows:
+                return rows
             return DEFAULT_LABELS
         except:
             return DEFAULT_LABELS
     
     @staticmethod
-    async def create_label(tenant_id: str, name: str, color: str) -> Dict:
+    async def create_label(tenant_id: str, name: str, color: str) -> Optional[Dict[str, Any]]:
         """Create a new label"""
         data = {
             'tenant_id': tenant_id,
@@ -117,7 +149,7 @@ class LabelsService:
             'color': color
         }
         result = supabase.table('labels').insert(data).execute()
-        return result.data[0] if result.data else None
+        return _first_dict(result.data)
     
     @staticmethod
     async def add_label_to_conversation(conversation_id: str, label_id: str) -> bool:
@@ -125,8 +157,9 @@ class LabelsService:
         try:
             # Get current labels
             conv = supabase.table('conversations').select('labels').eq('id', conversation_id).execute()
-            if conv.data:
-                current_labels = conv.data[0].get('labels') or []
+            row = _first_dict(conv.data)
+            if row:
+                current_labels = _as_str_list(row.get('labels'))
                 if label_id not in current_labels:
                     current_labels.append(label_id)
                     supabase.table('conversations').update({'labels': current_labels}).eq('id', conversation_id).execute()
@@ -143,8 +176,9 @@ class LabelsService:
         """Remove label from conversation"""
         try:
             conv = supabase.table('conversations').select('labels').eq('id', conversation_id).execute()
-            if conv.data:
-                current_labels = conv.data[0].get('labels') or []
+            row = _first_dict(conv.data)
+            if row:
+                current_labels = _as_str_list(row.get('labels'))
                 if label_id in current_labels:
                     current_labels.remove(label_id)
                     supabase.table('conversations').update({'labels': current_labels}).eq('id', conversation_id).execute()
@@ -161,42 +195,45 @@ class AgentService:
     """Service for agent assignment"""
     
     @staticmethod
-    async def assign_conversation(conversation_id: str, agent_id: str) -> Dict:
+    async def assign_conversation(conversation_id: str, agent_id: str) -> Optional[Dict[str, Any]]:
         """Assign conversation to agent"""
         result = supabase.table('conversations').update({
             'assigned_to': agent_id
         }).eq('id', conversation_id).execute()
-        return result.data[0] if result.data else None
+        return _first_dict(result.data)
     
     @staticmethod
-    async def unassign_conversation(conversation_id: str) -> Dict:
+    async def unassign_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
         """Unassign conversation"""
         result = supabase.table('conversations').update({
             'assigned_to': None
         }).eq('id', conversation_id).execute()
-        return result.data[0] if result.data else None
+        return _first_dict(result.data)
     
     @staticmethod
     async def get_agent_stats(tenant_id: str, agent_id: str) -> Dict:
         """Get agent statistics"""
         # Get assigned conversations
-        assigned = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('assigned_to', agent_id).execute()
+        assigned = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('assigned_to', agent_id).execute()
+        assigned_rows = _as_list_of_dicts(assigned.data)
         
         # Get open conversations
-        open_convs = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('assigned_to', agent_id).eq('status', 'open').execute()
+        open_convs = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('assigned_to', agent_id).eq('status', 'open').execute()
+        open_rows = _as_list_of_dicts(open_convs.data)
         
         # Get resolved today
         today = datetime.utcnow().date().isoformat()
-        resolved = supabase.table('conversations').select('id', count='exact').eq('tenant_id', tenant_id).eq('assigned_to', agent_id).eq('status', 'resolved').gte('updated_at', today).execute()
+        resolved = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('assigned_to', agent_id).eq('status', 'resolved').gte('updated_at', today).execute()
+        resolved_rows = _as_list_of_dicts(resolved.data)
         
         return {
-            'total_assigned': assigned.count or 0,
-            'open': open_convs.count or 0,
-            'resolved_today': resolved.count or 0
+            'total_assigned': len(assigned_rows),
+            'open': len(open_rows),
+            'resolved_today': len(resolved_rows)
         }
     
     @staticmethod
     async def get_agents(tenant_id: str) -> List[Dict]:
         """Get all agents for a tenant"""
         result = supabase.table('users').select('*').eq('tenant_id', tenant_id).in_('role', ['admin', 'agent']).execute()
-        return result.data or []
+        return _as_list_of_dicts(result.data)

@@ -52,6 +52,7 @@ import LabelsManager from '../components/LabelsManager';
 import TypingIndicator, { useTypingIndicator } from '../components/TypingIndicator';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { AgentsAPI, LabelsAPI, ConversationsAPI, ContactsAPI, MediaAPI } from '../lib/api';
+import { subscribeToTypingEvents } from '../lib/supabase';
 
 // Labels are now loaded from the database
 
@@ -1214,6 +1215,29 @@ const Inbox = () => {
 
   // Typing indicator hook
   const { setTyping, getTypingContact } = useTypingIndicator();
+
+  useEffect(() => {
+    const conversationId = selectedConversation?.id;
+    if (!conversationId) return;
+
+    const contactName =
+      (selectedConversation?.contactName || '').trim() ||
+      (selectedConversation?.contactPhone || '').trim() ||
+      'Contato';
+
+    const unsub = subscribeToTypingEvents(conversationId, (evt) => {
+      const isTyping = !!evt?.isTyping;
+      setTyping(conversationId, contactName, isTyping);
+    });
+
+    return () => {
+      try {
+        unsub?.();
+      } finally {
+        setTyping(conversationId, contactName, false);
+      }
+    };
+  }, [selectedConversation?.id, selectedConversation?.contactName, selectedConversation?.contactPhone, setTyping]);
 
   // Load agents for assignment
   const loadAgents = useCallback(async () => {

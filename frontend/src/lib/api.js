@@ -415,9 +415,12 @@ export const WhatsAppAPI = {
     return response.data;
   },
 
-  async sendTyping(instanceName, phone) {
-    const response = await apiClient.post('/whatsapp/typing', null, {
-      params: { instance_name: instanceName, phone }
+  async sendTyping(instanceName, phone, options = {}) {
+    const provider = options?.provider || 'evolution';
+    const presence = options?.presence || 'composing';
+    const config = options?.config || null;
+    const response = await apiClient.post('/whatsapp/typing', config, {
+      params: { instance_name: instanceName, phone, provider, presence }
     });
     return response.data;
   }

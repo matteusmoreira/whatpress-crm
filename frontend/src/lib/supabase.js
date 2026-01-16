@@ -127,4 +127,36 @@ export const subscribeToConnectionStatus = (tenantId, callback, onStatus) => {
   };
 };
 
+export const subscribeToTypingEvents = (conversationId, callback, onStatus) => {
+  const channel = supabase
+    .channel(`typing:${conversationId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'typing_events',
+        filter: `conversation_id=eq.${conversationId}`
+      },
+      (payload) => {
+        const row = payload.new || payload.old;
+        const isTyping = payload.eventType === 'DELETE' ? false : !!row?.is_typing;
+        callback({
+          event: payload.eventType,
+          conversationId: row?.conversation_id,
+          phone: row?.phone,
+          isTyping,
+          timestamp: row?.timestamp
+        });
+      }
+    )
+    .subscribe((status) => {
+      if (typeof onStatus === 'function') onStatus(status);
+    });
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
 export default supabase;

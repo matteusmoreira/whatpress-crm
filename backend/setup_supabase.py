@@ -3,9 +3,25 @@ Script para criar as tabelas no Supabase
 Execute com: python setup_supabase.py
 """
 
-from supabase_client import supabase
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .supabase_client import supabase
+
+    class CryptContext:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            ...
+
+        def hash(self, secret: str) -> str:
+            ...
+else:
+    try:
+        from .supabase_client import supabase
+    except Exception:
+        from supabase_client import supabase
+
+    from passlib.context import CryptContext
 import json
-from passlib.context import CryptContext
 
 _PASSWORD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

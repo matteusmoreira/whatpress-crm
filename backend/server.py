@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request, Query, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request, Query, Response, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -9,40 +9,63 @@ logger = logging.getLogger(__name__)
 import concurrent.futures
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional, Dict, Any, Tuple, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 import uuid
 from datetime import datetime, timedelta
 import httpx
-try:
+
+if TYPE_CHECKING:
     from .supabase_client import (
-        supabase,
-        SUPABASE_URL,
         SUPABASE_ANON_KEY,
-        SUPABASE_SERVICE_ROLE_KEY,
         SUPABASE_KEY_ROLE,
+        SUPABASE_SERVICE_ROLE_KEY,
+        SUPABASE_URL,
+        supabase,
     )
-    from .evolution_api import evolution_api, EvolutionAPI
+    from .evolution_api import EvolutionAPI, evolution_api
+    from .features import (
+        AgentService,
+        DEFAULT_LABELS,
+        DEFAULT_QUICK_REPLIES,
+        LabelsService,
+        QuickRepliesService,
+    )
     from .media_detection import detect_media_kind
-    from .features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
     from .whatsapp import get_whatsapp_container
-    from .whatsapp.errors import WhatsAppError, ProviderNotFoundError
+    from .whatsapp.errors import ProviderNotFoundError, WhatsAppError
     from .whatsapp.observability import LogContext
     from .whatsapp.providers.base import ConnectionRef, ProviderContext, SendMessageRequest
-except Exception:
-    from supabase_client import (
-        supabase,
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY,
-        SUPABASE_SERVICE_ROLE_KEY,
-        SUPABASE_KEY_ROLE,
-    )
-    from evolution_api import evolution_api, EvolutionAPI
-    from media_detection import detect_media_kind
-    from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
-    from whatsapp import get_whatsapp_container
-    from whatsapp.errors import WhatsAppError, ProviderNotFoundError
-    from whatsapp.observability import LogContext
-    from whatsapp.providers.base import ConnectionRef, ProviderContext, SendMessageRequest
+else:
+    try:
+        from .supabase_client import (
+            supabase,
+            SUPABASE_URL,
+            SUPABASE_ANON_KEY,
+            SUPABASE_SERVICE_ROLE_KEY,
+            SUPABASE_KEY_ROLE,
+        )
+        from .evolution_api import evolution_api, EvolutionAPI
+        from .media_detection import detect_media_kind
+        from .features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
+        from .whatsapp import get_whatsapp_container
+        from .whatsapp.errors import WhatsAppError, ProviderNotFoundError
+        from .whatsapp.observability import LogContext
+        from .whatsapp.providers.base import ConnectionRef, ProviderContext, SendMessageRequest
+    except Exception:
+        from supabase_client import (
+            supabase,
+            SUPABASE_URL,
+            SUPABASE_ANON_KEY,
+            SUPABASE_SERVICE_ROLE_KEY,
+            SUPABASE_KEY_ROLE,
+        )
+        from evolution_api import evolution_api, EvolutionAPI
+        from media_detection import detect_media_kind
+        from features import QuickRepliesService, LabelsService, AgentService, DEFAULT_QUICK_REPLIES, DEFAULT_LABELS
+        from whatsapp import get_whatsapp_container
+        from whatsapp.errors import WhatsAppError, ProviderNotFoundError
+        from whatsapp.observability import LogContext
+        from whatsapp.providers.base import ConnectionRef, ProviderContext, SendMessageRequest
 import jwt
 import json
 import base64
@@ -55,7 +78,22 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable
 import hmac
-from passlib.context import CryptContext
+
+if TYPE_CHECKING:
+    class CryptContext:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            ...
+
+        def hash(self, secret: str) -> str:
+            ...
+
+        def verify(self, secret: str, hash: str) -> bool:
+            ...
+
+        def needs_update(self, hash: str) -> bool:
+            ...
+else:
+    from passlib.context import CryptContext
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2980,6 +3018,11 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
     
     provider_id = str(connection.get("provider") or "").strip().lower()
     instance_name = str(connection.get("instance_name") or "").strip()
+    if not instance_name or len(instance_name) > 80:
+        raise HTTPException(status_code=400, detail="instanceName inválido.")
+    for ch in instance_name:
+        if not (ch.isalnum() or ch in {"_", "-", "."}):
+            raise HTTPException(status_code=400, detail="instanceName inválido.")
     conn_ref = ConnectionRef(
         tenant_id=str(connection.get("tenant_id") or ""),
         provider=provider_id,
@@ -5745,13 +5788,35 @@ async def send_whatsapp_direct(data: SendWhatsAppMessage, payload: dict = Depend
         raise _whatsapp_http_error(e)
 
 @api_router.post("/whatsapp/typing")
-async def send_typing_indicator(instance_name: str, phone: str, payload: dict = Depends(verify_token)):
+async def send_typing_indicator(
+    instance_name: str,
+    phone: str,
+    provider: str = Query("evolution"),
+    presence: str = Query("composing"),
+    config: Optional[dict[str, Any]] = Body(None),
+    payload: dict = Depends(verify_token),
+):
     """Send typing indicator"""
     try:
-        await evolution_api.send_presence(instance_name, phone, 'composing')
-        return {"success": True}
+        provider_id = str(provider or "evolution").strip().lower()
+        instance_name_norm = str(instance_name or "").strip()
+        conn_ref = ConnectionRef(
+            tenant_id=str(get_user_tenant_id(payload) or ""),
+            provider=provider_id,
+            instance_name=instance_name_norm,
+            config=config if isinstance(config, dict) else {},
+        )
+        _container, ctx = _make_provider_ctx(
+            tenant_id=conn_ref.tenant_id,
+            provider=provider_id,
+            instance_name=instance_name_norm,
+            correlation_id="typing",
+        )
+        provider_impl = _get_whatsapp_provider(provider_id)
+        result = await provider_impl.send_presence(ctx, connection=conn_ref, phone=phone, presence=presence)
+        return {"success": True, "result": result}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _whatsapp_http_error(e)
 
 # ==================== MESSAGE REACTIONS ====================
 
@@ -6318,7 +6383,7 @@ async def _execute_flow_for_conversation(
 
 # ==================== WEBHOOKS ====================
 
-@api_router.post("/api/webhooks/{provider}/{instance_name}")
+@api_router.post("/webhooks/{provider}/{instance_name}")
 async def provider_webhook(provider: str, instance_name: str, payload: dict):
     provider_id = str(provider or "").strip().lower()
     if provider_id == "evolution":
@@ -7106,14 +7171,24 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
             logger.info(f"Connection status updated for {instance_name}: {status}, result: {result.data}")
 
         elif parsed['event'] == 'presence':
-            phone = parsed.get('remote_jid')
+            phone_raw = parsed.get('remote_jid')
             presence = parsed.get('presence')
 
-            if phone and presence:
-                conn = supabase.table('connections').select('tenant_id').eq('instance_name', instance_name).execute()
+            if phone_raw and presence:
+                phone = normalize_phone_number(phone_raw) or (str(phone_raw or '').strip())
+                conn = supabase.table('connections').select('tenant_id, id').eq('instance_name', instance_name).execute()
                 if conn.data:
                     tenant_id = conn.data[0]['tenant_id']
-                    conv = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('contact_phone', phone).execute()
+                    connection_id = conn.data[0].get('id')
+                    query = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('contact_phone', phone)
+                    if connection_id:
+                        query = query.eq('connection_id', connection_id)
+                    conv = query.execute()
+                    if (not conv.data) and str(phone_raw or '').strip() and str(phone_raw).strip() != phone:
+                        query2 = supabase.table('conversations').select('id').eq('tenant_id', tenant_id).eq('contact_phone', str(phone_raw).strip())
+                        if connection_id:
+                            query2 = query2.eq('connection_id', connection_id)
+                        conv = query2.execute()
 
                     if conv.data:
                         typing_data = {
@@ -7124,7 +7199,7 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                         }
                         try:
                             supabase.table('typing_events').upsert(typing_data, on_conflict='conversation_id').execute()
-                        except:
+                        except Exception:
                             pass
 
     except Exception as e:

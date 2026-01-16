@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-try:
+if TYPE_CHECKING:
     from ...evolution_api import EvolutionAPI
-except ImportError:
-    from evolution_api import EvolutionAPI
+else:
+    try:
+        from ...evolution_api import EvolutionAPI
+    except ImportError:
+        from evolution_api import EvolutionAPI
 from ..errors import AuthError, ConnectionError, ProviderRequestError
 from ..observability import Observability
 from .base import (
@@ -142,6 +145,18 @@ class EvolutionWhatsAppProvider(WhatsAppProvider):
                 provider="evolution",
                 transient=True,
                 details={"error": str(e), "kind": req.kind},
+            )
+
+    async def send_presence(self, ctx: ProviderContext, *, connection: ConnectionRef, phone: str, presence: str = "composing") -> dict[str, Any]:
+        client = self._build_client(connection, ctx.obs)
+        try:
+            return await client.send_presence(connection.instance_name, phone, presence)
+        except Exception as e:
+            raise ProviderRequestError(
+                "Falha ao enviar presença.",
+                provider="evolution",
+                transient=True,
+                details={"error": str(e), "presence": presence},
             )
 
     def parse_webhook(self, ctx: ProviderContext, payload: dict[str, Any]) -> ProviderWebhookEvent:

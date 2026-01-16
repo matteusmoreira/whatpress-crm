@@ -1,0 +1,3711 @@
+{
+	"info": {
+		"_postman_id": "6c8a7d20-cb17-4611-a521-7f383881d631",
+		"name": "uazapi - WhatsApp API (v1.0)",
+		"description": "Para funcionar você precisa contratar nossos serviços:\n\n[https://uazapi.dev](https://uazapi.dev)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31128931",
+		"_collection_link": "https://www.postman.com/augustofcs/uazapi/collection/j48ko4t/uazapi-whatsapp-api-v1-0?action=share&source=collection_link&creator=31128931"
+	},
+	"item": [
+		{
+			"name": "Automações e sistemas embutidos",
+			"item": [
+				{
+					"name": "Fluxos (chatbot)",
+					"item": [
+						{
+							"name": "logs dos fluxos (conversa)",
+							"item": [
+								{
+									"name": "Automate - pesquisar conversa",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "// faça uma busca com esses campos, se remover todos, vai achar todas as conversas\r\n// conversa é um log de um fluxo\r\n{\r\n    // \"_id\": \"6502282cd50e2414e4d76c4c\",\r\n   // \"name\": \"teste1\" // nome do fluxo\r\n    \"status\": \"closed\" // status\r\n  //  \"remoteJid\": \"numero@s.whatsapp.net\" // se for grupo \"iddogrupo@g.us\"\r\n    //\"lastInteraction\": dataunix,\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/fetchConversation/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"fetchConversation",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Achar 1 conversa pelo id",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "// conversa é um log de um fluxo\r\n{\r\n     \"_id\": \"6503179744da4ee454ddcbea\"\r\n\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/getConversation/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"getConversation",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar conversa",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "//só é possivel editar esses campos, estado da conversa, e pausado até quando\r\n// conversa é um log de um fluxo\r\n{\r\n    \"_id\": \"6509a4b1e3251d3521979a95\", //pesquisar pelo id\r\n    \"status\": \"open\", // mudar status\r\n    \"chatLog\": {\r\n        \"stoppedUntil\": 1695130901914 // data unix - pausar conversa até...\r\n    }\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editConversation/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editConversation",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Apagar 1 conversa pelo id",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "// conversa é um log de um fluxo\r\n{\r\n     \"_id\": \"6503179744da4ee454ddcbea\"\r\n\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/deleteConversation/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"deleteConversation",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Editar fluxos",
+							"item": [
+								{
+									"name": "Automate - Ver um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"bubblePlus\",\r\n\"global\": \"true\" // \"true\" | \"false\" - como string mesmo\r\n                  // se for global, vc precisa usar apikey global\r\n\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/getflow/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"getflow",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Criar um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"newFlow\",\r\n\"default\": true,\r\n\"minutesToClose\": 10,\r\n\"readMessages\": true,\r\n\"startCommandWord\": \"!start\",\r\n\"global\": \"true\" // \"true\" | \"false\" - como string mesmo\r\n\t\t\t\t\t\t\t\t\t// se for global, vc precisa usar apikey global\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/createflow/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"createflow",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Deletar um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "DELETE",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"name2\",\r\n\"global\": \"true\" // \"true\" | \"false\" - como string mesmo\r\n\t\t\t\t\t\t\t\t\t// se for global, vc precisa usar apikey global\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/deleteflow/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"deleteflow",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"name\",\r\n\"default\": true,\r\n\"minutesToClose\": 10,\r\n\"readMessages\": true,\r\n\"startCommandWord\": \"!start\"\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflow/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflow",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar block de um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n  \"name\": \"newFlow\",\r\n  \"block\": {\r\n      // \"delete\": true // se passado como true, sem esquecer do \"_id\", vai deletar\r\n      // \"copy\": true // se passado como true, sem esquecer do \"_id\", vai duplicar/copiar\r\n    \"order\": 3,\r\n    \"_id\": \"64f8beda90d62b516c25798a\",\r\n    \"groupId\": \"64f7ebcf5e2fbbaaf5650fc2\",\r\n    \"apirequest\": { \r\n        \"url\": \"123\", \r\n        \"method\": \"POST\", \r\n        \"headers\": \"123\", \r\n        \"body\": \"123\",\r\n        \"requestFile\": false // ou true,  deixe como verdadeiro caso a resposta da api seja um arquivo\r\n         }\r\n  }\r\n} ",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflowblock/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflowblock",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar group de um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"name2\",\r\n\"global\": \"true\", // \"true\" | \"false\" - como string mesmo\r\n                  // se for global, vc precisa usar apikey global\r\n\"group\": {\r\n    //\"delete\": true // se delete for true, o grupo será excluído.\r\n    //\"_id\": \"xyz\",  // se id for fornecido, o grupo será atualizado.\r\n                     // se não for fornecido, um novo grupo será criado.\r\n    \"title\": \"teste\",\r\n    \"x\": 1,\r\n    \"y\": 2\r\n    }\r\n}\r\n",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflowgroup/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflowgroup",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar variavel de um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"name2\",\r\n\"global\": \"true\", // \"true\" | \"false\" - como string mesmo\r\n                  // se for global, vc precisa usar apikey global\r\n\"variable\": {\r\n  \"folder\": \"teste4\",\r\n  \"name\": 12343,\r\n  \"value\": \"saveaa\",\r\n  \"doc\": \"123\"\r\n    }\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflowvariable/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflowvariable",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar condição de um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n\"name\": \"name2\",\r\n\"global\": \"true\", // \"true\" | \"false\" - como string mesmo\r\n                  // se for global, vc precisa usar apikey global\r\n\"condition\": {\r\n  \"order\": 1,\r\n  \"OrAnd\": \"and\",\r\n  \"blockId\": \"64f62d5de4d8432bb67bd6d6\",\r\n  \"firstValue\": \"teste\",\r\n  \"expression\": \"equal\",\r\n  // expression options: \"equal\" | \"notEqual\" | \"contains\" | \"notContains\" | \"greater\" | \"less\" | \"notEmpty\" | \"empty\" | \"matchRegex\" | \"notMatchRegex\"; \r\n  \"secondValue\": \"teste\"\r\n    }\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflowcondition/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflowcondition",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar - edição de variável - de um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"name\": \"newFlow\",\r\n    \"global\": \"true\", // \"true\" | \"false\" - como string mesmo\r\n                  // se for global, vc precisa usar apikey global\r\n    \"varedit\": {\r\n        \"_id\": \"64fc7f7753e65d36b5de07c8\", // passe o id para editar/deletar\r\n        //ou não passe o id para criar um novo\r\n        \"delete\": false, // se quiser deletar passe delete = true\r\n        \"order\": 2,\r\n        \"blockId\": \"64fb634dc5ef20f87f28bccd\", // de qual block se refere essa edição de variável, são várias edições para 1 variável/block\r\n        \"firstValue\": \"nome\", // nome da variável que irá editar\r\n        \"editOperator\": \"+\", // operação\r\n// opções de editOperator: \"+\" | \"-\" | \"*\" | \"/\" | \"toBRL\" | \"findAndReplace\" | \"findAndReplaceRegex\" | \"extractRegex\" | \"upperCase\" | \"lowerCase\" | \"capitalizedWords\" | \"trimmed\" | \"truncatedto\" | \"truncatedtoEnd\" | \"setNewValue\" \r\n\r\n        \"secondValue\": \"5\" \r\n    }\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflowvaredit/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflowvaredit",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Automate - Editar replyOption de um fluxo",
+									"request": {
+										"auth": {
+											"type": "apikey",
+											"apikey": [
+												{
+													"key": "value",
+													"value": "{{apikey}}",
+													"type": "string"
+												},
+												{
+													"key": "key",
+													"value": "apikey",
+													"type": "string"
+												}
+											]
+										},
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"name\": \"teste3\",\r\n    \"global\": \"true\", // \"true\" | \"false\" - como string mesmo\r\n                  // se for global, vc precisa usar apikey global\r\n    \"replyOption\": {\r\n         //\"delete\": true // se delete for true, o replyOption será excluído.\r\n         //\"_id\": \"xyz\",  // se id for fornecido, o replyOption será atualizado.\r\n                          // se não for fornecido, um novo replyOption será criado.\r\n        \"order\": 1,\r\n        \"blockId\": \"651228b108aef2b9e8fa5524\",\r\n        \"option\": \"teste\",\r\n        \"optionDescription\": \"string\",\r\n        \"next_groupId\": \"\"\r\n    }\r\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{baseUrl}}/automate/editflowreply/{{instance}}",
+											"host": [
+												"{{baseUrl}}"
+											],
+											"path": [
+												"automate",
+												"editflowreply",
+												"{{instance}}"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Ver AutomateSystem",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/automate/getAutomateSystem/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"getAutomateSystem",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Configuração geral dos fluxos",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"enabled\": true,\r\n    \"ignoreGroups\": false,\r\n    \"prefixCommand\": \"/\",\r\n    \"stopConversation\": \"/stop\",\r\n    \"stopMinutes\": 20,\r\n    \"stopWhenYouSendMsg\": 10\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/automate/updateFlowConfig/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"updateFlowConfig",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Automate - Iniciar Fluxo",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"name\": \"teste2\", //pode passar o _id no lugar do name, assim \"name\": \"id123\"\r\n    \"remoteJid\": \"55000000000\",\r\n    \"changeVariables\": {\r\n        \"variavel1\": \"valor1\",\r\n        \"variavel2\": \"valor2\"\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/automate/startFlow/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"startFlow",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Automate - Ver todos os fluxos",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/automate/allflows/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"allflows",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						}
+					],
+					"description": "A criação de fluxos via API é bastante complexa, porém temos um frontend whitelabel para você ou seus clientes editarem seus fluxos, está em beta:\n\n[https://uazapi-plugin.bubbleapps.io/uazabot<br><br>](https://uazapi-plugin.bubbleapps.io/uazabot)Disponibilizamos o editor para você copiar para seu sistema, fale com o suporte para mais informações."
+				},
+				{
+					"name": "Sistema multiAtendimento",
+					"item": [
+						{
+							"name": "Ver AutomateSystem",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/automate/getAutomateSystem/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"getAutomateSystem",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Automate - Editar agentes",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n  \"_id\": \"651fd7b9ac1edf3756a8260c\",\r\n  //\"delete\": true,\r\n  \r\n  //campos abaixo apenas informativos\r\n  \"fone\": \"123456789\",\r\n  \"name\": \"Agent Name\",\r\n  \"email\": \"agent@example.com\",\r\n  \"role\": \"agent_role\"\r\n}\r\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/automate/updateAgent/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"updateAgent",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Automate - Editar campos personalizados",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n\"_id\": \"testeid\", // se o id não existir - criará um novo customField\r\n\"delete\": true // se passado delete true irá apagar\r\n//\"order\": 8, // será organizado conforme ordem, se passado decimal, exemplo 2.5, esse customfield será o novo 3, e os outros serão reordenados\r\n//\"name\": \"12345\" // nome do field\r\n}\r\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/automate/updateCustomFields/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"updateCustomFields",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Automate - Editar auto completar mensagens [teste]",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "// atenção 1: não tem como capturar as mensagens de autocompletar do whatsapp hoje, esse endpoint não altera nada no whatsapp.\r\n// atenção 2: esse endpoint é apenas um forma de guardar os dados de autocompletar mensagens de maneira fácil, \r\n// você terá que fazer no seu frontend a lógica de trocar o /\"command\" pela \"message\"\r\n\r\n{\r\n//\"_id\": \"testeid\", // se o id não existir - criará um novo AutoCompleteMessage\r\n//\"delete\": true // se passado delete true irá apagar\r\n\"command\": \"ola2\", // comando para auto completar mensagem\r\n\"message\": \"Olá2, como eu posso te ajudar?\" // mensagem\r\n\r\n\r\n}\r\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/automate/updateAutoCompleteMessages/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"automate",
+										"updateAutoCompleteMessages",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Chat - editar informações do Lead (Chat)",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"_id\": \"5521999999999\", // número de telefone\r\n    \"delete\" : \"all\", // 'all' | 'messages' -> all = apaga o chat e as mensagens, messages = apaga apenas as mensagens\r\n    \"unreadcount\": 1, // você pode usar esse valor (0 ou 1) para alterar se há mensagens não lidas\r\n    \"muteEndTime\": -1, // 0 = notificações normais e -1= sem notificações\r\n    \"leadInfo\": {\r\n        // ativa ou desativa fluxos conforme data unix:\r\n        \"desativadoFluxoAte\": 1733027661000, // se 0 = desabilitado para sempre, se 1 ou vazio = habilitado. configuração de chatbot - fluxos\r\n        // dados daqui em diante os dados são apenas informativos e editáveis, não muda no funcionamento da api, você pode usar para facilitar no gerenciamento do seu lead\r\n        \"nome\": \"\", // nome de exibição e como será chamado\r\n        \"nomecompleto\": \"Nome Completo\",\r\n        \"email\": \"seuemail@email.com\",\r\n        \"cpf\": \"123.456.789-09\",\r\n        \"status\": \"Assinante\", // Prospect, Lead, assinante, frio, quente, faça as suas categorias e defina aqui\r\n        \"notas\": \"Algumas notas adicionais.\", // observações sobre o lead\r\n        \"tags\": [ // tags, lista de texto\r\n            \"tag1\",\r\n            \"tag2\"\r\n        ],\r\n        \"etiquetas\": [\"1\", \"2\"], //passe o array de etiquetas pelo id\r\n        \"atendimentoAberto\": true, // atendimento aberto / fechado\r\n        \"responsavelid\": \"Atendente X\", // atribuido para qual atendente\r\n        \"customFields\": [\r\n    // a forma corretá de usar customFields é defini-los em editar campos personalizados,\r\n    // e aqui você usa o _id definido lá, e o valor como desejar, \r\n    // no seu frontend, vc vai buscar o nome e a ordem do customFields pelo automateSystem, pelo id.\r\n    // não há tratamento de erro, se não fizer assim, colocando qualquer id, o sistema irá aceitar\r\n            {\r\n                \"_id\": \"teste1\",\r\n                \"value\": \"testevalue1\"\r\n            },\r\n            {\r\n                \"_id\": \"teste2\",\r\n                \"value\": \"testevalue2\"\r\n            }\r\n        ]\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/chat/editChat/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"chat",
+										"editChat",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Chat - importar informações do Lead em massa (Chat)",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "//na função de importação em massa só o campo/objeto \"leadInfo\" será atualizado, como no exemplo abaixo\r\n\r\n[\r\n\r\n    {\r\n        \"_id\": \"1234\", //numero de telefone\r\n        \"leadInfo\": {\r\n            \"nome\": \"João da Silva\",\r\n            \"nomecompleto\": \"João Ferreira da Silva\",\r\n            \"email\": \"joao.silva@email.com\",\r\n            \"cpf\": \"123.456.789-00\",\r\n            \"status\": \"assinante\",\r\n            \"notas\": \"Cliente interessado em novos produtos da linha X.\",\r\n            \"tags\": [\r\n                \"cliente VIP\",\r\n                \"interessado em linha X\"\r\n            ],\r\n            \"etiquetas\": [\"1\", \"2\"], //passe o array de etiquetas pelo id\r\n            \"desativadoFluxoAte\": 1672531200000, // exemplo de timestamp\r\n            \"atendimentoAberto\": false,\r\n            \"responsavelid\": \"resp123\",\r\n            \"customFields\": [\r\n                {\r\n                    \"_id\": \"empresa\",\r\n                    \"value\": \"XYZ Corp\"\r\n                },\r\n                {\r\n                    \"_id\": \"cargo\",\r\n                    \"value\": \"Gerente de Projetos\"\r\n                }\r\n            ]\r\n        }\r\n    },\r\n    {\r\n    \"_id\": \"5678\", //numero de telefone\r\n    \"leadInfo\": {\r\n        \"nome\": \"Maria Fernandes\",\r\n        \"nomecompleto\": \"Maria Fernandes Pereira\",\r\n        \"email\": \"maria.fernandes@email.com\",\r\n        \"cpf\": \"987.654.321-00\",\r\n        \"status\": \"em análise\",\r\n        \"notas\": \"A cliente solicitou informações adicionais sobre o plano Premium.\",\r\n        \"tags\": [\r\n            \"potencial upgrade\",\r\n            \"interessada em plano Premium\"\r\n        ],\r\n        \"etiquetas\": [\"3\", \"4\"], //passe o array de etiquetas pelo id\r\n        \"desativadoFluxoAte\": 1675036800000, // exemplo de timestamp\r\n        \"atendimentoAberto\": true,\r\n        \"responsavelid\": \"resp456\",\r\n        \"customFields\": [\r\n            {\r\n                \"_id\": \"empresa\",\r\n                \"value\": \"ABC Ltda\"\r\n            },\r\n            {\r\n                \"_id\": \"cargo\",\r\n                \"value\": \"Diretora de Marketing\"\r\n            }\r\n        ]\r\n    }\r\n}\r\n\r\n]",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/chat/importChats/{{instance}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"chat",
+										"importChats",
+										"{{instance}}"
+									]
+								}
+							},
+							"response": []
+						}
+					],
+					"description": "Temos um frontend, caso queira ver como usar, feito em bubble:\n\n[https://uazapi-plugin.bubbleapps.io/multiatendimento](https://uazapi-plugin.bubbleapps.io/multiatendimento)\n\nDisponibilizamos o editor para você copiar para seu sistema, fale com o suporte para mais informações."
+				}
+			]
+		},
+		{
+			"name": "Controlar Instância",
+			"item": [
+				{
+					"name": "Instance - Criar ⚠️",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{globalApikey}}",
+									"type": "string"
+								},
+								{
+									"key": "in",
+									"value": "header",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"instanceName\": \"postmanX\",\r\n  \"apikey\": \"teste_apikey_criada_no_postman\",\r\n  \"number\": \"55119987654321\" // coloque seu número de telefone para conectar pelo código que será retornado\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/instance/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"create"
+							]
+						},
+						"description": "URL:  \nSe você está não está no plano ilimitado, e está usando o servidor oficial da uazapi, coloque nesse campo:\n\n[https://server02.uazapi.dev](https://server02.uazapi.dev)\n\nSe você está no plano ilimitado, hospedando a API em seu servidor, coloque:\n\nhttp://\\[ip_da_vps\\]:8080\n\nou se você ativou SSL e domínio na sua VPS/API\n\nhttps://\\[subdomínio\\].\\[seu_domínio\\]\n\nGlobal APIKEY (header):\n\nPara ter uma apikey global você precisa estar no plano ilimitado, hospedando a API no seu servidor.\n\nbody:\n\n\"instanceName\": \"string\", = nome da instância / número conectado\n\n\"apikey\": \"string\" = se deixado em branco gerará uma senha aleatório para essa instância, se definido, vc escolherá a senha para essa instância."
+					},
+					"response": []
+				},
+				{
+					"name": "Instance - Listar todas ⚠️",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{globalApikey}}",
+									"type": "string"
+								},
+								{
+									"key": "in",
+									"value": "header",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/fetchInstances",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"fetchInstances"
+							]
+						},
+						"description": "URL:  \nSe você está não está no plano ilimitado, e está usando o servidor oficial da uazapi, coloque nesse campo:\n\n[https://server02.uazapi.dev](https://server02.uazapi.dev)\n\nSe você está no plano ilimitado, hospedando a API em seu servidor, coloque:\n\nhttp://\\[ip_da_vps\\]:8080\n\nou se você ativou SSL e domínio na sua VPS/API\n\nhttps://\\[subdomínio\\].\\[seu_domínio\\]  \n\n  \n\nGlobal APIKEY:\n\nPara ter uma apikey global você precisa estar no plano ilimitado, hospedando a API no seu servidor."
+					},
+					"response": []
+				},
+				{
+					"name": "Instance - Info + QR Code",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/connectionState/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"connectionState",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Instance - Definir Webhook",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n   \r\n    //webhook\r\n    \"url\": \"https://webhook.site/fc29x57-32e7-48e5-b61c-cbcca231d586\",\r\n    \"enabled\": false, // habilitar ou não, o webhook\r\n    \"local_map\": false, // cada evento vai para uma subrota diferente, teste no webhook.site\r\n    \r\n    //eventos que serão escutados:\r\n    //comuns:\r\n    \"STATUS_INSTANCE\": true,\r\n    \"MESSAGES_UPSERT\": true,\r\n    \"SEND_MESSAGE\": true,\r\n    \"GROUPS_UPSERT\": true,\r\n    \"GROUPS_UPDATE\": true,\r\n    \"GROUP_PARTICIPANTS_UPDATE\": true,\r\n    \r\n    \"groups_ignore\": true, // se verdadeiro, ignora totalmente os grupos: ignora messages_upsert de grupo, não salva a mensagem recebida, e os eventos GROUPS_UPSERT, GROUPS_UPDATE e GROUP_PARTICIPANTS_UPDATE serão ignorados também.\r\n\r\n    //pouco usados:\r\n    \"MESSAGES_UPDATE\": true,\r\n    \"QRCODE_UPDATED\": true,\r\n    \"MESSAGES_SET\": true,\r\n    \"CONTACTS_SET\": true,\r\n    \"CONTACTS_UPSERT\": true,\r\n    \"CONTACTS_UPDATE\": true,\r\n    \"PRESENCE_UPDATE\": true,\r\n    \"CHATS_SET\": true,\r\n    \"CHATS_UPSERT\": true,\r\n    \"CHATS_UPDATE\": true,\r\n    \"CHATS_DELETE\": true,\r\n    \"CONNECTION_UPDATE\": true\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/webhook/set/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"webhook",
+								"set",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Instance - Status Webhook",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/webhook/find/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"webhook",
+								"find",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Instance - Logout",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/logout/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"logout",
+								"{{instance}}"
+							]
+						},
+						"description": "Você só pode fazer logout se a instancia tiver conectada com um número whatsapp."
+					},
+					"response": []
+				},
+				{
+					"name": "Instance - Delete",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/instance/delete/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"instance",
+								"delete",
+								"{{instance}}"
+							]
+						},
+						"description": "Só é possível deletar instâncias que não estão conectadas com um número whatsapp."
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "Disparador -> agendado / em massa",
+			"item": [
+				{
+					"name": "edit - Envio agendado",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    // \"_id\": \"6529451118a558ee99f3be61\", // sem o _id = cria um novo, com o _id = edita\r\n    //\"delete\": true, //caso queria apagar, passa o _id e esse campo, que irá apagar o envio\r\n    \"status\": \"scheduled\", // \"scheduled\"| \"stopped\" |\"done\" - caso queira parar esse envio, passe o _id e o status de \"stopped\"\r\n    \"info\": \"teste\", // apenas informativo - não altera a função\r\n      \"remoteJids\": [\r\n        \"654\", \"123\" // lista de número que irá enviar\r\n    ],\r\n    \"when\": 0, // quando, data unix em milisegundos, 0 = agora \r\n    // atenção: sempre ao reconectar fará uma buscar de todos os envios agendados para as últimas 12 horas não realizados e enviará, os agendamentos não realizados agendados há mais de 12 horas serão ignorados, reagende estes se quiser editando o when.\r\n    \"delaySecMin\": 1, //delay minimo em segundos entre uma mensagem e outra\r\n    \"delaySecMax\": 5, //delay máximo em segundos entre uma mensagem e outra\r\n    \"type\": \"text\", // \"text\" | \"video\" | \"image\" | \"document\" | \"audio\" | \"flow\" conforme exemplo abaixo\r\n    \"flowName\": \"nome do fluxo\", // se type for flow, preencha o nome do fluxo aqui, não precisando passar o atributo message abaixo, caso contrário, deixe vazio, ou não passe esse atributo.\r\n    \"message\": {\r\n        \"text\": \"nome: {{nome}}, nome completo: {{nomecompleto}}, note: {{note}}, tags: {{tags}}, status: {{statusLead}}, email: {{email}}, cpf: {{cpf}}, assignedTo: {{assignedTo}}, campo personalizado, customFields:  Endereço: {{Endereço}}, 12345: {{12345}}  \",\r\n        // Escreva o texto da mensagem, não funciona para aúdio, opcional para envio de arquivos, obrigatório para envio de texto.\r\n        // você pode usar dinamicamente os dados de fields e customFields definidos no multiatendimento (AutomateSystem)\r\n        \"urlOrBase64\": \"https://s3.amazonaws.com/appforest_uf/f1673468269758x727494806159481100/311627492_164638622952139_6016681321028139878_n.jpg\",\r\n        // aconselhamos enviar arquivo como URL, em base64 muitas vezes dá erro\r\n        //\"fileName\": \"planilha.xls\", //somente necessário quando enviar base64\r\n        // image | video | document (obrigatório apenas para quando type for \"media\".\r\n        \"delay\": 0 // valor em milisegundos, 1000 = 1 segundo\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/automate/scheduleMessage/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"automate",
+								"scheduleMessage",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ver - Envios Agendados",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/automate/scheduleMessage/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"automate",
+								"scheduleMessage",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Apagar Envios agendados já realizados",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/automate/deleteDoneMessages/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"automate",
+								"deleteDoneMessages",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Apagar TODOS os Envios agendados",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/automate/deleteAllMessages/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"automate",
+								"deleteAllMessages",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Temos um frontend, caso queira ver como usar, feito em bubble:\n\n[https://uazapi-plugin.bubbleapps.io/envio_agendado](https://uazapi-plugin.bubbleapps.io/envio_agendado)\n\nDisponibilizamos o editor para você copiar para seu sistema, fale com o suporte para mais informações."
+		},
+		{
+			"name": "Envios",
+			"item": [
+				{
+					"name": "Enviar Texto",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"textMessage\": {\r\n    \"text\": \"message\"\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200,\r\n    \"linkPreview\": false, // caso queria remover o preview dos links\r\n    \"changeVariables\": true // para modificar as variaveis do multiatendimento que tem esse {{formato}} para o valor do destinatário.\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendText/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendText",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Texto tipo resposta",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"textMessage\": {\r\n    \"text\": \"message\"\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200,\r\n    \"quoted\": {\r\n            \"key\": {\r\n                \"id\": \"3EB068C081CF775DA46CC1\"\r\n             }\r\n        }\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendText/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendText",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "! Enviar Texto mencionando 1",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{groupJid}}\",\r\n  \"textMessage\": {\r\n    \"text\": \"message\"\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200,\r\n    \"mentions\": {\r\n        \"everyOne\": false,\r\n        \"mentioned\": [\r\n        \"{{remotejid}}\"\r\n        ]\r\n    }\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendText/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendText",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Texto com menção - todos",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{groupJid}}\",\r\n  \"textMessage\": {\r\n    \"text\": \"message\"\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200,\r\n    \"mentions\": {\r\n        \"everyOne\": true\r\n    }\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendText/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendText",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Arquivo",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"mediaMessage\": {\r\n    \"mediatype\": \"image\", //image | document | video\r\n    \"fileName\": \"image.jpg\",\r\n    \"caption\": \"message\",\r\n    \"media\": \"https://s3.amazonaws.com/appforest_uf/f1673468269758x727494806159481100/311627492_164638622952139_6016681321028139878_n.jpg\" \r\n    //você pode enviar no lugar da URL, o arquivo em base64\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendMedia/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendMedia",
+								"{{instance}}"
+							]
+						},
+						"description": "\"mediatype\" pode ser \"audio\", \"image\", \"video\" ou \"document\"\n\na propriedade \"fileName\" é opcional\n\nStartFragmentEndFragm"
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar figurinha",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"number\": \"{{remotejid}}\",\r\n    \"options\": {\r\n        \"delay\": 1200,\r\n        \"presence\": \"composing\"\r\n    },\r\n    \"stickerMessage\": {\r\n        \"image\": \"https://www.gstatic.com/webp/gallery/5.webp\"   \r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendSticker/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendSticker",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Audio",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"audioMessage\": {\r\n    \"audio\": \"https://s3.amazonaws.com/appforest_uf/f1674251707433x301808511927603260/file_example_MP3_700KB.mp3\" //pode enviar qualquer tipo de audio que a api converte para .ogg\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200,\r\n    \"presence\": \"recording\"\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendWhatsAppAudio/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendWhatsAppAudio",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Localização",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"locationMessage\": {\r\n    \"name\": \"Maracanã\",\r\n    \"address\": \"Av. Pres. Castelo Branco, Portão 3 - Maracanã, Rio de Janeiro - RJ, 20271-130\",\r\n    \"latitude\": -22.912982815767986,\r\n    \"longitude\": -43.23028153499254\r\n  },\r\n  \"options\": {\r\n    \"delay\": 200\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendLocation/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendLocation",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "! Enviar Contato",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"contactMessage\": [\r\n    {\r\n     \"fullName\": \"Contact Name\",\r\n     \"phoneNumber\": \"+55 99 9 9999-9999 | 55 50 96815792\", // para mandar mais de um número, separe por | como no exemplo\r\n     \"organization\": \"Company Name\", // opcional\r\n     \"email\": \"email\", // opcional\r\n     \"url\": \"url page\" // opcional\r\n    },\r\n    {\r\n      \"fullName\": \"Name2\",\r\n      \"phoneNumber\": \"+55 21 0 0000-0000\"\r\n    }\r\n  ],\r\n  \"options\": {\r\n    \"delay\": 200\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendContact/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendContact",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Enquete",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\",\r\n  \"pollMessage\": {\r\n    \"name\": \"Nome Enquete Teste\",\r\n    \"selectableCount\": 1,\r\n    \"values\": [\r\n         \"Opt.: 1\",\r\n         \"Opt.: 2\",\r\n         \"Opt.: 3\",\r\n         \"Opt.: 4\"\r\n         ]\r\n    }\r\n}\r\n"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendPoll/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendPoll",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🤖 Enviar botões, lista  de opções ou enquete",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "// Atenção 1:\r\n// listas sempre foram problemáticas, e o WhatsApp pode bloquear mais uma vez a qualquer hora, \r\n// por isso fiz esse endpoint bem parecido com enquete, para o desenvolvedor trocar rápidamente entre um e outro.\r\n\r\n// Atenção 2:\r\n// Botões só aparecem no celular, não aparece na web/desktop\r\n\r\n//Atenção 3:\r\n//A lista, se enviada de uma conta Business, não aparece no celular de quem enviou (parece que não foi enviada, mas foi). Para verificar o envio, veja no whatsappWeb, desktop ou multiatendimento.\r\n\r\n{\r\n    \"number\": \"{{remotejid}}\",\r\n    \"menuMessage\": {\r\n        \"type\": \"list\", // \"list\" para lista, \"poll\" para enquete, \"button\" para botões\r\n        \"text\": \"Teste Lista\\n\",\r\n        // Para \"list\", a primeira linha antes da quebra de linha é o título. Para \"poll\" e \"button\", o texto inteiro é tratado como se fosse um título.\r\n        \r\n        \"footerText\": \"Só na uazapi\", // Apenas para \"list\" e \"button\". Texto opcional no rodapé.\r\n        \"buttonText\": \"Selecione\", // Botão para abrir a lista. Apenas para \"list\". Padrão: \"Selecione\" (se não passar valor).\r\n        \r\n        \"selectableCount\": 1, // Apenas para \"poll\". Número máximo de opções que podem ser selecionadas. Padrão: 1 (se não passar valor).\r\n        \"choices\": [\r\n            \"[subtítulo1]\",\r\n            \"A melhor API\",\r\n            \"Entrar na fila\",\r\n            \"[subtítulo2]\",\r\n            \"Opt.: 3\",\r\n            \"Opt.: 4\\nteste\\n123\", // Em \"list\", \"Opt.: 4\" é a opção, \"teste\" a descrição, \"123\" o id . Em \"poll\", apenas \"Opt.: 4\" é considerado.\r\n            \"Opt.: 4\\nteste\" // Em \"button\", \"Opt.: 4\" é a opção, \"teste\" é o id, se passar o id iniciando com http o botão será tipo URL\r\n          //  // Em \"list\" caso não passe os valores, descrição é opcional, ficará em branco, e o id será o mesmo valor da opção.\r\n        ]\r\n    },\r\n    \"options\": {\r\n        \"delay\": 200\r\n    }\r\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendMenu/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendMenu",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar presença",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n\"number\": \"{{remotejid}}\",\r\n\"presence\": \"composing\" // \"available\" | \"unavailable\" | \"composing\" | \"recording\" | \"paused\" \r\n}\r\n\r\n//explicações:\r\n//\"composing\" = digitando - fica por 10 segundos ou antes se enviar mesmo endpoint como \"paused\"\r\n//\"recording\" = gravando aúdio - fica por 10 segundos ou antes se enviar mesmo endpoint como \"paused\"\r\n//\"available\" = online\r\n//\"unavailable\" = offline\r\n\r\n//\"Dica rápida: já existe a opção de delay em cada envio de mensagem. Então, acione o aviso 'Digitando...' apenas se precisar de mais tempo para elaborar sua resposta. Isso indica ao interlocutor que você está ativo e envolvido na conversa.\""
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/updatePresence/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"updatePresence",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Ação na mensagem",
+			"item": [
+				{
+					"name": "Arquivar chat",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{globalApikey}}",
+									"type": "string"
+								},
+								{
+									"key": "in",
+									"value": "header",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"lastMessage\": {\r\n    \"key\": {\r\n      \"remoteJid\": \"09812@s.whatsapp.net\",\r\n       \"fromMe\": false,\r\n       \"id\": \"3EB0D24110DFAA0120C64B\"\r\n    }\r\n  },\r\n  \"archive\": false\r\n  // false: para desarquivar\r\n  // true: para arquivar\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/archiveChat/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"archiveChat",
+								"{{instance}}"
+							]
+						},
+						"description": "URL:  \nSe você está não está no plano ilimitado, e está usando o servidor oficial da uazapi, coloque nesse campo:\n\n[https://server02.uazapi.dev](https://server02.uazapi.dev)\n\nSe você está no plano ilimitado, hospedando a API em seu servidor, coloque:\n\nhttp://\\[ip_da_vps\\]:8080\n\nou se você ativou SSL e domínio na sua VPS/API\n\nhttps://\\[subdomínio\\].\\[seu_domínio\\]\n\nGlobal APIKEY (header):\n\nPara ter uma apikey global você precisa estar no plano ilimitado, hospedando a API no seu servidor.\n\nbody:\n\n\"instanceName\": \"string\", = nome da instância / número conectado\n\n\"apikey\": \"string\" = se deixado em branco gerará uma senha aleatório para essa instância, se definido, vc escolherá a senha para essa instância."
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar reação",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"reactionMessage\": {\r\n    \"key\": {\r\n      \"remoteJid\": \"120363070722855493@g.us\",\r\n      \"fromMe\": true,\r\n      \"id\": \"BAE54C90E05DA30C\"\r\n    },\r\n    \"reaction\": \"😒\"\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendReaction/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendReaction",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Baixar arquivo de uma mensagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"key\": {\r\n    \"id\": \"3EB05FC61A57F01C265A\" // passe o id da mensagem\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/getBase64FromMediaMessage/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"getBase64FromMediaMessage",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Apagar Mensagem",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "\r\n{\r\n  \"id\": \"3EB05FC61A57F01C265A\",\r\n  \"remoteJid\": \"120363070722855493@g.us\",\r\n  \"fromMe\": false,\r\n  \"paticipant\": \"numero@s.whatsapp.net\" //apenas para grupos, terá participant na mensagem, ai vc passa esse parametro\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/deleteMessageForEveryone/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"deleteMessageForEveryone",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Marcar mensagem como lida",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"readMessages\": [\r\n    {\r\n      \"remoteJid\": \"120363070722855493@g.us\",\r\n      \"fromMe\": false,\r\n      \"id\": \"3EB05FC61A57F01C265A\"\r\n    }\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/markMessageAsRead/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"markMessageAsRead",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Status / Stories",
+			"item": [
+				{
+					"name": "Enviar Stories Texto",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "// Atenção: as vezes o status/stories é enviado, mas pode não aparecer no seu histórico.\r\n// O status/stories pode aparecer no seu histórico do whatsapp web, se você tiver conectado a um.\r\n// Uma dica é ter um outro número que seja contato para verificar se o status/stories foi enviado.\r\n{\r\n    \"statusMessage\": {\r\n        \"type\": \"text\",\r\n        \"content\": \"Uazapi, a melhor API para WhatsApp\",\r\n        \"backgroundColor\": \"#008000\", // Opcional, coloque as cores. Exemplos:\r\n        //   #FFFFFF = White\r\n        //   #0000FF = Blue\r\n        //   #008000 = Green\r\n        //   #FFFF00 = Yellow\r\n        //   #FF0000 = Red\r\n        //   #800080 = Purple\r\n        //   #808080 = Gray\r\n        //   #FFC0CB = Pink \r\n        \"font\": 1, // Tipos de fonte\r\n        //   1 = SERIF\r\n        //   2 = NORICAN_REGULAR\r\n        //   3 = BRYNDAN_WRITE\r\n        //   4 = BEBASNEUE_REGULAR\r\n        //   5 = OSWALD_HEAVY */\r\n        \"allContacts\": true // true para mandar para todos os contatos ou\r\n                            //   false para mandar para uma lista abaixo\r\n        //   \"statusJidList\": [\r\n        //       \"{{remoteJid}}@s.whatsapp.net\"\r\n        //   ]\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendStatus/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendStatus",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Stories Imagem ou Video",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "// Atenção: as vezes o status/stories é enviado, mas pode não aparecer no seu histórico.\r\n// O status/stories pode aparecer no seu histórico do whatsapp web, se você tiver conectado a um.\r\n// Uma dica é ter um outro número que seja contato para verificar se o status/stories foi enviado.\r\n{\r\n    \"statusMessage\": {\r\n        \"type\": \"video\", // image ou video \r\n        \"content\": \"https://edisciplinas.usp.br/pluginfile.php/5196097/mod_resource/content/1/Teste.mp4\", // url da imagem ou video\r\n        \"caption\": \"Status/storie caption\", // Opcional\r\n        \"allContacts\": true // true para mandar para todos os contatos ou\r\n                            // false para mandar para lista abaixo\r\n        // \"statusJidList\": [\r\n        //     \"{{remoteJid}}@s.whatsapp.net\"\r\n        // ]\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendStatus/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendStatus",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Stories Audio",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "// Atenção: as vezes o status/stories é enviado, mas pode não aparecer no seu histórico.\r\n// O status/stories pode aparecer no seu histórico do whatsapp web, se você tiver conectado a um.\r\n// Uma dica é ter um outro número que seja contato para verificar se o status/stories foi enviado.\r\n{\r\n    \"statusMessage\": {\r\n        \"type\": \"audio\",\r\n        \"content\": \"https://s3.amazonaws.com/appforest_uf/f1674251707433x301808511927603260/file_example_MP3_700KB.mp3\",\r\n        \"allContacts\": true // true para mandar para todos os contatos ou\r\n                            // false para mandar para lista abaixo\r\n        // \"statusJidList\": [\r\n        //     \"{{remoteJid}}@s.whatsapp.net\"\r\n        // ]\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/message/sendStatus/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"message",
+								"sendStatus",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Controlar Grupos",
+			"item": [
+				{
+					"name": "Funciona - Porém está em desuso",
+					"item": [
+						{
+							"name": "Grupo - Mudar configurações",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"setting\": \"announcement\" // 'announcement' | 'not_announcement' | 'unlocked' | 'locked';\r\n}\r\n\r\n// usar: https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/group/groupSetting/{{instance}}?groupJid={{groupJid}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"group",
+										"groupSetting",
+										"{{instance}}"
+									],
+									"query": [
+										{
+											"key": "groupJid",
+											"value": "{{groupJid}}"
+										}
+									]
+								},
+								"description": "\"announcement | not_announcement | unlocked | locked\"\n\nannouncement = apenas admins podem enviar mensagem\n\nnot_announcement = qualquer um pode enviar mensagem\n\nunlocked = qualquer um pode editar os dados do grupo\n\nlocked = só admins podem editar os dados do grupo"
+							},
+							"response": []
+						},
+						{
+							"name": "Grupo - Mudar nome",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n  \"name\": \"grupo uazapi\"\r\n}\r\n\r\n// usar: https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/group/groupName/{{instance}}?groupJid={{groupJid}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"group",
+										"groupName",
+										"{{instance}}"
+									],
+									"query": [
+										{
+											"key": "groupJid",
+											"value": "{{groupJid}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Grupo - tempo das mensagens",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n  \"expiration\": 0 // 0 = desativado\r\n                  // 86400 = 24 horas\r\n                  // 604800 = 7 dias\r\n                  // 7776000 = 90 dias\r\n}\r\n\r\n// usar: https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/group/toggleEphemeral/{{instance}}?groupJid={{groupJid}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"group",
+										"toggleEphemeral",
+										"{{instance}}"
+									],
+									"query": [
+										{
+											"key": "groupJid",
+											"value": "{{groupJid}}"
+										}
+									]
+								},
+								"description": "\"announcement | not_announcement | unlocked | locked\"\n\nannouncement = apenas admins podem enviar mensagem\n\nnot_announcement = qualquer um pode enviar mensagem\n\nunlocked = qualquer um pode editar os dados do grupo\n\nlocked = só admins podem editar os dados do grupo"
+							},
+							"response": []
+						},
+						{
+							"name": "Grupo - Mudar descrição",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n  \"description\": \"Teste descrição\"\r\n}\r\n\r\n// usar: https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/group/groupDesc/{{instance}}?groupJid={{groupJid}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"group",
+										"groupDesc",
+										"{{instance}}"
+									],
+									"query": [
+										{
+											"key": "groupJid",
+											"value": "{{groupJid}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Grupo - Mudar imagem de um grupo",
+							"request": {
+								"auth": {
+									"type": "apikey",
+									"apikey": [
+										{
+											"key": "value",
+											"value": "{{apikey}}",
+											"type": "string"
+										},
+										{
+											"key": "key",
+											"value": "apikey",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n  \"image\": \"https://s3.amazonaws.com/appforest_uf/f1673468269758x727494806159481100/311627492_164638622952139_6016681321028139878_n.jpg\"\r\n}\r\n\r\n// usar: https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/group/updateGroupPicture/{{instance}}?groupJid={{groupJid}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"group",
+										"updateGroupPicture",
+										"{{instance}}"
+									],
+									"query": [
+										{
+											"key": "groupJid",
+											"value": "{{groupJid}}"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					],
+					"description": "Usar a função \"Grupo - Mudar configurações - tudo em um\"\n\n[https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d](https://www.postman.com/augustofcs/workspace/uazapi/request/16303723-171e46df-54dc-493c-aa9a-5bc1d429eb5d)"
+				},
+				{
+					"name": "Grupo - Criar",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"subject\": \"uazapi grupo\",  \r\n  \"description\": \"opcional\",\r\n  \"participants\": [\r\n    \"{{remotejid}}\" // adicionar outros separado por virgula\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/create/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"create",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Entrar em um grupo",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"inviteCode\": \"https://chat.whatsapp.com/KpV6Rcu9eAVCPQ4cM8mvgl\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/joinGroup/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"joinGroup",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Revogar invite URL code",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/group/revokeInviteCode/{{instance}}?groupJid={{groupJid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"revokeInviteCode",
+								"{{instance}}"
+							],
+							"query": [
+								{
+									"key": "groupJid",
+									"value": "{{groupJid}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Modificar/aprovar membros",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"action\": \"add\", // 'add' | 'remove' | 'promote' | 'demote' | 'reject' | 'approve';\r\n  \"participants\": [\r\n    \"5521996x15792\",\r\n    \"5521986x31256\"\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/updateParticipant/{{instance}}?groupJid={{groupJid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"updateParticipant",
+								"{{instance}}"
+							],
+							"query": [
+								{
+									"key": "groupJid",
+									"value": "{{groupJid}}"
+								}
+							]
+						},
+						"description": "\"action\" Opções:  \nadd - adiciona participantes  \nremove - remove participantes  \npromote - Adiciona na lista de administradores  \ndemote - Remove da lista de administradores"
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Buscar todos",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/findGroups/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"findGroups",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Detalhes de um grupo",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/group/findGroupInfos/{{instance}}?groupJid={{groupJid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"findGroupInfos",
+								"{{instance}}"
+							],
+							"query": [
+								{
+									"key": "groupJid",
+									"value": "{{groupJid}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Invite URL code",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/group/inviteCode/{{instance}}?groupJid={{groupJid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"inviteCode",
+								"{{instance}}"
+							],
+							"query": [
+								{
+									"key": "groupJid",
+									"value": "{{groupJid}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - invite code details",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"inviteCode\": \"xxx\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/inviteCodeDetails/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"inviteCodeDetails",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Mudar configurações - tudo em um",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    //passe apenas os campos que deseja atualizar\r\n\r\n    \"name\": \"grupo uazapi1\",\r\n    \"image\": \"https://s3.amazonaws.com/appforest_uf/f1673468269758x727494806159481100/311627492_164638622952139_6016681321028139878_n.jpg\",\r\n    \"description\": \"Teste descrição2\",\r\n    \"restrict\": false, // só admin pode editar info do grupo (nome, imagem, descrição, duração das mensagens)\r\n    \"announce\": true, // só admin pode enviar mensagem\r\n    \"memberAddMode\": true, // membros não admins podem adicionar outros membros\r\n    \"joinApprovalMode\": true, // admin precisa aprovar novos membros\r\n    \"expiration\": 0 // 0 = desativado\r\n                    // 86400 = 24 horas\r\n                    // 604800 = 7 dias\r\n                     // 7776000 = 90 dias\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/groupBetterSetting/{{instance}}?groupJid={{groupJid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"groupBetterSetting",
+								"{{instance}}"
+							],
+							"query": [
+								{
+									"key": "groupJid",
+									"value": "{{groupJid}}"
+								}
+							]
+						},
+						"description": "\"announcement | not_announcement | unlocked | locked\"\n\nannouncement = apenas admins podem enviar mensagem\n\nnot_announcement = qualquer um pode enviar mensagem\n\nunlocked = qualquer um pode editar os dados do grupo\n\nlocked = só admins podem editar os dados do grupo"
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Sair",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/group/leaveGroup/{{instance}}?groupJid={{groupJid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"leaveGroup",
+								"{{instance}}"
+							],
+							"query": [
+								{
+									"key": "groupJid",
+									"value": "{{groupJid}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Buscas",
+			"item": [
+				{
+					"name": "Buscar Chats",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/chat/findChats/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"findChats",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Etiquetas",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/chat/findLabels/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"findLabels",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Grupo - Buscar todos",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group/findGroups/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"group",
+								"findGroups",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Contatos",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"where\": {\r\n      \r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/findContacts/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"findContacts",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Mensagens",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"where\": {\r\n    \"key\": {\r\n      \"remoteJid\": \"{{remotejid}}@s.whatsapp.net\"\r\n    }\r\n  },\r\n  \"limit\": 1\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/findMessages/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"findMessages",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Funções relacionadas ao perfil",
+			"item": [
+				{
+					"name": "Checar se número existe",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"numbers\": [\r\n    \"5521996x5792\",\r\n    \"5521911111111\"\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/whatsappNumbers/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"whatsappNumbers",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pegar imagem de perfil",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"5521996x5792\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/fetchProfilePictureUrl/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"fetchProfilePictureUrl",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Dados de um perfil",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"number\": \"{{remotejid}}\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/fetchProfile/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"fetchProfile",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Recado (status)",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"status\": \"não me liga\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/updateProfileStatus/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"updateProfileStatus",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ver config de privacidade",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/chat/fetchPrivacySettings/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"fetchPrivacySettings",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Alterar privacidade",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "{{apikey}}",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "apikey",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"privacySettings\": {\n        \"readreceipts\": \"all\", // opções: 'all', 'none'\n        \"profile\": \"all\",      // opções: 'all', 'contacts', 'contact_blacklist', 'none'\n        \"status\": \"contacts\",  // opções: 'all', 'contacts', 'contact_blacklist', 'none'\n        \"last\": \"contacts\",    // opções: 'all', 'contacts', 'contact_blacklist', 'none'\n        \"online\": \"all\",       // opções: 'all', 'match_last_seen' \n        \"groupadd\": \"all\"     // opções: 'all', 'contacts', 'contact_blacklist', 'none'\n       // \"calladd\": \"all\"       // opções: 'all', 'contacts', 'contact_blacklist', 'none'\n       // calladd não tá funcionando a modificação\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/chat/updatePrivacySettings/{{instance}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"chat",
+								"updatePrivacySettings",
+								"{{instance}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Configuração de todas as instancias",
+			"request": {
+				"auth": {
+					"type": "apikey",
+					"apikey": [
+						{
+							"key": "value",
+							"value": "{{globalApikey}}",
+							"type": "string"
+						},
+						{
+							"key": "in",
+							"value": "header",
+							"type": "string"
+						},
+						{
+							"key": "key",
+							"value": "apikey",
+							"type": "string"
+						}
+					]
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "// configuração para todas as instâncias\r\n// Após qualquer alteração você precisa reiniciar a API com o comando /exit para as alterações entrarem em vigor\r\n\r\n{\r\n    //nome que aparece no whatsapp ao conectar na API - só funciona para novas conexões.\r\n    \"connectedName\": \"uazapi\",\r\n\r\n    //webhook\r\n    \"WebhookGlobal\": {\r\n        \"url\": \"https://webhook.site/13fab9-0156efcf2592\",\r\n        \"enabled\": true, // habilitar ou não, o webhook\r\n        \"local_map\": true, // cada evento vai para uma subrota diferente, teste no webhook.site\r\n        //eventos que serão escutados:\r\n        //comuns:\r\n        \"STATUS_INSTANCE\": false,\r\n        \"MESSAGES_UPSERT\": false,\r\n        \"SEND_MESSAGE\": false,\r\n        \"GROUPS_UPSERT\": false,\r\n        \"GROUPS_UPDATE\": false,\r\n        \"GROUP_PARTICIPANTS_UPDATE\": false,\r\n        //pouco usados:\r\n        \"MESSAGES_UPDATE\": false,\r\n        \"QRCODE_UPDATED\": false,\r\n        \"MESSAGES_SET\": false,\r\n        \"CONTACTS_SET\": false,\r\n        \"CONTACTS_UPSERT\": false,\r\n        \"CONTACTS_UPDATE\": false,\r\n        \"PRESENCE_UPDATE\": false,\r\n        \"CHATS_SET\": false,\r\n        \"CHATS_UPSERT\": false,\r\n        \"CHATS_UPDATE\": false,\r\n        \"CHATS_DELETE\": false,\r\n        \"CONNECTION_UPDATE\": false\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/config",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"config"
+					]
+				},
+				"description": "URL:  \nSe você está não está no plano ilimitado, e está usando o servidor oficial da uazapi, coloque nesse campo:\n\n[https://server02.uazapi.dev](https://server02.uazapi.dev)\n\nSe você está no plano ilimitado, hospedando a API em seu servidor, coloque:\n\nhttp://\\[ip_da_vps\\]:8080\n\nou se você ativou SSL e domínio na sua VPS/API\n\nhttps://\\[subdomínio\\].\\[seu_domínio\\]\n\nGlobal APIKEY (header):\n\nPara ter uma apikey global você precisa estar no plano ilimitado, hospedando a API no seu servidor.\n\nbody:\n\n\"instanceName\": \"string\", = nome da instância / número conectado\n\n\"apikey\": \"string\" = se deixado em branco gerará uma senha aleatório para essa instância, se definido, vc escolherá a senha para essa instância."
+			},
+			"response": []
+		},
+		{
+			"name": "Ver configuração de todas as instancias",
+			"request": {
+				"auth": {
+					"type": "apikey",
+					"apikey": [
+						{
+							"key": "value",
+							"value": "{{globalApikey}}",
+							"type": "string"
+						},
+						{
+							"key": "in",
+							"value": "header",
+							"type": "string"
+						},
+						{
+							"key": "key",
+							"value": "apikey",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/config",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"config"
+					]
+				},
+				"description": "URL:  \nSe você está não está no plano ilimitado, e está usando o servidor oficial da uazapi, coloque nesse campo:\n\n[https://server02.uazapi.dev](https://server02.uazapi.dev)\n\nSe você está no plano ilimitado, hospedando a API em seu servidor, coloque:\n\nhttp://\\[ip_da_vps\\]:8080\n\nou se você ativou SSL e domínio na sua VPS/API\n\nhttps://\\[subdomínio\\].\\[seu_domínio\\]\n\nGlobal APIKEY (header):\n\nPara ter uma apikey global você precisa estar no plano ilimitado, hospedando a API no seu servidor.\n\nbody:\n\n\"instanceName\": \"string\", = nome da instância / número conectado\n\n\"apikey\": \"string\" = se deixado em branco gerará uma senha aleatório para essa instância, se definido, vc escolherá a senha para essa instância."
+			},
+			"response": []
+		},
+		{
+			"name": "⚠️ Reiniciar API ⚠️",
+			"request": {
+				"auth": {
+					"type": "apikey",
+					"apikey": [
+						{
+							"key": "value",
+							"value": "{{globalApikey}}",
+							"type": "string"
+						},
+						{
+							"key": "in",
+							"value": "header",
+							"type": "string"
+						},
+						{
+							"key": "key",
+							"value": "apikey",
+							"type": "string"
+						}
+					]
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": " // Esta rota encerra o serviço da API. Note que, devido à configuração de nosso gerenciador de processos, a API será automaticamente reiniciada.",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/exit",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"exit"
+					]
+				},
+				"description": "URL:  \nSe você está não está no plano ilimitado, e está usando o servidor oficial da uazapi, coloque nesse campo:\n\n[https://server02.uazapi.dev](https://server02.uazapi.dev)\n\nSe você está no plano ilimitado, hospedando a API em seu servidor, coloque:\n\nhttp://\\[ip_da_vps\\]:8080\n\nou se você ativou SSL e domínio na sua VPS/API\n\nhttps://\\[subdomínio\\].\\[seu_domínio\\]\n\nGlobal APIKEY (header):\n\nPara ter uma apikey global você precisa estar no plano ilimitado, hospedando a API no seu servidor.\n\nbody:\n\n\"instanceName\": \"string\", = nome da instância / número conectado\n\n\"apikey\": \"string\" = se deixado em branco gerará uma senha aleatório para essa instância, se definido, vc escolherá a senha para essa instância."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "coloque a url do servidor",
+			"type": "string"
+		},
+		{
+			"key": "instance",
+			"value": "nome da instancia",
+			"type": "string"
+		},
+		{
+			"key": "apikey",
+			"value": "api key da instancia",
+			"type": "string"
+		},
+		{
+			"key": "globalApikey",
+			"value": "global api key",
+			"type": "string"
+		},
+		{
+			"key": "groupJid",
+			"value": "group@g.us",
+			"type": "string"
+		},
+		{
+			"key": "remotejid",
+			"value": "numero do telefone",
+			"type": "string"
+		},
+		{
+			"key": "teste",
+			"value": "1",
+			"type": "string"
+		}
+	]
+}
