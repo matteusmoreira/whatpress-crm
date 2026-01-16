@@ -578,7 +578,7 @@ def resolve_public_base_url(request: Optional[Request] = None) -> str:
         if host:
             return f"{proto}://{host}".rstrip("/")
 
-    return "https://whatpress-crm-production.up.railway.app"
+    return "https://altarcrm.up.railway.app"
 
 def extract_profile_picture_url(data: Any) -> Optional[str]:
     if not isinstance(data, dict):
@@ -7211,7 +7211,7 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
 
             update_data = {'status': status}
             if is_connected:
-                update_data['webhook_url'] = f"https://whatpress-crm-production.up.railway.app/api/webhooks/evolution/{instance_name}"
+                update_data['webhook_url'] = f"https://altarcrm.up.railway.app/api/webhooks/evolution/{instance_name}"
 
             result = supabase.table('connections').update(update_data).eq('instance_name', instance_name).execute()
             logger.info(f"Connection status updated for {instance_name}: {status}, result: {result.data}")
