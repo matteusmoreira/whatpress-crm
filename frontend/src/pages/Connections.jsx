@@ -211,13 +211,13 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
             )}
           </GlassButton>
         )}
-        {/* Botão de Sincronização para Evolution API */}
-        {connection.provider === 'evolution' && (
+        {/* Botão de Sincronização para Evolution API e UAZAPI */}
+        {['evolution', 'uazapi'].includes(connection.provider) && (
           <button
             onClick={handleSync}
             disabled={syncing}
             className="p-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors disabled:opacity-50"
-            title="Sincronizar status com Evolution API"
+            title="Sincronizar status com a API"
           >
             <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
           </button>

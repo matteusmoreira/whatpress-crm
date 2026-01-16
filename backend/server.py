@@ -3094,8 +3094,61 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
 
     async def _create_and_get_qr() -> dict[str, Any]:
         webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
-        create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
         local_conn_ref = conn_ref
+        
+        # Para UAZAPI, verificar se a instância já existe antes de criar
+        if provider_id == "uazapi":
+            try:
+                existing_instances = await provider.list_instances(ctx, connection=conn_ref)
+                # Procurar instância com o mesmo nome
+                existing_token = None
+                if isinstance(existing_instances, list):
+                    for inst in existing_instances:
+                        if isinstance(inst, dict) and str(inst.get("name") or "").strip().lower() == instance_name.lower():
+                            existing_token = _extract_uazapi_instance_token(inst)
+                            logger.info(f"UAZAPI instance '{instance_name}' already exists, reusing token")
+                            break
+                elif isinstance(existing_instances, dict):
+                    # Se retornou direto o objeto ou lista em chave 'instances'
+                    instances_list = existing_instances.get("instances") or existing_instances.get("data") or []
+                    if isinstance(instances_list, list):
+                        for inst in instances_list:
+                            if isinstance(inst, dict) and str(inst.get("name") or "").strip().lower() == instance_name.lower():
+                                existing_token = _extract_uazapi_instance_token(inst)
+                                logger.info(f"UAZAPI instance '{instance_name}' already exists, reusing token")
+                                break
+                
+                if existing_token:
+                    # Instância já existe, salvar token e fazer connect
+                    merged_cfg = dict(local_conn_ref.config or {})
+                    merged_cfg["token"] = existing_token
+                    supabase.table("connections").update({"config": merged_cfg}).eq("id", connection_id).execute()
+                    local_conn_ref = ConnectionRef(
+                        tenant_id=local_conn_ref.tenant_id,
+                        provider=local_conn_ref.provider,
+                        instance_name=local_conn_ref.instance_name,
+                        phone_number=local_conn_ref.phone_number,
+                        config=merged_cfg,
+                    )
+                    # Tentar obter QR code via connect
+                    qr_result = await container.connections.connect_with_retries(
+                        provider, connection=local_conn_ref, correlation_id=f"connect_existing:{connection_id}"
+                    )
+                    qrcode = _extract_qrcode_value(qr_result)
+                    pairing_code = qr_result.get("pairingCode")
+                    if qrcode:
+                        supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
+                        return {
+                            "success": True,
+                            "message": "Escaneie o QR Code para conectar",
+                            "qrcode": qrcode,
+                            "pairingCode": pairing_code,
+                        }
+            except Exception as e:
+                logger.warning(f"Could not check existing UAZAPI instances: {e}")
+        
+        # Criar nova instância
+        create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
         if provider_id == "uazapi":
             token = _extract_uazapi_instance_token(create_result)
             if token:
