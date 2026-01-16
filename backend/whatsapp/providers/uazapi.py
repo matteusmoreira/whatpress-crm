@@ -37,41 +37,42 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         connection: ConnectionRef,
         webhook_url: Optional[str] = None,
     ) -> dict[str, Any]:
+        """Cria uma nova instância UAZAPI.
+        
+        Documentação: POST /instance/create
+        Requer: globalApikey no header apikey
+        Payload: {instanceName, apikey (opcional), number (opcional)}
+        """
         client, cfg = self._build_admin_client(connection)
-        endpoints_raw = cfg.get("endpoints")
-        endpoints_cfg: dict[str, Any] = endpoints_raw if isinstance(endpoints_raw, dict) else {}
-        path = str(endpoints_cfg.get("create_instance") or "/instance/create").strip()
+        
+        # Preparar payload conforme documentação UAZAPI
         instance_apikey = str(
             (connection.config or {}).get("token")
             or (connection.config or {}).get("apikey")
             or (connection.config or {}).get("instance_token")
             or ""
         ).strip()
+        
         phone = connection.phone_number or ""
         phone_norm = _format_phone(phone) if phone else ""
+        
+        # Payload baseado na documentação oficial UAZAPI
         payload: dict[str, Any] = {
             "instanceName": connection.instance_name,
-            "instance_name": connection.instance_name,
-            "name": connection.instance_name,
-            "qrcode": True,
-            "qr": True,
-            "base64": True,
         }
+        
+        # apikey da instância (se fornecida, senão UAZAPI gera automaticamente)
         if instance_apikey:
             payload["apikey"] = instance_apikey
-            payload["token"] = instance_apikey
+        
+        # Número para conectar (retorna código de pareamento)
         if phone_norm:
             payload["number"] = phone_norm
-            payload["phoneNumber"] = phone_norm
-            payload["phone"] = phone_norm
+        
         try:
-            return await _request_with_uazapi_fallbacks(
-                client,
-                method="POST",
-                path=path,
-                json=payload,
-                instance_name=None,
-            )
+            # Endpoint direto conforme documentação: POST /instance/create
+            result = await client.request("POST", "/instance/create", json=payload)
+            return result
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -83,18 +84,16 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
 
     async def delete_instance(self, ctx: ProviderContext, *, connection: ConnectionRef) -> dict[str, Any]:
+        """Deleta uma instância UAZAPI.
+        
+        Documentação: DELETE /instance/delete/{{instance}}
+        Requer: apikey da instância no header
+        Nota: Só é possível deletar instâncias não conectadas.
+        """
         client, cfg = self._build_client(connection)
-        endpoints_raw = cfg.get("endpoints")
-        endpoints_cfg: dict[str, Any] = endpoints_raw if isinstance(endpoints_raw, dict) else {}
-        path = str(endpoints_cfg.get("delete_instance") or "/instance/delete").strip()
+        path = f"/instance/delete/{connection.instance_name}"
         try:
-            return await _request_with_uazapi_fallbacks(
-                client,
-                method="DELETE",
-                path=path,
-                json=None,
-                instance_name=connection.instance_name,
-            )
+            return await client.request("DELETE", path, json=None)
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -106,58 +105,30 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
 
     async def connect(self, ctx: ProviderContext, *, connection: ConnectionRef) -> dict[str, Any]:
+        """Obtém estado de conexão e QRCode da instância.
+        
+        Documentação: GET /instance/connectionState/{{instance}}
+        Retorna: QRCode em base64, status da conexão, código de pareamento
+        """
         client, cfg = self._build_client(connection)
-        endpoints_raw = cfg.get("endpoints")
-        endpoints_cfg: dict[str, Any] = endpoints_raw if isinstance(endpoints_raw, dict) else {}
-        path = str(endpoints_cfg.get("connect") or "/instance/connectionState").strip()
-        phone = connection.phone_number or ""
-        phone_norm = _format_phone(phone) if phone else ""
-        payload: dict[str, Any] = {"qrcode": True, "qr": True, "base64": True}
-        if phone_norm:
-            payload["phone"] = phone_norm
-            payload["phoneNumber"] = phone_norm
-            payload["number"] = phone_norm
+        path = f"/instance/connectionState/{connection.instance_name}"
+        
         try:
-            attempts = [
-                ("GET", path, None),
-                ("POST", path, payload),
-                ("GET", "/instance/connectionState", None),
-                ("GET", "/instance/connect", None),
-                ("POST", "/instance/connect", payload),
-            ]
-            last: Optional[Exception] = None
-            for method, pth, body in attempts:
-                try:
-                    result = await _request_with_uazapi_fallbacks(
-                        client,
-                        method=method,
-                        path=pth,
-                        json=body,
-                        instance_name=connection.instance_name,
-                    )
-                    if isinstance(result, dict):
-                        qrcode = _extract_qrcode_value(result)
-                        if qrcode:
-                            result["base64"] = qrcode
-                        if "pairingCode" not in result:
-                            code = result.get("code")
-                            if isinstance(code, str) and code.strip():
-                                result["pairingCode"] = code.strip()
-                    return result
-                except ProviderRequestError as e:
-                    last = e
-                    details = e.details or {}
-                    if details.get("status_code") not in {400, 404, 405}:
-                        raise
-            if last:
-                raise last
-            return await _request_with_uazapi_fallbacks(
-                client,
-                method="GET",
-                path=path,
-                json=None,
-                instance_name=connection.instance_name,
-            )
+            result = await client.request("GET", path, json=None)
+            
+            if isinstance(result, dict):
+                # Extrair QRCode da resposta
+                qrcode = _extract_qrcode_value(result)
+                if qrcode:
+                    result["base64"] = qrcode
+                
+                # Extrair código de pareamento se presente
+                if "pairingCode" not in result:
+                    code = result.get("code")
+                    if isinstance(code, str) and code.strip():
+                        result["pairingCode"] = code.strip()
+            
+            return result
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -169,30 +140,15 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
 
     async def get_connection_state(self, ctx: ProviderContext, *, connection: ConnectionRef) -> dict[str, Any]:
+        """Obtém estado de conexão da instância.
+        
+        Documentação: GET /instance/connectionState/{{instance}}
+        """
         client, cfg = self._build_client(connection)
-        endpoints_raw = cfg.get("endpoints")
-        endpoints_cfg: dict[str, Any] = endpoints_raw if isinstance(endpoints_raw, dict) else {}
-        path = str(endpoints_cfg.get("get_status") or "/instance/connectionState").strip()
+        path = f"/instance/connectionState/{connection.instance_name}"
+        
         try:
-            attempts = [path, "/instance/connectionState", "/instance/getStatus"]
-            last: Optional[Exception] = None
-            for pth in attempts:
-                try:
-                    return await _request_with_uazapi_fallbacks(
-                        client,
-                        method="GET",
-                        path=pth,
-                        json=None,
-                        instance_name=connection.instance_name,
-                    )
-                except ProviderRequestError as e:
-                    last = e
-                    details = e.details or {}
-                    if details.get("status_code") not in {400, 404, 405}:
-                        raise
-            if last:
-                raise last
-            return await _request_with_uazapi_fallbacks(client, method="GET", path=path, json=None, instance_name=connection.instance_name)
+            return await client.request("GET", path, json=None)
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -204,14 +160,18 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
 
     async def ensure_webhook(self, ctx: ProviderContext, *, connection: ConnectionRef, webhook_url: str) -> dict[str, Any]:
+        """Configura webhook para a instância.
+        
+        Documentação: POST /webhook/set/{{instance}}
+        """
         client, cfg = self._build_client(connection)
-        endpoints_raw = cfg.get("endpoints")
-        endpoints_cfg: dict[str, Any] = endpoints_raw if isinstance(endpoints_raw, dict) else {}
-        path = str(endpoints_cfg.get("ensure_webhook") or "/webhook/set").strip()
+        path = f"/webhook/set/{connection.instance_name}"
+        
         payload = {
             "url": webhook_url,
             "enabled": True,
             "local_map": False,
+            # Eventos principais
             "STATUS_INSTANCE": True,
             "MESSAGES_UPSERT": True,
             "SEND_MESSAGE": True,
@@ -224,14 +184,9 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             "CONNECTION_UPDATE": True,
             "groups_ignore": True,
         }
+        
         try:
-            return await _request_with_uazapi_fallbacks(
-                client,
-                method="POST",
-                path=path,
-                json=payload,
-                instance_name=connection.instance_name,
-            )
+            return await client.request("POST", path, json=payload)
         except ProviderRequestError:
             raise
         except Exception as e:
@@ -545,6 +500,11 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         return client, cfg
 
     def _build_admin_client(self, connection: ConnectionRef) -> tuple[HttpClient, dict[str, Any]]:
+        """Constrói cliente HTTP para operações admin (criar/listar instâncias).
+        
+        UAZAPI usa 'globalApikey' no header 'apikey' para operações admin.
+        Documentação: header apikey com valor da globalApikey.
+        """
         cfg = connection.config or {}
         base_url_raw = str(
             cfg.get("base_url") or cfg.get("url") or cfg.get("baseUrl") or ""
@@ -556,18 +516,20 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         if not base_url:
             base_url = self._default_base_url.rstrip("/")
         base_url = _normalize_uazapi_base_url(base_url)
+        
+        # Buscar globalApikey (token admin)
         admin_token = str(
-            cfg.get("admintoken")
-            or cfg.get("admin_token")
-            or cfg.get("globalApikey")
+            cfg.get("globalApikey")
             or cfg.get("global_apikey")
+            or cfg.get("admintoken")
+            or cfg.get("admin_token")
             or ""
         ).strip()
         if not admin_token:
             admin_token = self._default_admin_token
         if not admin_token:
             raise AuthError(
-                "Uazapi não configurada (admintoken/apikey).",
+                "Uazapi não configurada (globalApikey).",
                 transient=False,
             )
         if not base_url:
@@ -576,9 +538,10 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 provider="uazapi",
                 transient=False,
             )
+        # UAZAPI usa header 'apikey' para autenticação (não 'admintoken')
         client = HttpClient(
             config=HttpClientConfig(base_url=base_url),
-            auth=StaticHeadersAuth(headers={"admintoken": admin_token, "apikey": admin_token}),
+            auth=StaticHeadersAuth(headers={"apikey": admin_token}),
             provider="uazapi",
         )
         return client, cfg
