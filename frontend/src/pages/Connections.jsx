@@ -431,10 +431,21 @@ const Connections = () => {
       }
     }
     try {
-      const created = await createConnection({
-        tenantId,
-        ...newConnection
-      });
+      // Para UAZAPI, incluir uazapiMode e globalApikey dentro do config
+      let connectionData = { tenantId, ...newConnection };
+      if (newConnection.provider === 'uazapi') {
+        const cfg = newConnection.config || {};
+        connectionData = {
+          ...connectionData,
+          config: {
+            ...cfg,
+            uazapi_mode: newConnection.uazapiMode || 'existing',
+            // Mapear admintoken para globalApikey (formato esperado pelo backend)
+            globalApikey: cfg.admintoken || '',
+          }
+        };
+      }
+      const created = await createConnection(connectionData);
       setShowCreateModal(false);
       toast.success('Conexão criada!', { description: 'Configure-a para começar a receber mensagens.' });
 

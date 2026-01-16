@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from .errors import ConnectionError
+from .errors import AuthError, ConnectionError, ProviderRequestError, WhatsAppError
 from .observability import LogContext, Observability
 from .providers.base import ConnectionRef, ProviderContext, WhatsAppProvider
 
@@ -54,11 +54,35 @@ class ConnectionManager:
                 )
                 if not e.transient or attempt >= self._policy.max_attempts:
                     raise
+            except (ProviderRequestError, AuthError) as e:
+                # Erros do provider/auth: repassar com mensagem original
+                last_error = e
+                self._obs.warning(
+                    "whatsapp.connect.provider_error",
+                    ctx=log_ctx,
+                    attempt=attempt,
+                    code=e.code,
+                    transient=e.transient,
+                    message=str(e),
+                )
+                if not e.transient or attempt >= self._policy.max_attempts:
+                    # Repassar o erro original para preservar a mensagem
+                    raise ConnectionError(
+                        str(e.message),
+                        provider=connection.provider,
+                        transient=e.transient,
+                        details=e.details,
+                    )
             except Exception as e:
                 last_error = e
                 self._obs.warning("whatsapp.connect.unexpected_error", ctx=log_ctx, attempt=attempt, error=str(e))
                 if attempt >= self._policy.max_attempts:
-                    raise ConnectionError("Falha inesperada ao conectar.", provider=connection.provider, transient=True)
+                    raise ConnectionError(
+                        f"Falha ao conectar: {str(e)}",
+                        provider=connection.provider,
+                        transient=True,
+                        details={"error": str(e), "type": type(e).__name__},
+                    )
 
             await asyncio.sleep(_with_jitter(delay, self._policy.jitter_s))
             delay = min(delay * 2, self._policy.max_delay_s)
