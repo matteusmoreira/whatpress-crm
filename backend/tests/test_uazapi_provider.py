@@ -18,6 +18,7 @@ def _ensure_backend_on_path() -> None:
 
 
 def test_uazapi_provider_registered_and_capabilities() -> None:
+    """Testa se o provider está registrado com capabilities v2."""
     _ensure_backend_on_path()
     whatsapp = importlib.import_module("backend.whatsapp")
     container = whatsapp.get_whatsapp_container()
@@ -26,11 +27,13 @@ def test_uazapi_provider_registered_and_capabilities() -> None:
     provider = container.registry.get("uazapi")
     caps = provider.capabilities()
     assert caps.provider_id == "uazapi"
-    assert "v1" in caps.supported_versions
+    # UAZAPI v2
+    assert "v2" in caps.supported_versions
     assert callable(getattr(provider, "send_presence", None))
 
 
 def test_uazapi_parse_webhook_messages_upsert_fallback() -> None:
+    """Testa o parse de webhooks de mensagem com fallback."""
     _ensure_backend_on_path()
     uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
     EvolutionAPI = uaz_mod.EvolutionAPI
@@ -65,6 +68,7 @@ def test_uazapi_parse_webhook_messages_upsert_fallback() -> None:
 
 
 def test_uazapi_parse_webhook_presence_update_fallback() -> None:
+    """Testa o parse de webhooks de presença com fallback."""
     _ensure_backend_on_path()
     uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
     EvolutionAPI = uaz_mod.EvolutionAPI
@@ -97,9 +101,11 @@ def test_uazapi_parse_webhook_presence_update_fallback() -> None:
 
 
 def test_uazapi_send_presence_formats_phone_and_calls_request() -> None:
+    """Testa se send_presence formata telefone e usa endpoint v2 correto."""
     _ensure_backend_on_path()
     uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
     base_mod = importlib.import_module("backend.whatsapp.providers.base")
+    http_mod = importlib.import_module("backend.whatsapp.http")
 
     provider = uaz_mod.UazapiWhatsAppProvider(default_base_url="https://test.uazapi.com", default_admin_token="admin")
     conn_ref = base_mod.ConnectionRef(
@@ -110,20 +116,23 @@ def test_uazapi_send_presence_formats_phone_and_calls_request() -> None:
         config={"token": "tok1", "base_url": "https://test.uazapi.com"},
     )
 
-    with mock.patch("backend.whatsapp.providers.uazapi._request_with_uazapi_fallbacks") as req_mock:
-        req_mock.return_value = {"ok": True}
+    with mock.patch.object(http_mod.HttpClient, "request") as req_mock:
+        async def mock_request(*args, **kwargs):
+            return {"ok": True}
+        req_mock.side_effect = mock_request
         result = asyncio.run(provider.send_presence(None, connection=conn_ref, phone="+55 (21) 99999-8888", presence="composing"))
         assert result == {"ok": True}
 
         assert req_mock.call_count == 1
-        kwargs = req_mock.call_args.kwargs
-        assert kwargs["method"] == "POST"
-        assert kwargs["path"] == "/chat/updatePresence"
-        assert kwargs["instance_name"] == "inst1"
-        assert kwargs["json"] == {"number": "5521999998888", "presence": "composing"}
+        # Verificar chamada: POST /message/presence (v2)
+        call_args = req_mock.call_args
+        assert call_args[0][0] == "POST"
+        assert call_args[0][1] == "/message/presence"
+        assert call_args[1]["json"] == {"number": "5521999998888", "presence": "composing"}
 
 
 def test_uazapi_send_presence_rejects_empty_phone() -> None:
+    """Testa que send_presence rejeita telefone vazio."""
     _ensure_backend_on_path()
     uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
     base_mod = importlib.import_module("backend.whatsapp.providers.base")
@@ -140,3 +149,133 @@ def test_uazapi_send_presence_rejects_empty_phone() -> None:
 
     with pytest.raises(errors_mod.ProviderRequestError):
         asyncio.run(provider.send_presence(None, connection=conn_ref, phone="", presence="composing"))
+
+
+def test_uazapi_send_text_message() -> None:
+    """Testa envio de mensagem de texto via endpoint v2."""
+    _ensure_backend_on_path()
+    uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
+    base_mod = importlib.import_module("backend.whatsapp.providers.base")
+    http_mod = importlib.import_module("backend.whatsapp.http")
+
+    provider = uaz_mod.UazapiWhatsAppProvider(default_base_url="https://test.uazapi.com", default_admin_token="admin")
+    conn_ref = base_mod.ConnectionRef(
+        tenant_id="t1",
+        provider="uazapi",
+        instance_name="inst1",
+        phone_number=None,
+        config={"token": "tok1", "base_url": "https://test.uazapi.com"},
+    )
+    
+    from backend.whatsapp.providers.base import SendMessageRequest
+    req = SendMessageRequest(
+        instance_name="inst1",
+        phone="5511999999999",
+        kind="text",
+        content="Olá, mundo!",
+        caption=None,
+        filename=None,
+    )
+
+    with mock.patch.object(http_mod.HttpClient, "request") as req_mock:
+        async def mock_request(*args, **kwargs):
+            return {"success": True, "id": "msg123"}
+        req_mock.side_effect = mock_request
+        result = asyncio.run(provider.send_message(None, connection=conn_ref, req=req))
+        
+        assert result["success"] is True
+        # Verificar chamada: POST /send/text (v2)
+        call_args = req_mock.call_args
+        assert call_args[0][0] == "POST"
+        assert call_args[0][1] == "/send/text"
+        assert call_args[1]["json"] == {"number": "5511999999999", "text": "Olá, mundo!"}
+
+
+def test_uazapi_send_media_message() -> None:
+    """Testa envio de mídia via endpoint v2."""
+    _ensure_backend_on_path()
+    uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
+    base_mod = importlib.import_module("backend.whatsapp.providers.base")
+    http_mod = importlib.import_module("backend.whatsapp.http")
+
+    provider = uaz_mod.UazapiWhatsAppProvider(default_base_url="https://test.uazapi.com", default_admin_token="admin")
+    conn_ref = base_mod.ConnectionRef(
+        tenant_id="t1",
+        provider="uazapi",
+        instance_name="inst1",
+        phone_number=None,
+        config={"token": "tok1", "base_url": "https://test.uazapi.com"},
+    )
+    
+    from backend.whatsapp.providers.base import SendMessageRequest
+    req = SendMessageRequest(
+        instance_name="inst1",
+        phone="5511999999999",
+        kind="image",
+        content="https://example.com/image.jpg",
+        caption="Uma imagem",
+        filename=None,
+    )
+
+    with mock.patch.object(http_mod.HttpClient, "request") as req_mock:
+        async def mock_request(*args, **kwargs):
+            return {"success": True, "id": "msg456"}
+        req_mock.side_effect = mock_request
+        result = asyncio.run(provider.send_message(None, connection=conn_ref, req=req))
+        
+        assert result["success"] is True
+        # Verificar chamada: POST /send/media (v2)
+        call_args = req_mock.call_args
+        assert call_args[0][0] == "POST"
+        assert call_args[0][1] == "/send/media"
+        expected_json = {
+            "number": "5511999999999",
+            "type": "image",
+            "file": "https://example.com/image.jpg",
+            "text": "Uma imagem"
+        }
+        assert call_args[1]["json"] == expected_json
+
+
+def test_uazapi_client_uses_token_header() -> None:
+    """Testa que o cliente usa header 'token' (v2)."""
+    _ensure_backend_on_path()
+    uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
+    base_mod = importlib.import_module("backend.whatsapp.providers.base")
+
+    provider = uaz_mod.UazapiWhatsAppProvider(default_base_url="https://test.uazapi.com", default_admin_token="admin")
+    conn_ref = base_mod.ConnectionRef(
+        tenant_id="t1",
+        provider="uazapi",
+        instance_name="inst1",
+        phone_number=None,
+        config={"token": "my_instance_token", "base_url": "https://test.uazapi.com"},
+    )
+    
+    client, cfg = provider._build_client(conn_ref)
+    
+    # Verificar que o auth tem o header 'token' (dataclass usa .headers, não ._headers)
+    assert hasattr(client, "_auth")
+    assert client._auth.headers.get("token") == "my_instance_token"
+
+
+def test_uazapi_admin_client_uses_admintoken_header() -> None:
+    """Testa que o cliente admin usa header 'admintoken' (v2)."""
+    _ensure_backend_on_path()
+    uaz_mod = importlib.import_module("backend.whatsapp.providers.uazapi")
+    base_mod = importlib.import_module("backend.whatsapp.providers.base")
+
+    provider = uaz_mod.UazapiWhatsAppProvider(default_base_url="https://test.uazapi.com", default_admin_token="default_admin")
+    conn_ref = base_mod.ConnectionRef(
+        tenant_id="t1",
+        provider="uazapi",
+        instance_name="inst1",
+        phone_number=None,
+        config={"admintoken": "my_admin_token", "base_url": "https://test.uazapi.com"},
+    )
+    
+    client, cfg = provider._build_admin_client(conn_ref)
+    
+    # Verificar que o auth tem o header 'admintoken' (dataclass usa .headers, não ._headers)
+    assert hasattr(client, "_auth")
+    assert client._auth.headers.get("admintoken") == "my_admin_token"
