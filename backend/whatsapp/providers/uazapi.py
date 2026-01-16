@@ -9,7 +9,7 @@ else:
         from ...evolution_api import EvolutionAPI
     except ImportError:
         from evolution_api import EvolutionAPI
-from ..auth import ApiKeyHeaderAuth
+from ..auth import StaticHeadersAuth
 from ..errors import AuthError, ConnectionError, ProviderRequestError
 from ..http import HttpClient, HttpClientConfig
 from .base import (
@@ -53,6 +53,9 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             "instanceName": connection.instance_name,
             "instance_name": connection.instance_name,
             "name": connection.instance_name,
+            "qrcode": True,
+            "qr": True,
+            "base64": True,
         }
         if instance_apikey:
             payload["apikey"] = instance_apikey
@@ -133,9 +136,13 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                         instance_name=connection.instance_name,
                     )
                     if isinstance(result, dict):
-                        qrcode = (result.get("qrcode", {}) or {}).get("base64") or result.get("base64")
-                        if qrcode and "base64" not in result:
+                        qrcode = _extract_qrcode_value(result)
+                        if qrcode:
                             result["base64"] = qrcode
+                        if "pairingCode" not in result:
+                            code = result.get("code")
+                            if isinstance(code, str) and code.strip():
+                                result["pairingCode"] = code.strip()
                     return result
                 except ProviderRequestError as e:
                     last = e
@@ -516,11 +523,11 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         if not base_url_raw and subdomain:
             base_url_raw = f"https://{subdomain}.uazapi.com"
         base_url = _normalize_uazapi_base_url(base_url_raw)
-        token = str(
-            cfg.get("token") or cfg.get("instance_token") or ""
-        ).strip()
-        if not token:
-            raise AuthError("Uazapi não configurada (token).", transient=False)
+        token = str(cfg.get("token") or cfg.get("instance_token") or "").strip()
+        apikey = str(cfg.get("apikey") or cfg.get("api_key") or cfg.get("apiKey") or "").strip()
+        credential = token or apikey
+        if not credential:
+            raise AuthError("Uazapi não configurada (token/apikey).", transient=False)
         if not base_url:
             base_url = self._default_base_url.rstrip("/")
         base_url = _normalize_uazapi_base_url(base_url)
@@ -532,7 +539,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
         client = HttpClient(
             config=HttpClientConfig(base_url=base_url),
-            auth=ApiKeyHeaderAuth(header_name="token", api_key=token),
+            auth=StaticHeadersAuth(headers={"apikey": credential, "token": credential}),
             provider="uazapi",
         )
         return client, cfg
@@ -550,13 +557,17 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             base_url = self._default_base_url.rstrip("/")
         base_url = _normalize_uazapi_base_url(base_url)
         admin_token = str(
-            cfg.get("admintoken") or cfg.get("admin_token") or ""
+            cfg.get("admintoken")
+            or cfg.get("admin_token")
+            or cfg.get("globalApikey")
+            or cfg.get("global_apikey")
+            or ""
         ).strip()
         if not admin_token:
             admin_token = self._default_admin_token
         if not admin_token:
             raise AuthError(
-                "Uazapi não configurada (admintoken).",
+                "Uazapi não configurada (admintoken/apikey).",
                 transient=False,
             )
         if not base_url:
@@ -567,10 +578,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
         client = HttpClient(
             config=HttpClientConfig(base_url=base_url),
-            auth=ApiKeyHeaderAuth(
-                header_name="admintoken",
-                api_key=admin_token,
-            ),
+            auth=StaticHeadersAuth(headers={"admintoken": admin_token, "apikey": admin_token}),
             provider="uazapi",
         )
         return client, cfg
@@ -597,6 +605,35 @@ def _map_kind_to_media_type(kind: str) -> Optional[str]:
         return "document"
     if k in {"sticker"}:
         return "sticker"
+    return None
+
+
+def _extract_qrcode_value(obj: Any) -> Optional[str]:
+    def pick_from_dict(d: dict[str, Any]) -> Optional[str]:
+        base64 = d.get("base64")
+        if isinstance(base64, str) and base64.strip():
+            return base64.strip()
+        for k in ("qrcode", "qr", "qrCode", "qr_code"):
+            v = d.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+            if isinstance(v, dict):
+                nested = v.get("base64") or v.get("qrcode") or v.get("qr") or v.get("qrCode") or v.get("qr_code")
+                if isinstance(nested, str) and nested.strip():
+                    return nested.strip()
+        return None
+
+    if not isinstance(obj, dict):
+        return None
+    direct = pick_from_dict(obj)
+    if direct:
+        return direct
+    for k in ("instance", "data", "response"):
+        nested = obj.get(k)
+        if isinstance(nested, dict):
+            val = pick_from_dict(nested)
+            if val:
+                return val
     return None
 
 

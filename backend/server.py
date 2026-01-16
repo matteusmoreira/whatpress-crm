@@ -798,6 +798,8 @@ def _is_connected_state(provider: str, state: dict) -> bool:
 
 def _extract_uazapi_instance_token(obj: Any) -> Optional[str]:
     token_keys = {
+        "apikey",
+        "api_key",
         "token",
         "instance_token",
         "instancetoken",
@@ -828,6 +830,30 @@ def _extract_uazapi_instance_token(obj: Any) -> Optional[str]:
         return None
 
     return walk(obj, 0)
+
+
+def _extract_qrcode_value(obj: Any) -> Optional[str]:
+    if not isinstance(obj, dict):
+        return None
+    base64 = obj.get("base64")
+    if isinstance(base64, str) and base64.strip():
+        return base64.strip()
+
+    qrcode = obj.get("qrcode") or obj.get("qr") or obj.get("qrCode") or obj.get("qr_code")
+    if isinstance(qrcode, str) and qrcode.strip():
+        return qrcode.strip()
+    if isinstance(qrcode, dict):
+        nested = qrcode.get("base64") or qrcode.get("qrcode") or qrcode.get("qr") or qrcode.get("qrCode") or qrcode.get("qr_code")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+
+    for k in ("instance", "data", "response"):
+        nested_obj = obj.get(k)
+        if isinstance(nested_obj, dict):
+            val = _extract_qrcode_value(nested_obj)
+            if val:
+                return val
+    return None
 
 def _whatsapp_http_error(e: Exception) -> HTTPException:
     if isinstance(e, ProviderNotFoundError):
@@ -3040,11 +3066,31 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
     provider = _get_whatsapp_provider(provider_id)
 
     cfg = conn_ref.config or {}
-    token_present = bool(str(cfg.get("token") or cfg.get("instance_token") or "").strip())
+    token_present = bool(
+        str(
+            cfg.get("token")
+            or cfg.get("instance_token")
+            or cfg.get("apikey")
+            or cfg.get("api_key")
+            or cfg.get("apiKey")
+            or ""
+        ).strip()
+    )
     uazapi_mode = ""
     if provider_id == "uazapi":
         uazapi_mode = str(cfg.get("uazapi_mode") or cfg.get("uazapiMode") or cfg.get("mode") or "").strip().lower()
-    allow_create = provider_id == "uazapi" and (uazapi_mode == "create" or bool(str(cfg.get("admintoken") or cfg.get("admin_token") or "").strip()))
+    allow_create = provider_id == "uazapi" and (
+        uazapi_mode == "create"
+        or bool(
+            str(
+                cfg.get("admintoken")
+                or cfg.get("admin_token")
+                or cfg.get("globalApikey")
+                or cfg.get("global_apikey")
+                or ""
+            ).strip()
+        )
+    )
 
     async def _create_and_get_qr() -> dict[str, Any]:
         webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
@@ -3064,13 +3110,13 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                     config=merged_cfg,
                 )
 
-        qrcode = (create_result.get("qrcode", {}) or {}).get("base64") or create_result.get("base64")
+        qrcode = _extract_qrcode_value(create_result)
         pairing_code = create_result.get("pairingCode")
         if not qrcode:
             qr_result = await container.connections.connect_with_retries(
                 provider, connection=local_conn_ref, correlation_id=f"connect_after_create:{connection_id}"
             )
-            qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+            qrcode = _extract_qrcode_value(qr_result)
             pairing_code = qr_result.get("pairingCode")
 
         if not qrcode:
@@ -3108,7 +3154,7 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
             qr_result = await container.connections.connect_with_retries(
                 provider, connection=conn_ref, correlation_id=f"connect:{connection_id}"
             )
-            qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+            qrcode = _extract_qrcode_value(qr_result)
             if qrcode:
                 return {
                     "success": True,
@@ -3160,7 +3206,7 @@ async def get_qrcode(connection_id: str, payload: dict = Depends(verify_token)):
     try:
         provider = _get_whatsapp_provider(provider_id)
         qr_result = await container.connections.connect_with_retries(provider, connection=conn_ref, correlation_id=f"connect:{connection_id}")
-        qrcode = qr_result.get("base64") or (qr_result.get("qrcode", {}) or {}).get("base64")
+        qrcode = _extract_qrcode_value(qr_result)
         return {"qrcode": qrcode, "pairingCode": qr_result.get("pairingCode"), "code": qr_result.get("code")}
     except Exception as e:
         raise _whatsapp_http_error(e)
