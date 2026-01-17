@@ -27,6 +27,19 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
   const [syncing, setSyncing] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
+  const isTokenError = (error) => {
+    const detail = error?.response?.data?.detail;
+    const raw = String(detail || error?.message || '');
+    const msg = raw.toLowerCase();
+    return (
+      msg.includes('missing token') ||
+      msg.includes('invalid token') ||
+      msg.includes('token inválido') ||
+      (msg.includes('token') && msg.includes('uazapi') && msg.includes(' 401')) ||
+      (msg.includes('token') && msg.includes('(uazapi 401)'))
+    );
+  };
+
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
@@ -63,7 +76,12 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
       toast.success(result.message || 'Status sincronizado!');
       // Recarregar a lista de conexões é feito pelo componente pai
     } catch (error) {
-      toast.error('Erro ao sincronizar', { description: error.response?.data?.detail || error.message });
+      const description = error.response?.data?.detail || error.message;
+      if (isTokenError(error)) {
+        toast.error('Token da Uazapi inválido', { description });
+      } else {
+        toast.error('Erro ao sincronizar', { description });
+      }
     } finally {
       setSyncing(false);
     }
@@ -236,6 +254,20 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
 const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionSuccess, syncConnection }) => {
   const [status, setStatus] = useState('waiting'); // waiting, connected, error
   const [pollingActive, setPollingActive] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const isTokenError = (error) => {
+    const detail = error?.response?.data?.detail;
+    const raw = String(detail || error?.message || '');
+    const msg = raw.toLowerCase();
+    return (
+      msg.includes('missing token') ||
+      msg.includes('invalid token') ||
+      msg.includes('token inválido') ||
+      (msg.includes('token') && msg.includes('uazapi') && msg.includes(' 401')) ||
+      (msg.includes('token') && msg.includes('(uazapi 401)'))
+    );
+  };
 
   useEffect(() => {
     if (!connectionId || !pollingActive) return;
@@ -264,8 +296,16 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
           }, 1500);
         }
       } catch (error) {
+        if (isTokenError(error)) {
+          setStatus('error');
+          setErrorMessage(
+            String(error?.response?.data?.detail || error?.message || 'Token inválido para consultar o status.')
+          );
+          setPollingActive(false);
+          if (intervalId) clearInterval(intervalId);
+          return;
+        }
         console.warn('Polling error:', error);
-        // Continuar tentando, não é erro fatal
       }
     };
 
@@ -301,6 +341,19 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
             </div>
             <h3 className="text-xl font-bold text-emerald-400 mb-2">Conectado com sucesso!</h3>
             <p className="text-white/60">Seu WhatsApp foi conectado.</p>
+          </div>
+        ) : status === 'error' ? (
+          <div className="p-8 text-center">
+            <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+              <XCircle className="w-10 h-10 text-red-400" />
+            </div>
+            <h3 className="text-xl font-bold text-red-400 mb-2">Não foi possível confirmar a conexão</h3>
+            <p className="text-white/60 mb-4">
+              A API retornou erro de autenticação ao consultar o status.
+            </p>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-left">
+              <p className="text-white/70 text-xs break-words">{errorMessage}</p>
+            </div>
           </div>
         ) : (
           <>
