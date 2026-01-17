@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from .errors import AuthError, ConnectionError, ProviderRequestError, WhatsAppError
+from .errors import AuthError, ConnectionError, ProviderRequestError
 from .observability import LogContext, Observability
 from .providers.base import ConnectionRef, ProviderContext, WhatsAppProvider
 
@@ -99,4 +99,3 @@ def _with_jitter(delay_s: float, jitter_s: float) -> float:
     if jitter_s <= 0:
         return delay_s
     return max(0.0, delay_s + (jitter_s * 0.5))
-

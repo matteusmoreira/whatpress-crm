@@ -787,17 +787,54 @@ def _is_connected_state(provider: str, state: dict) -> bool:
         instance_state = (state.get("instance", {}) or {}).get("state", "")
         return str(instance_state or "").strip().lower() in {"open", "connected"}
     if pid == "uazapi":
-        # UAZAPI v2 retorna 'state' na raiz: {state: "connected|connecting|disconnected"}
-        # Também verificamos outros campos para compatibilidade
         status = (
-            state.get("state")  # Campo principal da UAZAPI v2
+            state.get("state")
             or state.get("status")
             or state.get("connectionStatus")
+            or state.get("connection_state")
+            or state.get("connectionState")
+            or (state.get("data", {}) or {}).get("state")
+            or (state.get("data", {}) or {}).get("status")
             or (state.get("instance", {}) or {}).get("status")
             or (state.get("instance", {}) or {}).get("state")
+            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("state")
+            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("status")
         )
         return str(status or "").strip().lower() in {"connected", "open"}
     return False
+
+
+def _get_connection_status(provider: str, state: dict) -> str:
+    pid = str(provider or "").strip().lower()
+    if pid == "evolution":
+        instance_state = (state.get("instance", {}) or {}).get("state", "")
+        normalized = str(instance_state or "").strip().lower()
+        if normalized in {"open", "connected"}:
+            return "connected"
+        if normalized in {"connecting"}:
+            return "connecting"
+        return "disconnected"
+    if pid == "uazapi":
+        status_raw = (
+            state.get("state")
+            or state.get("status")
+            or state.get("connectionStatus")
+            or state.get("connection_state")
+            or state.get("connectionState")
+            or (state.get("data", {}) or {}).get("state")
+            or (state.get("data", {}) or {}).get("status")
+            or (state.get("instance", {}) or {}).get("status")
+            or (state.get("instance", {}) or {}).get("state")
+            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("state")
+            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("status")
+        )
+        normalized = str(status_raw or "").strip().lower()
+        if normalized in {"connected", "open"}:
+            return "connected"
+        if normalized in {"connecting"}:
+            return "connecting"
+        return "disconnected"
+    return "disconnected"
 
 def _extract_uazapi_instance_token(obj: Any) -> Optional[str]:
     token_keys = {
@@ -3082,18 +3119,19 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
     uazapi_mode = ""
     if provider_id == "uazapi":
         uazapi_mode = str(cfg.get("uazapi_mode") or cfg.get("uazapiMode") or cfg.get("mode") or "").strip().lower()
-    allow_create = provider_id == "uazapi" and (
-        uazapi_mode == "create"
-        or bool(
-            str(
-                cfg.get("admintoken")
-                or cfg.get("admin_token")
-                or cfg.get("globalApikey")
-                or cfg.get("global_apikey")
-                or ""
-            ).strip()
-        )
+    uazapi_admin_token_present = bool(
+        str(
+            cfg.get("admintoken")
+            or cfg.get("admin_token")
+            or cfg.get("globalApikey")
+            or cfg.get("global_apikey")
+            or os.getenv("UAZAPI_ADMIN_TOKEN")
+            or ""
+        ).strip()
     )
+    allow_admin_flow = provider_id == "uazapi" and uazapi_admin_token_present
+    if provider_id == "uazapi" and uazapi_mode == "create" and not uazapi_admin_token_present:
+        raise HTTPException(status_code=400, detail="Uazapi não configurada (admintoken).")
 
     async def _create_and_get_qr() -> dict[str, Any]:
         webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
@@ -3107,22 +3145,38 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                 existing_token = None
                 if isinstance(existing_instances, list):
                     for inst in existing_instances:
-                        if isinstance(inst, dict) and str(inst.get("name") or "").strip().lower() == instance_name.lower():
-                            existing_token = _extract_uazapi_instance_token(inst)
-                            logger.info(f"UAZAPI instance '{instance_name}' already exists, reusing token")
-                            break
+                        if isinstance(inst, dict):
+                            inst_name = str(
+                                inst.get("name")
+                                or inst.get("instanceName")
+                                or inst.get("instance_name")
+                                or inst.get("instance")
+                                or ""
+                            ).strip().lower()
+                            if inst_name == instance_name.lower():
+                                existing_token = _extract_uazapi_instance_token(inst)
+                                logger.info(f"UAZAPI instance '{instance_name}' already exists, reusing token")
+                                break
                 elif isinstance(existing_instances, dict):
                     # Se retornou direto o objeto ou lista em chave 'instances'
                     instances_list = existing_instances.get("instances") or existing_instances.get("data") or []
                     if isinstance(instances_list, list):
                         for inst in instances_list:
-                            if isinstance(inst, dict) and str(inst.get("name") or "").strip().lower() == instance_name.lower():
-                                existing_token = _extract_uazapi_instance_token(inst)
-                                logger.info(f"UAZAPI instance '{instance_name}' already exists, reusing token")
-                                break
+                            if isinstance(inst, dict):
+                                inst_name = str(
+                                    inst.get("name")
+                                    or inst.get("instanceName")
+                                    or inst.get("instance_name")
+                                    or inst.get("instance")
+                                    or ""
+                                ).strip().lower()
+                                if inst_name == instance_name.lower():
+                                    existing_token = _extract_uazapi_instance_token(inst)
+                                    logger.info(f"UAZAPI instance '{instance_name}' already exists, reusing token")
+                                    break
                 
                 if existing_token:
-                    # Instância já existe, salvar token e fazer connect
+                    # Instância já existe, salvar token
                     merged_cfg = dict(local_conn_ref.config or {})
                     merged_cfg["token"] = existing_token
                     supabase.table("connections").update({"config": merged_cfg}).eq("id", connection_id).execute()
@@ -3134,11 +3188,27 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                         config=merged_cfg,
                     )
                     
-                    # Configurar webhook automaticamente para instância existente
+                    # Verificar se já está conectado
+                    try:
+                        state = await provider.get_connection_state(ctx, connection=local_conn_ref)
+                        if isinstance(state, dict) and _is_connected_state(provider_id, state):
+                            # Já está conectado! Configurar webhook e retornar sucesso
+                            try:
+                                await provider.ensure_webhook(ctx, connection=local_conn_ref, webhook_url=webhook_url)
+                                supabase.table("connections").update({"webhook_url": webhook_url}).eq("id", connection_id).execute()
+                                logger.info(f"Webhook configurado automaticamente para instância UAZAPI existente '{instance_name}'")
+                            except Exception as e:
+                                logger.warning(f"Não foi possível configurar webhook para instância UAZAPI existente '{instance_name}': {e}")
+                            
+                            supabase.table("connections").update({"status": "connected"}).eq("id", connection_id).execute()
+                            return {"success": True, "message": "Instância já conectada! Configuração atualizada."}
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar status da instância existente '{instance_name}': {e}")
+                    
+                    # Se não estiver conectado, configurar webhook e tentar conectar
                     try:
                         await provider.ensure_webhook(ctx, connection=local_conn_ref, webhook_url=webhook_url)
                         supabase.table("connections").update({"webhook_url": webhook_url}).eq("id", connection_id).execute()
-                        logger.info(f"Webhook configurado automaticamente para instância UAZAPI existente '{instance_name}'")
                     except Exception as e:
                         logger.warning(f"Não foi possível configurar webhook para instância UAZAPI existente '{instance_name}': {e}")
                     
@@ -3147,7 +3217,7 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                         provider, connection=local_conn_ref, correlation_id=f"connect_existing:{connection_id}"
                     )
                     qrcode = _extract_qrcode_value(qr_result)
-                    pairing_code = qr_result.get("pairingCode")
+                    pairing_code = qr_result.get("pairingCode") or qr_result.get("code")
                     if qrcode:
                         supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
                         return {
@@ -3156,8 +3226,18 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                             "qrcode": qrcode,
                             "pairingCode": pairing_code,
                         }
+                    if pairing_code:
+                        supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
+                        return {
+                            "success": True,
+                            "message": "Use o código de pareamento para conectar",
+                            "pairingCode": pairing_code,
+                        }
             except Exception as e:
                 logger.warning(f"Could not check existing UAZAPI instances: {e}")
+        
+        if provider_id == "uazapi" and uazapi_mode != "create":
+            raise HTTPException(status_code=404, detail="Instância não encontrada na Uazapi.")
         
         # Criar nova instância
         create_result = await provider.create_instance(ctx, connection=conn_ref, webhook_url=webhook_url)
@@ -3184,18 +3264,24 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                     logger.warning(f"Não foi possível configurar webhook para instância UAZAPI '{instance_name}': {e}")
 
         qrcode = _extract_qrcode_value(create_result)
-        pairing_code = create_result.get("pairingCode")
+        pairing_code = create_result.get("pairingCode") or create_result.get("code")
         if not qrcode:
             qr_result = await container.connections.connect_with_retries(
                 provider, connection=local_conn_ref, correlation_id=f"connect_after_create:{connection_id}"
             )
             qrcode = _extract_qrcode_value(qr_result)
-            pairing_code = qr_result.get("pairingCode")
+            pairing_code = qr_result.get("pairingCode") or qr_result.get("code")
 
-        if not qrcode:
-            raise HTTPException(status_code=502, detail="Instância criada, mas não foi possível obter o QR Code.")
+        if not qrcode and not pairing_code:
+            raise HTTPException(status_code=502, detail="Instância criada, mas não foi possível obter QR Code ou código.")
 
         supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
+        if pairing_code and not qrcode:
+            return {
+                "success": True,
+                "message": "Use o código de pareamento para conectar",
+                "pairingCode": pairing_code,
+            }
         return {
             "success": True,
             "message": "Instância criada! Escaneie o QR Code para conectar",
@@ -3219,8 +3305,8 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
         supabase.table("connections").update({"status": "connected", "webhook_url": webhook_url}).eq("id", connection_id).execute()
         return {"success": True, "message": "Conexão estabelecida com sucesso!"}
 
-    if not token_present and provider_id == "uazapi" and not allow_create:
-        raise HTTPException(status_code=400, detail="Uazapi não configurada (token).")
+    if not token_present and provider_id == "uazapi" and not allow_admin_flow:
+        raise HTTPException(status_code=400, detail="Uazapi não configurada (token ou admintoken).")
 
     try:
         if token_present:
@@ -3228,18 +3314,27 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                 provider, connection=conn_ref, correlation_id=f"connect:{connection_id}"
             )
             qrcode = _extract_qrcode_value(qr_result)
+            pairing_code = qr_result.get("pairingCode") or qr_result.get("code")
             if qrcode:
+                supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
                 return {
                     "success": True,
                     "message": "Escaneie o QR Code para conectar",
                     "qrcode": qrcode,
-                    "pairingCode": qr_result.get("pairingCode"),
+                    "pairingCode": pairing_code,
                 }
-        if allow_create:
+            if pairing_code:
+                supabase.table("connections").update({"status": "connecting"}).eq("id", connection_id).execute()
+                return {
+                    "success": True,
+                    "message": "Use o código de pareamento para conectar",
+                    "pairingCode": pairing_code,
+                }
+        if allow_admin_flow:
             return await _create_and_get_qr()
-        raise HTTPException(status_code=502, detail="Não foi possível obter o QR Code.")
+        raise HTTPException(status_code=502, detail="Não foi possível obter QR Code ou código.")
     except Exception as e:
-        if allow_create and not token_present:
+        if allow_admin_flow and not token_present:
             try:
                 return await _create_and_get_qr()
             except Exception as e2:
@@ -3317,11 +3412,13 @@ async def sync_connection_status(connection_id: str, request: Request, payload: 
     try:
         provider = _get_whatsapp_provider(provider_id)
         state = await provider.get_connection_state(ctx, connection=conn_ref)
-        is_connected = _is_connected_state(provider_id, state)
-        new_status = 'connected' if is_connected else 'disconnected'
+        new_status = _get_connection_status(provider_id, state if isinstance(state, dict) else {})
+        is_connected = new_status == "connected"
         
         # Atualizar banco de dados
-        update_data = {'status': new_status}
+        update_data = {"status": new_status}
+        if new_status == "disconnected":
+            update_data["webhook_url"] = ""
         if is_connected:
             update_data['webhook_url'] = _resolve_provider_webhook_url(request, provider_id, instance_name)
             try:

@@ -32,10 +32,9 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
     setTestResult(null);
     try {
       const result = await onTest(connection.id);
-      if (result.qrcode) {
-        // Show QR Code modal with connection id for status polling
-        onShowQR(result.qrcode, result.pairingCode, connection.id);
-        setTestResult({ success: true, message: 'Escaneie o QR Code para conectar' });
+      if (result.qrcode || result.pairingCode) {
+        onShowQR(result.qrcode || null, result.pairingCode || null, connection.id);
+        setTestResult({ success: true, message: result.message || 'Conecte usando o QR Code ou código de pareamento' });
       } else {
         setTestResult({ success: true, message: result.message });
         setTimeout(() => onToggle(connection.id, 'connected'), 500);
@@ -279,7 +278,7 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
     };
   }, [connectionId, pollingActive, syncConnection, onClose, onConnectionSuccess]);
 
-  if (!qrcode) return null;
+  if (!qrcode && !pairingCode) return null;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -305,13 +304,15 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
           </div>
         ) : (
           <>
-            <div className="bg-white p-4 rounded-2xl mb-6">
-              <img
-                src={qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`}
-                alt="QR Code"
-                className="w-full h-auto"
-              />
-            </div>
+            {qrcode && (
+              <div className="bg-white p-4 rounded-2xl mb-6">
+                <img
+                  src={qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`}
+                  alt="QR Code"
+                  className="w-full h-auto"
+                />
+              </div>
+            )}
 
             {pairingCode && (
               <div className="mb-6">
@@ -328,12 +329,14 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
               <span className="text-sm">Aguardando conexão...</span>
             </div>
 
-            <div className="text-white/60 text-sm space-y-2">
-              <p>1. Abra o WhatsApp no seu celular</p>
-              <p>2. Toque em <strong>Configurações</strong> → <strong>Dispositivos conectados</strong></p>
-              <p>3. Toque em <strong>Conectar dispositivo</strong></p>
-              <p>4. Escaneie o QR Code acima</p>
-            </div>
+            {qrcode && (
+              <div className="text-white/60 text-sm space-y-2">
+                <p>1. Abra o WhatsApp no seu celular</p>
+                <p>2. Toque em <strong>Configurações</strong> → <strong>Dispositivos conectados</strong></p>
+                <p>3. Toque em <strong>Conectar dispositivo</strong></p>
+                <p>4. Escaneie o QR Code acima</p>
+              </div>
+            )}
           </>
         )}
 
@@ -488,8 +491,9 @@ const Connections = () => {
         }
       } else {
         const token = String(cfg.token || '').trim();
-        if (!token) {
-          toast.error('Informe o token da instância Uazapi');
+        const adminToken = String(cfg.admintoken || '').trim();
+        if (!token && !adminToken) {
+          toast.error('Informe o token da instância (token) ou o admin token (admintoken)');
           return;
         }
       }
@@ -792,7 +796,7 @@ const Connections = () => {
                               config: { ...prev.config, token: e.target.value }
                             }))
                           }
-                          required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'existing'}
+                          required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'existing' && !String(newConnection.config?.admintoken || '').trim()}
                         />
                       </div>
                     )}

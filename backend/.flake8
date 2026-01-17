@@ -37,5 +37,5 @@ per-file-ignores =
     backend/whatsapp/providers/evolution.py:E501
     whatsapp/providers/stub.py:E501
     backend/whatsapp/providers/stub.py:E501
-    whatsapp/providers/uazapi.py:E501,W391
-    backend/whatsapp/providers/uazapi.py:E501,W391
+    whatsapp/providers/uazapi.py:E501,W391,W293
+    backend/whatsapp/providers/uazapi.py:E501,W391,W293

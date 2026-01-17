@@ -166,7 +166,7 @@ def test_uazapi_send_text_message() -> None:
         phone_number=None,
         config={"token": "tok1", "base_url": "https://test.uazapi.com"},
     )
-    
+
     from backend.whatsapp.providers.base import SendMessageRequest
     req = SendMessageRequest(
         instance_name="inst1",
@@ -182,7 +182,7 @@ def test_uazapi_send_text_message() -> None:
             return {"success": True, "id": "msg123"}
         req_mock.side_effect = mock_request
         result = asyncio.run(provider.send_message(None, connection=conn_ref, req=req))
-        
+
         assert result["success"] is True
         # Verificar chamada: POST /send/text (v2)
         call_args = req_mock.call_args
@@ -206,7 +206,7 @@ def test_uazapi_send_media_message() -> None:
         phone_number=None,
         config={"token": "tok1", "base_url": "https://test.uazapi.com"},
     )
-    
+
     from backend.whatsapp.providers.base import SendMessageRequest
     req = SendMessageRequest(
         instance_name="inst1",
@@ -222,7 +222,7 @@ def test_uazapi_send_media_message() -> None:
             return {"success": True, "id": "msg456"}
         req_mock.side_effect = mock_request
         result = asyncio.run(provider.send_message(None, connection=conn_ref, req=req))
-        
+
         assert result["success"] is True
         # Verificar chamada: POST /send/media (v2)
         call_args = req_mock.call_args
@@ -251,9 +251,9 @@ def test_uazapi_client_uses_token_header() -> None:
         phone_number=None,
         config={"token": "my_instance_token", "base_url": "https://test.uazapi.com"},
     )
-    
+
     client, cfg = provider._build_client(conn_ref)
-    
+
     # Verificar que o auth tem o header 'token' (dataclass usa .headers, não ._headers)
     assert hasattr(client, "_auth")
     assert client._auth.headers.get("token") == "my_instance_token"
@@ -273,9 +273,9 @@ def test_uazapi_admin_client_uses_admintoken_header() -> None:
         phone_number=None,
         config={"admintoken": "my_admin_token", "base_url": "https://test.uazapi.com"},
     )
-    
+
     client, cfg = provider._build_admin_client(conn_ref)
-    
+
     # Verificar que o auth tem o header 'admintoken' (dataclass usa .headers, não ._headers)
     assert hasattr(client, "_auth")
     assert client._auth.headers.get("admintoken") == "my_admin_token"
