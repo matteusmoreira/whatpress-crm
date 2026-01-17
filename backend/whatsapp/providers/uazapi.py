@@ -268,6 +268,8 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 "presence",
                 "groups",
             ],
+            "addUrlEvents": False,
+            "addUrlTypesMessages": False,
             # Importante: evita loops em automações
             "excludeMessages": ["wasSentByApi"],
         }

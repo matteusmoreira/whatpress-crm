@@ -1086,10 +1086,14 @@ async def _flush_db_write_queue_once() -> int:
                         q = q.eq(filt.get("field"), filt.get("value"))
                 _db_call_with_retry(f"flush.update.{table}", lambda: q.execute())
             elif kind == "webhook_event":
+                provider = str(op.get("provider") or "evolution").strip().lower()
                 instance_name = op.get("instance_name")
                 payload = op.get("payload")
                 if instance_name and isinstance(payload, dict):
-                    await _process_evolution_webhook(instance_name, payload, from_queue=True)
+                    if provider == "uazapi":
+                        await _process_uazapi_webhook(instance_name, payload, from_queue=True)
+                    else:
+                        await _process_evolution_webhook(instance_name, payload, from_queue=True)
             _DB_WRITE_QUEUE.popleft()
             processed += 1
         except Exception as e:
@@ -6668,15 +6672,98 @@ async def _execute_flow_for_conversation(
 # ==================== WEBHOOKS ====================
 
 @api_router.post("/webhooks/{provider}/{instance_name}")
-async def provider_webhook(provider: str, instance_name: str, payload: dict):
+async def provider_webhook(provider: str, instance_name: str, request: Request, payload: Any = Body(None)):
     provider_id = str(provider or "").strip().lower()
+    body = payload
+    if body is None:
+        try:
+            body = await request.json()
+        except Exception:
+            try:
+                raw = await request.body()
+                if raw:
+                    body = json.loads(raw.decode("utf-8", errors="ignore"))
+            except Exception:
+                body = {}
+
+    if isinstance(body, list):
+        results = []
+        for item in body:
+            if not isinstance(item, dict):
+                continue
+            if provider_id == "evolution":
+                results.append(await _process_evolution_webhook(instance_name, item, from_queue=False))
+            elif provider_id == "uazapi":
+                results.append(await _process_uazapi_webhook(instance_name, item, from_queue=False))
+            else:
+                results.append({"success": True, "ignored": "unsupported_provider"})
+        return {"success": True, "batch": True, "count": len(results)}
+
+    if not isinstance(body, dict):
+        body = {"data": body}
+
     if provider_id == "evolution":
-        return await _process_evolution_webhook(instance_name, payload, from_queue=False)
+        return await _process_evolution_webhook(instance_name, body, from_queue=False)
     if provider_id == "uazapi":
-        return await _process_uazapi_webhook(instance_name, payload, from_queue=False)
+        return await _process_uazapi_webhook(instance_name, body, from_queue=False)
     logger.warning(
         f"Webhook for unsupported provider '{provider_id}' - currently only 'evolution' and 'uazapi' are implemented."
     )
+    return {"success": True, "ignored": "unsupported_provider"}
+
+
+@api_router.post("/webhooks/{provider}/{instance_name}/{suffix:path}")
+async def provider_webhook_with_suffix(provider: str, instance_name: str, suffix: str, request: Request, payload: Any = Body(None)):
+    provider_id = str(provider or "").strip().lower()
+    body = payload
+    if body is None:
+        try:
+            body = await request.json()
+        except Exception:
+            try:
+                raw = await request.body()
+                if raw:
+                    body = json.loads(raw.decode("utf-8", errors="ignore"))
+            except Exception:
+                body = {}
+
+    suffix = str(suffix or "").strip().strip("/")
+    suffix_parts = [p for p in suffix.split("/") if p] if suffix else []
+    suffix_event = suffix_parts[0] if len(suffix_parts) >= 1 else ""
+    suffix_message_type = suffix_parts[1] if len(suffix_parts) >= 2 else ""
+
+    def inject_suffix(d: dict) -> dict:
+        if suffix_event and not (d.get("event") or d.get("type")):
+            d["event"] = suffix_event
+        if suffix_message_type:
+            data = d.get("data")
+            if isinstance(data, dict) and not (data.get("type") or data.get("messageType") or data.get("message_type")):
+                data["type"] = suffix_message_type
+        return d
+
+    if isinstance(body, list):
+        results = []
+        for item in body:
+            if not isinstance(item, dict):
+                continue
+            item = inject_suffix(item)
+            if provider_id == "evolution":
+                results.append(await _process_evolution_webhook(instance_name, item, from_queue=False))
+            elif provider_id == "uazapi":
+                results.append(await _process_uazapi_webhook(instance_name, item, from_queue=False))
+            else:
+                results.append({"success": True, "ignored": "unsupported_provider"})
+        return {"success": True, "batch": True, "count": len(results)}
+
+    if not isinstance(body, dict):
+        body = {"data": body}
+
+    body = inject_suffix(body)
+
+    if provider_id == "evolution":
+        return await _process_evolution_webhook(instance_name, body, from_queue=False)
+    if provider_id == "uazapi":
+        return await _process_uazapi_webhook(instance_name, body, from_queue=False)
     return {"success": True, "ignored": "unsupported_provider"}
 
 @api_router.post("/webhooks/evolution/{instance_name}")
@@ -6707,8 +6794,8 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                 )
             except Exception as e:
                 if _is_transient_db_error(e):
-                    if (provider_id == "evolution") and (not from_queue):
-                        _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
+                    if not from_queue:
+                        _queue_db_write({"kind": "webhook_event", "provider": provider_id, "instance_name": instance_name, "payload": payload})
                         return {"success": True, "queued": True}
                     raise
                 raise
@@ -6822,8 +6909,8 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                         )
                 except Exception as e:
                     if _is_transient_db_error(e):
-                        if (provider_id == "evolution") and (not from_queue):
-                            _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
+                        if not from_queue:
+                            _queue_db_write({"kind": "webhook_event", "provider": provider_id, "instance_name": instance_name, "payload": payload})
                             return {"success": True, "queued": True}
                         raise
                     raise
@@ -6889,8 +6976,8 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                         is_new_conversation = True
                     except Exception as e:
                         if _is_transient_db_error(e):
-                            if (provider_id == "evolution") and (not from_queue):
-                                _queue_db_write({"kind": "webhook_event", "instance_name": instance_name, "payload": payload})
+                            if not from_queue:
+                                _queue_db_write({"kind": "webhook_event", "provider": provider_id, "instance_name": instance_name, "payload": payload})
                                 return {"success": True, "queued": True}
                             raise
                         raise

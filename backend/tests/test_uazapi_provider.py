@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from fastapi.testclient import TestClient
 
 
 def _ensure_backend_on_path() -> None:
@@ -279,3 +280,107 @@ def test_uazapi_admin_client_uses_admintoken_header() -> None:
     # Verificar que o auth tem o header 'admintoken' (dataclass usa .headers, não ._headers)
     assert hasattr(client, "_auth")
     assert client._auth.headers.get("admintoken") == "my_admin_token"
+
+
+def test_server_webhook_uazapi_accepts_suffix_and_injects_event_and_type() -> None:
+    _ensure_backend_on_path()
+    srv = importlib.import_module("backend.server")
+
+    srv._ensure_offline_flush_task_started = lambda: None
+    srv._ensure_bulk_worker_task_started = lambda: None
+
+    called = []
+
+    async def fake_uazapi(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+        called.append((instance_name, payload, from_queue))
+        return {"success": True}
+
+    original = srv._process_uazapi_webhook
+    srv._process_uazapi_webhook = fake_uazapi
+    try:
+        with TestClient(srv.app) as client:
+            resp = client.post(
+                "/api/webhooks/uazapi/onebarber/messages/conversation",
+                json={"data": {}},
+            )
+            assert resp.status_code == 200
+    finally:
+        srv._process_uazapi_webhook = original
+
+    assert len(called) == 1
+    instance_name, payload, from_queue = called[0]
+    assert instance_name == "onebarber"
+    assert from_queue is False
+    assert payload.get("event") == "messages"
+    assert isinstance(payload.get("data"), dict)
+    assert payload["data"].get("type") == "conversation"
+
+
+def test_server_webhook_uazapi_accepts_batch_payload_list() -> None:
+    _ensure_backend_on_path()
+    srv = importlib.import_module("backend.server")
+
+    srv._ensure_offline_flush_task_started = lambda: None
+    srv._ensure_bulk_worker_task_started = lambda: None
+
+    calls = []
+
+    async def fake_uazapi(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+        calls.append((instance_name, payload, from_queue))
+        return {"success": True}
+
+    original = srv._process_uazapi_webhook
+    srv._process_uazapi_webhook = fake_uazapi
+    try:
+        with TestClient(srv.app) as client:
+            resp = client.post(
+                "/api/webhooks/uazapi/onebarber",
+                json=[{"event": "messages"}, {"event": "presence"}],
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data.get("batch") is True
+            assert data.get("count") == 2
+    finally:
+        srv._process_uazapi_webhook = original
+
+    assert len(calls) == 2
+
+
+def test_flush_db_queue_routes_webhook_event_to_uazapi_processor() -> None:
+    _ensure_backend_on_path()
+    srv = importlib.import_module("backend.server")
+
+    called_uazapi = []
+    called_evolution = []
+
+    async def fake_uazapi(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+        called_uazapi.append((instance_name, payload, from_queue))
+        return {"success": True}
+
+    async def fake_evolution(instance_name: str, payload: dict, *, from_queue: bool) -> dict:
+        called_evolution.append((instance_name, payload, from_queue))
+        return {"success": True}
+
+    original_uazapi = srv._process_uazapi_webhook
+    original_evolution = srv._process_evolution_webhook
+    try:
+        srv._process_uazapi_webhook = fake_uazapi
+        srv._process_evolution_webhook = fake_evolution
+        srv._DB_WRITE_QUEUE.clear()
+        srv._DB_WRITE_QUEUE.append({
+            "kind": "webhook_event",
+            "provider": "uazapi",
+            "instance_name": "onebarber",
+            "payload": {"event": "messages"},
+        })
+
+        processed = asyncio.run(srv._flush_db_write_queue_once())
+        assert processed == 1
+    finally:
+        srv._process_uazapi_webhook = original_uazapi
+        srv._process_evolution_webhook = original_evolution
+        srv._DB_WRITE_QUEUE.clear()
+
+    assert len(called_uazapi) == 1
+    assert len(called_evolution) == 0
