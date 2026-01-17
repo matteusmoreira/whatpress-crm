@@ -787,8 +787,11 @@ def _is_connected_state(provider: str, state: dict) -> bool:
         instance_state = (state.get("instance", {}) or {}).get("state", "")
         return str(instance_state or "").strip().lower() in {"open", "connected"}
     if pid == "uazapi":
+        # UAZAPI v2 retorna 'state' na raiz: {state: "connected|connecting|disconnected"}
+        # Também verificamos outros campos para compatibilidade
         status = (
-            state.get("status")
+            state.get("state")  # Campo principal da UAZAPI v2
+            or state.get("status")
             or state.get("connectionStatus")
             or (state.get("instance", {}) or {}).get("status")
             or (state.get("instance", {}) or {}).get("state")

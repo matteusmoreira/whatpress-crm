@@ -33,8 +33,8 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
     try {
       const result = await onTest(connection.id);
       if (result.qrcode) {
-        // Show QR Code modal
-        onShowQR(result.qrcode, result.pairingCode);
+        // Show QR Code modal with connection id for status polling
+        onShowQR(result.qrcode, result.pairingCode, connection.id);
         setTestResult({ success: true, message: 'Escaneie o QR Code para conectar' });
       } else {
         setTestResult({ success: true, message: result.message });
@@ -233,8 +233,52 @@ const ConnectionCard = ({ connection, onTest, onToggle, onDelete, onShowQR, onSy
   );
 };
 
-// QR Code Modal Component
-const QRCodeModal = ({ qrcode, pairingCode, onClose }) => {
+// QR Code Modal Component with auto-polling
+const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionSuccess, syncConnection }) => {
+  const [status, setStatus] = useState('waiting'); // waiting, connected, error
+  const [pollingActive, setPollingActive] = useState(true);
+
+  useEffect(() => {
+    if (!connectionId || !pollingActive) return;
+
+    let intervalId = null;
+    let attempts = 0;
+    const maxAttempts = 60; // 3 minutos (60 * 3s)
+
+    const checkStatus = async () => {
+      try {
+        attempts++;
+        if (attempts > maxAttempts) {
+          setPollingActive(false);
+          return;
+        }
+
+        const result = await syncConnection(connectionId);
+        if (result.status === 'connected') {
+          setStatus('connected');
+          setPollingActive(false);
+          if (intervalId) clearInterval(intervalId);
+          // Notificar sucesso após 1.5s para dar tempo de ver a mensagem
+          setTimeout(() => {
+            if (onConnectionSuccess) onConnectionSuccess();
+            onClose();
+          }, 1500);
+        }
+      } catch (error) {
+        console.warn('Polling error:', error);
+        // Continuar tentando, não é erro fatal
+      }
+    };
+
+    // Verificar imediatamente e depois a cada 3 segundos
+    checkStatus();
+    intervalId = setInterval(checkStatus, 3000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [connectionId, pollingActive, syncConnection, onClose, onConnectionSuccess]);
+
   if (!qrcode) return null;
 
   return (
@@ -250,37 +294,57 @@ const QRCodeModal = ({ qrcode, pairingCode, onClose }) => {
           </button>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl mb-6">
-          <img
-            src={qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`}
-            alt="QR Code"
-            className="w-full h-auto"
-          />
-        </div>
-
-        {pairingCode && (
-          <div className="mb-6">
-            <p className="text-white/60 text-sm mb-2">Ou use o código de pareamento:</p>
-            <p className="text-2xl font-mono font-bold text-emerald-400 tracking-wider">
-              {pairingCode}
-            </p>
+        {/* Status indicator */}
+        {status === 'connected' ? (
+          <div className="p-8 text-center">
+            <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-10 h-10 text-emerald-400" />
+            </div>
+            <h3 className="text-xl font-bold text-emerald-400 mb-2">Conectado com sucesso!</h3>
+            <p className="text-white/60">Seu WhatsApp foi conectado.</p>
           </div>
+        ) : (
+          <>
+            <div className="bg-white p-4 rounded-2xl mb-6">
+              <img
+                src={qrcode.startsWith('data:') ? qrcode : `data:image/png;base64,${qrcode}`}
+                alt="QR Code"
+                className="w-full h-auto"
+              />
+            </div>
+
+            {pairingCode && (
+              <div className="mb-6">
+                <p className="text-white/60 text-sm mb-2">Ou use o código de pareamento:</p>
+                <p className="text-2xl font-mono font-bold text-emerald-400 tracking-wider">
+                  {pairingCode}
+                </p>
+              </div>
+            )}
+
+            {/* Polling status */}
+            <div className="flex items-center justify-center gap-2 mb-4 text-white/60">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Aguardando conexão...</span>
+            </div>
+
+            <div className="text-white/60 text-sm space-y-2">
+              <p>1. Abra o WhatsApp no seu celular</p>
+              <p>2. Toque em <strong>Configurações</strong> → <strong>Dispositivos conectados</strong></p>
+              <p>3. Toque em <strong>Conectar dispositivo</strong></p>
+              <p>4. Escaneie o QR Code acima</p>
+            </div>
+          </>
         )}
 
-        <div className="text-white/60 text-sm space-y-2">
-          <p>1. Abra o WhatsApp no seu celular</p>
-          <p>2. Toque em <strong>Configurações</strong> → <strong>Dispositivos conectados</strong></p>
-          <p>3. Toque em <strong>Conectar dispositivo</strong></p>
-          <p>4. Escaneie o QR Code acima</p>
-        </div>
-
         <GlassButton onClick={onClose} variant="secondary" className="w-full mt-6">
-          Fechar
+          {status === 'connected' ? 'Fechar' : 'Cancelar'}
         </GlassButton>
       </GlassCard>
     </div>
   );
 };
+
 
 // Evolution Instances Component
 const EvolutionInstances = ({ tenantId }) => {
@@ -384,7 +448,7 @@ const Connections = () => {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
-  const [qrCodeData, setQrCodeData] = useState({ qrcode: null, pairingCode: null });
+  const [qrCodeData, setQrCodeData] = useState({ qrcode: null, pairingCode: null, connectionId: null });
   const [newConnection, setNewConnection] = useState({
     provider: 'evolution',
     instanceName: '',
@@ -453,7 +517,7 @@ const Connections = () => {
         try {
           const result = await testConnection(created.id);
           if (result?.qrcode) {
-            handleShowQR(result.qrcode, result.pairingCode);
+            handleShowQR(result.qrcode, result.pairingCode, created.id);
           }
         } catch (error) {
           toast.error('Erro ao gerar QR Code', { description: error.response?.data?.detail || error.message });
@@ -479,9 +543,17 @@ const Connections = () => {
     }
   };
 
-  const handleShowQR = (qrcode, pairingCode) => {
-    setQrCodeData({ qrcode, pairingCode });
+  const handleShowQR = (qrcode, pairingCode, connectionId = null) => {
+    setQrCodeData({ qrcode, pairingCode, connectionId });
     setShowQRModal(true);
+  };
+
+  const handleConnectionSuccess = () => {
+    // Recarregar lista de conexões quando uma conexão for estabelecida
+    if (tenantId) {
+      fetchConnections(tenantId);
+    }
+    toast.success('WhatsApp conectado com sucesso!');
   };
 
   const providers = [
@@ -587,7 +659,10 @@ const Connections = () => {
         <QRCodeModal
           qrcode={qrCodeData.qrcode}
           pairingCode={qrCodeData.pairingCode}
+          connectionId={qrCodeData.connectionId}
           onClose={() => setShowQRModal(false)}
+          onConnectionSuccess={handleConnectionSuccess}
+          syncConnection={syncConnection}
         />
       )}
 
@@ -596,168 +671,168 @@ const Connections = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 p-4 overflow-y-auto">
           <div className="min-h-full flex items-start justify-center">
             <GlassCard className="w-full max-w-lg my-8" hover={false}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">Nova Conexão</h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">Nova Conexão</h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <form onSubmit={handleCreateConnection} className="space-y-6">
-              {/* Provider Selection */}
-              <div>
-                <label className="text-white/80 text-sm font-medium block mb-3">Provedor</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {providers.map((provider) => (
-                    <button
-                      key={provider.id}
-                      type="button"
-                      onClick={() => setNewConnection(prev => ({ ...prev, provider: provider.id }))}
-                      className={cn(
-                        'p-4 rounded-xl text-center transition-all border',
-                        newConnection.provider === provider.id
-                          ? 'bg-emerald-500/30 border-emerald-500 text-white'
-                          : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
-                      )}
-                    >
-                      <p className="font-medium text-sm">{provider.name}</p>
-                    </button>
-                  ))}
+              <form onSubmit={handleCreateConnection} className="space-y-6">
+                {/* Provider Selection */}
+                <div>
+                  <label className="text-white/80 text-sm font-medium block mb-3">Provedor</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {providers.map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        onClick={() => setNewConnection(prev => ({ ...prev, provider: provider.id }))}
+                        className={cn(
+                          'p-4 rounded-xl text-center transition-all border',
+                          newConnection.provider === provider.id
+                            ? 'bg-emerald-500/30 border-emerald-500 text-white'
+                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                        )}
+                      >
+                        <p className="font-medium text-sm">{provider.name}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Instance Name */}
-              <div>
-                <label className="text-white/80 text-sm font-medium block mb-2">Nome da Instância</label>
-                <GlassInput
-                  type="text"
-                  placeholder="Ex: principal-whatsapp"
-                  value={newConnection.instanceName}
-                  onChange={(e) => setNewConnection(prev => ({ ...prev, instanceName: e.target.value }))}
-                  required
-                />
-              </div>
+                {/* Instance Name */}
+                <div>
+                  <label className="text-white/80 text-sm font-medium block mb-2">Nome da Instância</label>
+                  <GlassInput
+                    type="text"
+                    placeholder="Ex: principal-whatsapp"
+                    value={newConnection.instanceName}
+                    onChange={(e) => setNewConnection(prev => ({ ...prev, instanceName: e.target.value }))}
+                    required
+                  />
+                </div>
 
-              {/* Phone Number - Opcional para Evolution API */}
-              <div>
-                <label className="text-white/80 text-sm font-medium block mb-2">
-                  Número WhatsApp <span className="text-white/40">(opcional para Evolution API e Uazapi)</span>
-                </label>
-                <GlassInput
-                  type="tel"
-                  placeholder="+55 21 99999-8888"
-                  value={newConnection.phoneNumber}
-                  onChange={(e) => setNewConnection(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                />
-                {['evolution', 'uazapi'].includes(newConnection.provider) && (
-                  <p className="text-white/40 text-xs mt-1">
-                    O número será associado automaticamente após escanear o QR Code
-                  </p>
-                )}
-              </div>
+                {/* Phone Number - Opcional para Evolution API */}
+                <div>
+                  <label className="text-white/80 text-sm font-medium block mb-2">
+                    Número WhatsApp <span className="text-white/40">(opcional para Evolution API e Uazapi)</span>
+                  </label>
+                  <GlassInput
+                    type="tel"
+                    placeholder="+55 21 99999-8888"
+                    value={newConnection.phoneNumber}
+                    onChange={(e) => setNewConnection(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                  />
+                  {['evolution', 'uazapi'].includes(newConnection.provider) && (
+                    <p className="text-white/40 text-xs mt-1">
+                      O número será associado automaticamente após escanear o QR Code
+                    </p>
+                  )}
+                </div>
 
-              {newConnection.provider === 'uazapi' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-white/80 text-sm font-medium block mb-3">Modo</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setNewConnection(prev => ({ ...prev, uazapiMode: 'existing' }))}
-                        className={cn(
-                          'p-3 rounded-xl text-center transition-all border text-sm',
-                          newConnection.uazapiMode === 'existing'
-                            ? 'bg-emerald-500/30 border-emerald-500 text-white'
-                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
-                        )}
-                      >
-                        Instância existente
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewConnection(prev => ({ ...prev, uazapiMode: 'create' }))}
-                        className={cn(
-                          'p-3 rounded-xl text-center transition-all border text-sm',
-                          newConnection.uazapiMode === 'create'
-                            ? 'bg-emerald-500/30 border-emerald-500 text-white'
-                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
-                        )}
-                      >
-                        Criar e escanear QR
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-white/80 text-sm font-medium block mb-2">Server URL Uazapi</label>
-                    <GlassInput
-                      type="text"
-                      placeholder="Ex: https://whatpress.uazapi.com"
-                      value={newConnection.config?.base_url || ''}
-                      onChange={(e) =>
-                        setNewConnection(prev => ({
-                          ...prev,
-                          config: { ...prev.config, base_url: e.target.value }
-                        }))
-                      }
-                    />
-                  </div>
-                  {newConnection.uazapiMode === 'existing' && (
+                {newConnection.provider === 'uazapi' && (
+                  <div className="space-y-4">
                     <div>
-                      <label className="text-white/80 text-sm font-medium block mb-2">Token da instância (token)</label>
+                      <label className="text-white/80 text-sm font-medium block mb-3">Modo</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setNewConnection(prev => ({ ...prev, uazapiMode: 'existing' }))}
+                          className={cn(
+                            'p-3 rounded-xl text-center transition-all border text-sm',
+                            newConnection.uazapiMode === 'existing'
+                              ? 'bg-emerald-500/30 border-emerald-500 text-white'
+                              : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                          )}
+                        >
+                          Instância existente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewConnection(prev => ({ ...prev, uazapiMode: 'create' }))}
+                          className={cn(
+                            'p-3 rounded-xl text-center transition-all border text-sm',
+                            newConnection.uazapiMode === 'create'
+                              ? 'bg-emerald-500/30 border-emerald-500 text-white'
+                              : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                          )}
+                        >
+                          Criar e escanear QR
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-white/80 text-sm font-medium block mb-2">Server URL Uazapi</label>
                       <GlassInput
                         type="text"
-                        placeholder="Copie o token da instância na Uazapi"
-                        value={newConnection.config?.token || ''}
+                        placeholder="Ex: https://whatpress.uazapi.com"
+                        value={newConnection.config?.base_url || ''}
                         onChange={(e) =>
                           setNewConnection(prev => ({
                             ...prev,
-                            config: { ...prev.config, token: e.target.value }
+                            config: { ...prev.config, base_url: e.target.value }
                           }))
                         }
-                        required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'existing'}
                       />
                     </div>
-                  )}
-                  <div>
-                    <label className="text-white/80 text-sm font-medium block mb-2">Admin token (admintoken)</label>
-                    <GlassInput
-                      type="text"
-                      placeholder={
-                        newConnection.uazapiMode === 'create'
-                          ? 'Obrigatório para criar instância'
-                          : 'Opcional, usado para criar/deletar instâncias via painel'
-                      }
-                      value={newConnection.config?.admintoken || ''}
-                      onChange={(e) =>
-                        setNewConnection(prev => ({
-                          ...prev,
-                          config: { ...prev.config, admintoken: e.target.value }
-                        }))
-                      }
-                      required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'create'}
-                    />
+                    {newConnection.uazapiMode === 'existing' && (
+                      <div>
+                        <label className="text-white/80 text-sm font-medium block mb-2">Token da instância (token)</label>
+                        <GlassInput
+                          type="text"
+                          placeholder="Copie o token da instância na Uazapi"
+                          value={newConnection.config?.token || ''}
+                          onChange={(e) =>
+                            setNewConnection(prev => ({
+                              ...prev,
+                              config: { ...prev.config, token: e.target.value }
+                            }))
+                          }
+                          required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'existing'}
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-white/80 text-sm font-medium block mb-2">Admin token (admintoken)</label>
+                      <GlassInput
+                        type="text"
+                        placeholder={
+                          newConnection.uazapiMode === 'create'
+                            ? 'Obrigatório para criar instância'
+                            : 'Opcional, usado para criar/deletar instâncias via painel'
+                        }
+                        value={newConnection.config?.admintoken || ''}
+                        onChange={(e) =>
+                          setNewConnection(prev => ({
+                            ...prev,
+                            config: { ...prev.config, admintoken: e.target.value }
+                          }))
+                        }
+                        required={newConnection.provider === 'uazapi' && newConnection.uazapiMode === 'create'}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                <GlassButton
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1"
-                >
-                  Cancelar
-                </GlassButton>
-                <GlassButton type="submit" className="flex-1">
-                  Criar Conexão
-                </GlassButton>
-              </div>
-            </form>
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
+                  <GlassButton
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setShowCreateModal(false)}
+                    className="flex-1"
+                  >
+                    Cancelar
+                  </GlassButton>
+                  <GlassButton type="submit" className="flex-1">
+                    Criar Conexão
+                  </GlassButton>
+                </div>
+              </form>
             </GlassCard>
           </div>
         </div>
