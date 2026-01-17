@@ -3133,6 +3133,15 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                         phone_number=local_conn_ref.phone_number,
                         config=merged_cfg,
                     )
+                    
+                    # Configurar webhook automaticamente para instância existente
+                    try:
+                        await provider.ensure_webhook(ctx, connection=local_conn_ref, webhook_url=webhook_url)
+                        supabase.table("connections").update({"webhook_url": webhook_url}).eq("id", connection_id).execute()
+                        logger.info(f"Webhook configurado automaticamente para instância UAZAPI existente '{instance_name}'")
+                    except Exception as e:
+                        logger.warning(f"Não foi possível configurar webhook para instância UAZAPI existente '{instance_name}': {e}")
+                    
                     # Tentar obter QR code via connect
                     qr_result = await container.connections.connect_with_retries(
                         provider, connection=local_conn_ref, correlation_id=f"connect_existing:{connection_id}"
@@ -3165,6 +3174,14 @@ async def test_connection(connection_id: str, request: Request, payload: dict = 
                     phone_number=local_conn_ref.phone_number,
                     config=merged_cfg,
                 )
+                
+                # Configurar webhook automaticamente após criar instância
+                try:
+                    await provider.ensure_webhook(ctx, connection=local_conn_ref, webhook_url=webhook_url)
+                    supabase.table("connections").update({"webhook_url": webhook_url}).eq("id", connection_id).execute()
+                    logger.info(f"Webhook configurado automaticamente para instância UAZAPI '{instance_name}'")
+                except Exception as e:
+                    logger.warning(f"Não foi possível configurar webhook para instância UAZAPI '{instance_name}': {e}")
 
         qrcode = _extract_qrcode_value(create_result)
         pairing_code = create_result.get("pairingCode")
@@ -6518,14 +6535,6 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
             push_name_raw = (parsed.get('push_name') or '').strip()
             contact_push_name = push_name_raw if (push_name_raw and not is_from_me) else None
 
-            raw_jid = parsed.get('remote_jid_raw') or payload.get('data', {}).get('key', {}).get('remoteJid', '')
-            if '@g.us' in raw_jid:
-                logger.info(f"Ignoring group message from {raw_jid}")
-                return {"success": True, "ignored": "group_message"}
-            if '@broadcast' in raw_jid:
-                logger.info(f"Ignoring broadcast message from {raw_jid}")
-                return {"success": True, "ignored": "broadcast_message"}
-
             try:
                 conn = _db_call_with_retry(
                     "connections.get_by_instance",
@@ -6538,6 +6547,25 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                         return {"success": True, "queued": True}
                     raise
                 raise
+
+            ignore_groups = True
+            if conn.data:
+                # Verificar configuração da conexão
+                connection_cfg = conn.data[0].get('config') or {}
+                # Padrão é True (ignorar) para manter compatibilidade
+                ignore_groups = connection_cfg.get('ignoreGroups', True)
+
+            raw_jid = parsed.get('remote_jid_raw') or payload.get('data', {}).get('key', {}).get('remoteJid', '')
+            if '@g.us' in raw_jid:
+                if ignore_groups:
+                    logger.info(f"Ignoring group message from {raw_jid} (config=ignore)")
+                    return {"success": True, "ignored": "group_message"}
+                else:
+                    logger.info(f"Processing group message from {raw_jid} (config=allow)")
+            
+            if '@broadcast' in raw_jid:
+                logger.info(f"Ignoring broadcast message from {raw_jid}")
+                return {"success": True, "ignored": "broadcast_message"}
 
             if conn.data:
                 connection = conn.data[0]
@@ -6785,44 +6813,50 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                         else:
                             push_name = (contact_push_name or '').strip() or None
 
-                            logger.info(f"DEBUG - Auto-creating contact | push_name: '{push_name}' | phone: {phone} | tenant: {tenant_id}")
+                            # REGRAS PARA CRIAÇÃO DE CONTATOS:
+                            # 1. Não criar contatos de grupos (@g.us) na tabela contacts
+                            # 2. Não criar contatos se a mensagem foi enviada por mim (outbound) - apenas se o contato iniciou
+                            is_group_contact = '@g.us' in str(phone or '')
+                            should_create_contact = (not is_group_contact) and (not is_from_me)
 
-                            try:
-                                insert_data = {
-                                    'tenant_id': tenant_id,
-                                    'name': push_name,
-                                    'phone': phone,
-                                    'source': 'whatsapp',
-                                    'status': 'pending',
-                                    'first_contact_at': first_contact_at_iso,
-                                    'custom_fields': {'lifecycleStatus': 'Novo contato'}
-                                }
-                                _db_call_with_retry(
-                                    "contacts.auto.insert",
-                                    lambda: supabase.table('contacts').insert(insert_data).execute()
-                                )
-                                _cache_contact_row({**insert_data})
-                            except Exception:
-                                insert_data_alt = {
-                                    'tenant_id': tenant_id,
-                                    'full_name': push_name,
-                                    'phone': phone,
-                                    'source': 'whatsapp',
-                                    'status': 'pending',
-                                    'first_contact_at': first_contact_at_iso,
-                                    'custom_fields': {'lifecycleStatus': 'Novo contato'}
-                                }
+                            if should_create_contact:
+                                logger.info(f"DEBUG - Auto-creating contact | push_name: '{push_name}' | phone: {phone} | tenant: {tenant_id}")
                                 try:
+                                    insert_data = {
+                                        'tenant_id': tenant_id,
+                                        'name': push_name,
+                                        'phone': phone,
+                                        'source': 'whatsapp',
+                                        'status': 'pending',
+                                        'first_contact_at': first_contact_at_iso,
+                                        'custom_fields': {'lifecycleStatus': 'Novo contato'}
+                                    }
                                     _db_call_with_retry(
-                                        "contacts.auto.insert_alt",
-                                        lambda: supabase.table('contacts').insert(insert_data_alt).execute()
+                                        "contacts.auto.insert",
+                                        lambda: supabase.table('contacts').insert(insert_data).execute()
                                     )
-                                    _cache_contact_row({**insert_data_alt})
-                                except Exception as e:
-                                    if _is_transient_db_error(e):
-                                        _queue_db_write({"kind": "insert", "table": "contacts", "data": insert_data_alt})
-                                    else:
-                                        raise
+                                    _cache_contact_row({**insert_data})
+                                except Exception:
+                                    insert_data_alt = {
+                                        'tenant_id': tenant_id,
+                                        'full_name': push_name,
+                                        'phone': phone,
+                                        'source': 'whatsapp',
+                                        'status': 'pending',
+                                        'first_contact_at': first_contact_at_iso,
+                                        'custom_fields': {'lifecycleStatus': 'Novo contato'}
+                                    }
+                                    try:
+                                        _db_call_with_retry(
+                                            "contacts.auto.insert_alt",
+                                            lambda: supabase.table('contacts').insert(insert_data_alt).execute()
+                                        )
+                                        _cache_contact_row({**insert_data_alt})
+                                    except Exception as e:
+                                        if _is_transient_db_error(e):
+                                            _queue_db_write({"kind": "insert", "table": "contacts", "data": insert_data_alt})
+                                        else:
+                                            raise
                             safe_insert_audit_log(
                                 tenant_id=tenant_id,
                                 actor_user_id=None,

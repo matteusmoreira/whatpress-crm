@@ -818,6 +818,30 @@ const Connections = () => {
                   </div>
                 )}
 
+                {/* Ignore Groups Option */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+                  <div>
+                    <p className="text-white text-sm font-medium">Ignorar Grupos</p>
+                    <p className="text-white/40 text-xs mt-1">Não receber mensagens de grupos no CRM</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNewConnection(prev => ({
+                      ...prev,
+                      config: { ...prev.config, ignoreGroups: !(prev.config?.ignoreGroups ?? true) }
+                    }))}
+                    className={cn(
+                      'w-12 h-6 rounded-full p-1 transition-all relative',
+                      (newConnection.config?.ignoreGroups ?? true) ? 'bg-emerald-500' : 'bg-white/10'
+                    )}
+                  >
+                    <div className={cn(
+                      'w-4 h-4 rounded-full bg-white transition-all absolute top-1',
+                      (newConnection.config?.ignoreGroups ?? true) ? 'left-7' : 'left-1'
+                    )} />
+                  </button>
+                </div>
+
                 {/* Actions */}
                 <div className="flex gap-3 pt-4">
                   <GlassButton

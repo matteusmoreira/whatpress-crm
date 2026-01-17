@@ -259,6 +259,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
         
         # Payload v2 - modo simples recomendado
         payload = {
+            "enabled": True,
             "url": webhook_url,
             "events": [
                 "connection",
