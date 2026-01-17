@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 import uuid
 from datetime import datetime, timedelta
 import httpx
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from .supabase_client import (
@@ -579,6 +580,18 @@ def resolve_public_base_url(request: Optional[Request] = None) -> str:
             return f"{proto}://{host}".rstrip("/")
 
     return "https://altarcrm.up.railway.app"
+
+def _is_local_webhook_url(url: str) -> bool:
+    try:
+        parsed = urlparse(str(url or ""))
+        host = (parsed.hostname or "").strip().lower()
+    except Exception:
+        return False
+    if host in {"localhost", "127.0.0.1", "0.0.0.0"}:
+        return True
+    if host.endswith(".local"):
+        return True
+    return False
 
 def extract_profile_picture_url(data: Any) -> Optional[str]:
     if not isinstance(data, dict):
@@ -3467,14 +3480,19 @@ async def sync_connection_status(connection_id: str, request: Request, payload: 
         
         # Atualizar banco de dados
         update_data = {"status": new_status}
+        existing_webhook_url = str(connection.get("webhook_url") or "").strip()
         if new_status == "disconnected":
             update_data["webhook_url"] = ""
         if is_connected:
-            update_data['webhook_url'] = _resolve_provider_webhook_url(request, provider_id, instance_name)
-            try:
-                await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=update_data['webhook_url'])
-            except Exception as e:
-                logger.warning(f"Could not set webhook for {instance_name}: {e}")
+            desired_webhook_url = _resolve_provider_webhook_url(request, provider_id, instance_name)
+            if _is_local_webhook_url(desired_webhook_url) and existing_webhook_url and (not _is_local_webhook_url(existing_webhook_url)):
+                desired_webhook_url = existing_webhook_url
+            update_data['webhook_url'] = desired_webhook_url
+            if desired_webhook_url and desired_webhook_url != existing_webhook_url:
+                try:
+                    await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=desired_webhook_url)
+                except Exception as e:
+                    logger.warning(f"Could not set webhook for {instance_name}: {e}")
             
             # Tentar obter o número do telefone se conectado
             if provider_id == "evolution":

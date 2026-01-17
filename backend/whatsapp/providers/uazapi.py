@@ -436,43 +436,136 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 data = payload.get("data") or {}
                 if not isinstance(data, dict):
                     data = {}
+
+                msg_obj: dict[str, Any] = data
+                messages = data.get("messages")
+                if isinstance(messages, list) and messages:
+                    first = messages[0]
+                    if isinstance(first, dict):
+                        msg_obj = first
+                if isinstance(data.get("message"), dict):
+                    msg_obj = {**msg_obj, **(data.get("message") or {})}
+
+                key_obj: dict[str, Any] = {}
+                key_candidate = msg_obj.get("key")
+                if isinstance(key_candidate, dict):
+                    key_obj = key_candidate
+
+                data_key_obj: dict[str, Any] = {}
+                data_key_candidate = data.get("key")
+                if isinstance(data_key_candidate, dict):
+                    data_key_obj = data_key_candidate
+
                 sender = (
-                    data.get("sender")
+                    msg_obj.get("sender")
+                    or msg_obj.get("phone")
+                    or msg_obj.get("remoteJid")
+                    or msg_obj.get("remote_jid")
+                    or key_obj.get("remoteJid")
+                    or key_obj.get("remote_jid")
+                    or data.get("sender")
                     or data.get("phone")
                     or data.get("remoteJid")
                     or data.get("remote_jid")
+                    or data_key_obj.get("remoteJid")
+                    or data_key_obj.get("remote_jid")
                 )
-                remote_jid_raw = None
+
+                remote_jid_raw: Optional[str] = None
+                remote_jid: Optional[str] = None
                 if isinstance(sender, str) and sender.strip():
                     s = sender.strip()
-                    if "@s.whatsapp.net" in s or "@g.us" in s:
+                    if "@" in s:
                         remote_jid_raw = s
+                        remote_jid = s.split("@", 1)[0]
                     else:
-                        remote_jid_raw = f"{s}@s.whatsapp.net"
+                        remote_jid = s
+                        if s.isdigit():
+                            remote_jid_raw = f"{s}@s.whatsapp.net"
+                        else:
+                            remote_jid_raw = s
+
+                def _extract_text(value: Any, depth: int = 0) -> str:
+                    if depth > 6:
+                        return ""
+                    if isinstance(value, str):
+                        return value
+                    if isinstance(value, dict):
+                        for k in ("conversation", "text", "caption", "body", "message", "content"):
+                            v = value.get(k)
+                            if isinstance(v, str) and v.strip():
+                                return v.strip()
+                        for v in value.values():
+                            found = _extract_text(v, depth + 1)
+                            if found:
+                                return found
+                        return ""
+                    if isinstance(value, list):
+                        for item in value:
+                            found = _extract_text(item, depth + 1)
+                            if found:
+                                return found
+                        return ""
+                    return ""
+
                 text = (
-                    data.get("message")
-                    or data.get("text")
+                    _extract_text(msg_obj.get("message"))
+                    or _extract_text(msg_obj)
+                    or _extract_text(data)
                     or ""
                 )
-                msg_type = str(data.get("type") or data.get("messageType") or "text").strip() or "text"
-                ts = payload.get("timestamp") or payload.get("date_time")
+
+                msg_type = str(
+                    msg_obj.get("type")
+                    or msg_obj.get("messageType")
+                    or msg_obj.get("message_type")
+                    or data.get("type")
+                    or data.get("messageType")
+                    or "text"
+                ).strip() or "text"
+
+                ts = (
+                    msg_obj.get("timestamp")
+                    or msg_obj.get("messageTimestamp")
+                    or payload.get("timestamp")
+                    or payload.get("date_time")
+                )
+
                 push_name = (
-                    data.get("pushname")
+                    msg_obj.get("pushname")
+                    or msg_obj.get("push_name")
+                    or msg_obj.get("pushName")
+                    or msg_obj.get("senderName")
+                    or data.get("pushname")
                     or data.get("push_name")
                     or data.get("pushName")
                     or data.get("senderName")
                 )
+
+                from_me = (
+                    msg_obj.get("fromMe")
+                    if isinstance(msg_obj.get("fromMe"), bool)
+                    else (key_obj.get("fromMe") if isinstance(key_obj.get("fromMe"), bool) else False)
+                )
+
                 parsed_fallback = {
                     "event": "message",
                     "instance": instance,
-                    "message_id": data.get("id") or data.get("messageid"),
-                    "from_me": data.get("fromMe", False),
-                    "remote_jid": sender,
+                    "message_id": msg_obj.get("id") or key_obj.get("id") or data.get("id") or data.get("messageid"),
+                    "from_me": from_me,
+                    "remote_jid": remote_jid or sender,
                     "remote_jid_raw": remote_jid_raw or sender,
                     "content": text,
                     "type": msg_type,
                     "media_kind": msg_type if msg_type != "text" else None,
-                    "media_url": data.get("audio_url") or data.get("media_url") or data.get("fileURL"),
+                    "media_url": (
+                        msg_obj.get("audio_url")
+                        or msg_obj.get("media_url")
+                        or msg_obj.get("fileURL")
+                        or data.get("audio_url")
+                        or data.get("media_url")
+                        or data.get("fileURL")
+                    ),
                     "timestamp": ts,
                     "push_name": push_name,
                 }

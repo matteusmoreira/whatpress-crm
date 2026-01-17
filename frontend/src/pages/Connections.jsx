@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Plug,
   Plus,
@@ -255,6 +255,13 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
   const [status, setStatus] = useState('waiting'); // waiting, connected, error
   const [pollingActive, setPollingActive] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const onCloseRef = useRef(onClose);
+  const onConnectionSuccessRef = useRef(onConnectionSuccess);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onConnectionSuccessRef.current = onConnectionSuccess;
+  }, [onClose, onConnectionSuccess]);
 
   const isTokenError = (error) => {
     const detail = error?.response?.data?.detail;
@@ -291,8 +298,8 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
           if (intervalId) clearInterval(intervalId);
           // Notificar sucesso após 1.5s para dar tempo de ver a mensagem
           setTimeout(() => {
-            if (onConnectionSuccess) onConnectionSuccess();
-            onClose();
+            if (onConnectionSuccessRef.current) onConnectionSuccessRef.current();
+            onCloseRef.current();
           }, 1500);
         }
       } catch (error) {
@@ -316,7 +323,7 @@ const QRCodeModal = ({ qrcode, pairingCode, connectionId, onClose, onConnectionS
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [connectionId, pollingActive, syncConnection, onClose, onConnectionSuccess]);
+  }, [connectionId, pollingActive, syncConnection]);
 
   if (!qrcode && !pairingCode) return null;
 
