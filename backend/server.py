@@ -781,25 +781,83 @@ def _resolve_provider_webhook_url(request: Request, provider: str, instance_name
     base = resolve_public_base_url(request)
     return f"{base}/api/webhooks/{provider}/{instance_name}"
 
+def _walk_json_values(value: Any, *, depth: int = 0, max_depth: int = 5):
+    if depth > max_depth:
+        return
+    yield value
+    if isinstance(value, dict):
+        for v in value.values():
+            yield from _walk_json_values(v, depth=depth + 1, max_depth=max_depth)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_json_values(item, depth=depth + 1, max_depth=max_depth)
+
+def _extract_uazapi_connection_status(state: dict) -> str:
+    if not isinstance(state, dict):
+        return ""
+
+    keys = (
+        "state",
+        "status",
+        "connectionStatus",
+        "connection_state",
+        "connectionState",
+        "instanceState",
+    )
+    bool_keys = ("connected", "isConnected", "online", "isOnline")
+
+    def extract_from_obj(obj: Any) -> str:
+        if not isinstance(obj, dict):
+            return ""
+        for k in keys:
+            v = obj.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        for k in bool_keys:
+            v = obj.get(k)
+            if isinstance(v, bool) and v is True:
+                return "connected"
+        conn = obj.get("connection")
+        if isinstance(conn, str) and conn.strip():
+            return conn.strip()
+        if isinstance(conn, dict):
+            for k in keys:
+                v = conn.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            for k in bool_keys:
+                v = conn.get(k)
+                if isinstance(v, bool) and v is True:
+                    return "connected"
+        return ""
+
+    for candidate in (
+        state,
+        state.get("data"),
+        state.get("instance"),
+        (state.get("data") or {}).get("instance") if isinstance(state.get("data"), dict) else None,
+    ):
+        found = extract_from_obj(candidate)
+        if found:
+            return str(found or "").strip().lower()
+
+    known = {"disconnected", "connecting", "connected", "open"}
+    for v in _walk_json_values(state, max_depth=5):
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in known:
+                return s
+        elif isinstance(v, bool) and v is True:
+            pass
+    return ""
+
 def _is_connected_state(provider: str, state: dict) -> bool:
     pid = str(provider or "").strip().lower()
     if pid == "evolution":
         instance_state = (state.get("instance", {}) or {}).get("state", "")
         return str(instance_state or "").strip().lower() in {"open", "connected"}
     if pid == "uazapi":
-        status = (
-            state.get("state")
-            or state.get("status")
-            or state.get("connectionStatus")
-            or state.get("connection_state")
-            or state.get("connectionState")
-            or (state.get("data", {}) or {}).get("state")
-            or (state.get("data", {}) or {}).get("status")
-            or (state.get("instance", {}) or {}).get("status")
-            or (state.get("instance", {}) or {}).get("state")
-            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("state")
-            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("status")
-        )
+        status = _extract_uazapi_connection_status(state)
         return str(status or "").strip().lower() in {"connected", "open"}
     return False
 
@@ -815,23 +873,15 @@ def _get_connection_status(provider: str, state: dict) -> str:
             return "connecting"
         return "disconnected"
     if pid == "uazapi":
-        status_raw = (
-            state.get("state")
-            or state.get("status")
-            or state.get("connectionStatus")
-            or state.get("connection_state")
-            or state.get("connectionState")
-            or (state.get("data", {}) or {}).get("state")
-            or (state.get("data", {}) or {}).get("status")
-            or (state.get("instance", {}) or {}).get("status")
-            or (state.get("instance", {}) or {}).get("state")
-            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("state")
-            or ((state.get("instance", {}) or {}).get("connection", {}) or {}).get("status")
-        )
-        normalized = str(status_raw or "").strip().lower()
+        normalized = _extract_uazapi_connection_status(state)
         if normalized in {"connected", "open"}:
             return "connected"
         if normalized in {"connecting"}:
+            return "connecting"
+        if _extract_qrcode_value(state):
+            return "connecting"
+        pairing_code = state.get("pairingCode") or state.get("paircode") or state.get("code")
+        if isinstance(pairing_code, str) and pairing_code.strip():
             return "connecting"
         return "disconnected"
     return "disconnected"
