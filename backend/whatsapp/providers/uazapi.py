@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -268,8 +269,8 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 "presence",
                 "groups",
             ],
-            "addUrlEvents": False,
-            "addUrlTypesMessages": False,
+            "addUrlEvents": True,
+            "addUrlTypesMessages": True,
             # Importante: evita loops em automações
             "excludeMessages": ["wasSentByApi"],
         }
@@ -413,6 +414,68 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             data = {"raw": payload}
             return ProviderWebhookEvent(event="unknown", instance=None, data=data)
 
+        jid_pattern = re.compile(r"(\d{7,20})@(s\.whatsapp\.net|g\.us)", re.IGNORECASE)
+
+        def walk(v: Any, depth: int = 0):
+            if depth > 6:
+                return
+            yield v
+            if isinstance(v, dict):
+                for vv in v.values():
+                    yield from walk(vv, depth + 1)
+            elif isinstance(v, list):
+                for vv in v:
+                    yield from walk(vv, depth + 1)
+
+        def find_sender(obj: Any) -> Optional[str]:
+            if not isinstance(obj, (dict, list)):
+                if isinstance(obj, str):
+                    s = obj.strip()
+                    if s:
+                        m = jid_pattern.search(s)
+                        if m:
+                            return m.group(0)
+                        if s.isdigit() and 7 <= len(s) <= 20:
+                            return s
+                return None
+
+            preferred_keys = (
+                "remoteJid",
+                "remote_jid",
+                "jid",
+                "chatId",
+                "chat_id",
+                "from",
+                "sender",
+                "phone",
+                "phoneNumber",
+                "number",
+                "participant",
+                "id",
+            )
+
+            for v in walk(obj):
+                if isinstance(v, dict):
+                    for k in preferred_keys:
+                        cand = v.get(k)
+                        if isinstance(cand, str) and cand.strip():
+                            s = cand.strip()
+                            m = jid_pattern.search(s)
+                            if m:
+                                return m.group(0)
+                            if s.isdigit() and 7 <= len(s) <= 20:
+                                return s
+
+            for v in walk(obj):
+                if isinstance(v, str):
+                    s = v.strip()
+                    if not s:
+                        continue
+                    m = jid_pattern.search(s)
+                    if m:
+                        return m.group(0)
+            return None
+
         parser = EvolutionAPI(base_url="http://unused", api_key="unused")
         parsed: Optional[dict[str, Any]] = None
 
@@ -475,8 +538,11 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
 
                 remote_jid_raw: Optional[str] = None
                 remote_jid: Optional[str] = None
-                if isinstance(sender, str) and sender.strip():
-                    s = sender.strip()
+                sender_str = sender.strip() if isinstance(sender, str) else ""
+                if not sender_str:
+                    sender_str = find_sender(payload) or find_sender(data) or ""
+                if sender_str:
+                    s = sender_str.strip()
                     if "@" in s:
                         remote_jid_raw = s
                         remote_jid = s.split("@", 1)[0]

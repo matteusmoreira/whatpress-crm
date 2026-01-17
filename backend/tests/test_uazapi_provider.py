@@ -4,6 +4,7 @@ import importlib
 import sys
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -384,3 +385,74 @@ def test_flush_db_queue_routes_webhook_event_to_uazapi_processor() -> None:
 
     assert len(called_uazapi) == 1
     assert len(called_evolution) == 0
+
+
+def test_server_generic_webhook_parses_iso_timestamp_to_first_contact_at() -> None:
+    _ensure_backend_on_path()
+    srv = importlib.import_module("backend.server")
+
+    srv._ensure_offline_flush_task_started = lambda: None
+    srv._ensure_bulk_worker_task_started = lambda: None
+
+    captured: dict[str, dict] = {}
+
+    def fake_parse_provider_webhook(provider_id: str, instance_name: str, payload: dict) -> dict:
+        return {
+            "event": "message",
+            "instance": instance_name,
+            "message_id": "m1",
+            "from_me": False,
+            "remote_jid": "5598987654321",
+            "remote_jid_raw": "5598987654321@s.whatsapp.net",
+            "content": "Oi",
+            "type": "text",
+            "timestamp": "2025-02-16T14:30:25.123Z",
+            "push_name": "José",
+        }
+
+    def _extract_closure_dict(fn) -> dict | None:
+        clos = getattr(fn, "__closure__", None)
+        if not clos:
+            return None
+        for cell in clos:
+            try:
+                val = cell.cell_contents
+            except Exception:
+                continue
+            if isinstance(val, dict):
+                return val
+        return None
+
+    def fake_db_call_with_retry(operation: str, fn):
+        if operation == "connections.get_by_instance":
+            return SimpleNamespace(data=[{"id": "conn1", "tenant_id": "t1", "config": {}, "tenants": {}}])
+        if operation in {"conversations.get_by_phone", "conversations.get_by_phone_raw"}:
+            return SimpleNamespace(data=[])
+        if operation == "conversations.insert":
+            return SimpleNamespace(data=[{"id": "conv1", "unread_count": 0}])
+        if operation in {"contacts.auto.exists", "contacts.auto.exists_raw"}:
+            return SimpleNamespace(data=[])
+        if operation in {"contacts.auto.insert", "contacts.auto.insert_alt"}:
+            insert_data = _extract_closure_dict(fn)
+            if isinstance(insert_data, dict):
+                captured["contact_insert"] = insert_data
+            return SimpleNamespace(data=[{}])
+        if operation == "messages.insert":
+            msg_data = _extract_closure_dict(fn)
+            if isinstance(msg_data, dict):
+                captured["message_insert"] = msg_data
+            return SimpleNamespace(data=[{}])
+        if operation == "tenants.get_message_count":
+            return SimpleNamespace(data=[{"messages_this_month": 0}])
+        if operation == "tenants.bump_message_count":
+            return SimpleNamespace(data=[{"messages_this_month": 1}])
+        return SimpleNamespace(data=[{}])
+
+    with mock.patch.object(srv, "_parse_provider_webhook", fake_parse_provider_webhook), mock.patch.object(
+        srv, "_db_call_with_retry", fake_db_call_with_retry
+    ), mock.patch.object(srv, "safe_insert_audit_log", lambda **kwargs: None):
+        result = asyncio.run(srv._process_generic_webhook("uazapi", "inst1", {"event": "messages"}, from_queue=False))
+
+    assert result.get("success") is True
+    assert captured["message_insert"].get("external_id") == "m1"
+    assert captured["contact_insert"].get("first_contact_at") == "2025-02-16T14:30:25.123000"

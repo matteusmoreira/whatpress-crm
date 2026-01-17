@@ -21,7 +21,7 @@ const API = `${BACKEND_URL}/api`;
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API,
-  withCredentials: true,
+  withCredentials: false,
   headers: {
     'Content-Type': 'application/json'
   }

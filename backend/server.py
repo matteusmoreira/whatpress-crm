@@ -11,7 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import httpx
 from urllib.parse import urlparse
 
@@ -111,7 +111,9 @@ _DEBUG_ENDPOINTS_ENABLED = (
 def resolve_cors_allow_origins() -> List[str]:
     required = [
         "https://whatpress-crm.vercel.app",
+        "https://altarcrm.vercel.app",
         "https://crm.altartech.com.br",
+        "https://altarcrm.up.railway.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
@@ -150,7 +152,7 @@ def resolve_cors_allow_origins() -> List[str]:
 CORS_ALLOW_ORIGINS = resolve_cors_allow_origins()
 CORS_ALLOW_ORIGIN_REGEX = os.getenv(
     "CORS_ALLOW_ORIGIN_REGEX",
-    r"^https://((.*\.)?whatpress-crm(-.*)?\.vercel\.app|crm\.altartech\.com\.br)$",
+    r"^https://((.*\.)?(whatpress-crm|altarcrm)(-.*)?\.vercel\.app|crm\.altartech\.com\.br|altarcrm\.up\.railway\.app)$",
 )
 
 app.add_middleware(
@@ -3492,7 +3494,17 @@ async def sync_connection_status(connection_id: str, request: Request, payload: 
             if _is_local_webhook_url(desired_webhook_url) and existing_webhook_url and (not _is_local_webhook_url(existing_webhook_url)):
                 desired_webhook_url = existing_webhook_url
             update_data['webhook_url'] = desired_webhook_url
-            if desired_webhook_url and desired_webhook_url != existing_webhook_url:
+            should_force_uazapi_webhook_update = False
+            if provider_id == "uazapi":
+                cfg = connection.get("config") if isinstance(connection.get("config"), dict) else {}
+                should_force_uazapi_webhook_update = not bool(
+                    cfg.get("uazapi_webhook_url_params")
+                    or cfg.get("uazapiWebhookUrlParams")
+                )
+                if should_force_uazapi_webhook_update:
+                    update_data["config"] = {**cfg, "uazapi_webhook_url_params": True}
+
+            if desired_webhook_url and (desired_webhook_url != existing_webhook_url or should_force_uazapi_webhook_update):
                 try:
                     await provider.ensure_webhook(ctx, connection=conn_ref, webhook_url=desired_webhook_url)
                 except Exception as e:
@@ -6835,11 +6847,26 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
                 first_contact_dt = datetime.utcnow()
                 ts = parsed.get('timestamp')
                 try:
-                    ts_int = int(ts)
-                    if ts_int > 10**12:
-                        ts_int = ts_int // 1000
-                    if ts_int > 0:
-                        first_contact_dt = datetime.utcfromtimestamp(ts_int)
+                    if isinstance(ts, (int, float)):
+                        ts_int = int(ts)
+                        if ts_int > 10**12:
+                            ts_int = ts_int // 1000
+                        if ts_int > 0:
+                            first_contact_dt = datetime.utcfromtimestamp(ts_int)
+                    elif ts is not None:
+                        ts_str = str(ts).strip()
+                        if ts_str.isdigit():
+                            ts_int = int(ts_str)
+                            if ts_int > 10**12:
+                                ts_int = ts_int // 1000
+                            if ts_int > 0:
+                                first_contact_dt = datetime.utcfromtimestamp(ts_int)
+                        elif ts_str:
+                            ts_norm = ts_str.replace("Z", "+00:00") if ts_str.endswith("Z") else ts_str
+                            dt = datetime.fromisoformat(ts_norm)
+                            if dt.tzinfo is not None:
+                                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+                            first_contact_dt = dt
                 except Exception:
                     first_contact_dt = datetime.utcnow()
                 first_contact_at_iso = first_contact_dt.isoformat()
