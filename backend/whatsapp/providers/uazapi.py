@@ -509,65 +509,74 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 if not isinstance(data, dict):
                     data = {}
                 
-                # Para UAZAPI v2, verificar se 'message' está na raiz do payload
-                # Formato v2: {"EventType": "messages", "chat": {...}, "message": {...}}
-                if payload.get("EventType") == "messages" and payload.get("message"):
-                    # Formato UAZAPI v2 - dados na raiz
-                    v2_message = payload.get("message") or {}
-                    v2_chat = payload.get("chat") or {}
+                # Para UAZAPI v2, verificar se 'chat' está na raiz do payload
+                # IMPORTANTE: UAZAPI v2 NÃO tem objeto 'message'! 
+                # Os dados da mensagem estão em:
+                # - chat.wa_lastMessageTextVote = texto da mensagem
+                # - chat.wa_lastMessageSender = quem enviou
+                # - chat.wa_chatid = número do contato
+                v2_chat = payload.get("chat")
+                if payload.get("EventType") == "messages" and isinstance(v2_chat, dict):
+                    # Formato UAZAPI v2 - dados no objeto chat
+                    import re
                     
-                    if isinstance(v2_message, dict) and isinstance(v2_chat, dict):
-                        # Extrair dados do formato v2
-                        remote_jid_raw = (
-                            v2_chat.get("wa_chatid")
-                            or v2_chat.get("wa_chatlid")
-                            or v2_message.get("Chat")
-                            or ""
-                        )
-                        remote_jid = remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw
-                        
-                        # Extrair número de telefone limpo
-                        phone_raw = v2_chat.get("phone") or ""
-                        if phone_raw:
-                            import re
-                            phone_clean = re.sub(r'[^\d]', '', phone_raw)
-                            if not remote_jid:
-                                remote_jid = phone_clean
-                        
-                        content = (
-                            v2_message.get("Text") 
-                            or v2_message.get("text")
-                            or v2_message.get("Caption")
-                            or v2_message.get("caption")
-                            or ""
-                        )
-                        from_me = v2_message.get("IsFromMe", False)
-                        push_name = (
-                            v2_message.get("PushName")
-                            or v2_chat.get("name")
-                            or ""
-                        )
-                        message_id = v2_message.get("ID") or v2_message.get("id") or ""
-                        timestamp = v2_message.get("Timestamp") or v2_message.get("timestamp")
-                        msg_type = v2_message.get("Type") or v2_message.get("type") or "text"
-                        
-                        return ProviderWebhookEvent(
-                            event="message",
-                            instance=instance if isinstance(instance, str) else None,
-                            data={
-                                "event": "messages",
-                                "instance": instance,
-                                "remote_jid_raw": remote_jid_raw,
-                                "remote_jid": remote_jid,
-                                "from_me": from_me,
-                                "message_id": message_id,
-                                "push_name": push_name,
-                                "content": content,
-                                "timestamp": timestamp,
-                                "type": msg_type,
-                                "v2_format": True,  # Flag para indicar formato v2
-                            },
-                        )
+                    # Extrair dados do formato v2
+                    remote_jid_raw = (
+                        v2_chat.get("wa_chatid")
+                        or v2_chat.get("wa_chatlid")
+                        or ""
+                    )
+                    remote_jid = remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw
+                    
+                    # Extrair número de telefone limpo
+                    phone_raw = v2_chat.get("phone") or ""
+                    if phone_raw:
+                        phone_clean = re.sub(r'[^\d]', '', phone_raw)
+                        if not remote_jid:
+                            remote_jid = phone_clean
+                    
+                    # Conteúdo da mensagem está em wa_lastMessageTextVote
+                    content = v2_chat.get("wa_lastMessageTextVote") or ""
+                    
+                    # Determinar se é from_me comparando wa_lastMessageSender com owner
+                    last_sender = v2_chat.get("wa_lastMessageSender") or ""
+                    owner = payload.get("owner") or v2_chat.get("owner") or ""
+                    
+                    # Se o sender contém o owner, é uma mensagem enviada por nós
+                    from_me = False
+                    if owner and last_sender:
+                        from_me = owner in last_sender or last_sender.startswith(owner)
+                    
+                    push_name = v2_chat.get("name") or ""
+                    
+                    # Gerar ID único para a mensagem baseado no timestamp
+                    timestamp = v2_chat.get("wa_lastMsgTimestamp")
+                    if timestamp and timestamp > 1000000000000:
+                        timestamp = timestamp // 1000  # Converter de ms para s
+                    
+                    message_id = f"uazapi_{v2_chat.get('id', '')}_{timestamp or ''}"
+                    
+                    msg_type = (v2_chat.get("wa_lastMessageType") or "text").lower()
+                    if msg_type == "conversation":
+                        msg_type = "text"
+                    
+                    return ProviderWebhookEvent(
+                        event="message",
+                        instance=instance if isinstance(instance, str) else None,
+                        data={
+                            "event": "messages",
+                            "instance": instance,
+                            "remote_jid_raw": remote_jid_raw,
+                            "remote_jid": remote_jid,
+                            "from_me": from_me,
+                            "message_id": message_id,
+                            "push_name": push_name,
+                            "content": content,
+                            "timestamp": timestamp,
+                            "type": msg_type,
+                            "v2_format": True,  # Flag para indicar formato v2
+                        },
+                    )
 
                 msg_obj: dict[str, Any] = data
                 messages = data.get("messages")
