@@ -722,6 +722,15 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             )
 
         event = str(parsed.get("event") or "unknown")
+        
+        # Normalizar evento para compatibilidade com server.py
+        # UAZAPI envia "messages" mas server.py espera "message"
+        normalized_event = event.strip().lower()
+        if normalized_event in {"messages", "messages.upsert", "messages_upsert"}:
+            event = "message"
+        elif normalized_event in {"messages.update", "messages_update"}:
+            event = "message_update"
+        
         instance = (
             parsed.get("instance")
             or parsed.get("instanceName")
@@ -732,7 +741,52 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
             or payload.get("instance_id")
             or payload.get("instance_uuid")
         )
+        
+        # Se o evento é de mensagem mas não tem remote_jid, tentar extrair do payload original
         data = dict(parsed)
+        if event == "message" and not data.get("remote_jid"):
+            # Extrair dados do payload UAZAPI
+            payload_data = payload.get("data") or {}
+            if isinstance(payload_data, dict):
+                key_obj = payload_data.get("key") or {}
+                if isinstance(key_obj, dict):
+                    remote_jid_raw = key_obj.get("remoteJid") or key_obj.get("remote_jid") or ""
+                    if remote_jid_raw:
+                        data["remote_jid_raw"] = remote_jid_raw
+                        data["remote_jid"] = remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw
+                    
+                    if "fromMe" in key_obj:
+                        data["from_me"] = key_obj["fromMe"]
+                    
+                    if key_obj.get("id"):
+                        data["message_id"] = key_obj["id"]
+                
+                # Extrair pushName
+                push_name = payload_data.get("pushName") or payload_data.get("pushname") or payload_data.get("push_name")
+                if push_name:
+                    data["push_name"] = push_name
+                
+                # Extrair conteúdo da mensagem
+                message_obj = payload_data.get("message") or {}
+                if isinstance(message_obj, dict):
+                    content = (
+                        message_obj.get("conversation")
+                        or message_obj.get("text")
+                        or message_obj.get("caption")
+                        or message_obj.get("body")
+                    )
+                    if content:
+                        data["content"] = content
+                
+                # Extrair timestamp
+                ts = payload_data.get("messageTimestamp") or payload_data.get("timestamp")
+                if ts:
+                    data["timestamp"] = ts
+                
+                # Extrair tipo de mensagem
+                msg_type = payload_data.get("messageType") or payload_data.get("type") or "text"
+                data["type"] = msg_type
+        
         return ProviderWebhookEvent(
             event=event,
             instance=instance if isinstance(instance, str) else None,
