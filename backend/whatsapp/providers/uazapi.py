@@ -564,7 +564,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                         event="message",
                         instance=instance if isinstance(instance, str) else None,
                         data={
-                            "event": "messages",
+                            "event": "message",  # server.py espera 'message' (singular)
                             "instance": instance,
                             "remote_jid_raw": remote_jid_raw,
                             "remote_jid": remote_jid,
