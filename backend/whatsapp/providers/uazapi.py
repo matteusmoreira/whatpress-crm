@@ -476,6 +476,78 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                         return m.group(0)
             return None
 
+        # PRIMEIRO: Verificar se é formato UAZAPI v2 (com EventType e chat)
+        # Isso DEVE ser feito ANTES do Evolution parser para evitar parsing incorreto
+        if payload.get("EventType") == "messages" and isinstance(payload.get("chat"), dict):
+            v2_chat = payload.get("chat")
+            instance = payload.get("instanceName") or payload.get("instance")
+            
+            # Extrair dados do formato v2
+            wa_chatid = v2_chat.get("wa_chatid") or ""
+            wa_chatlid = v2_chat.get("wa_chatlid") or ""
+            
+            # Priorizar wa_chatid se tiver @s.whatsapp.net, senão usar wa_chatlid
+            remote_jid_raw = wa_chatid if "@s.whatsapp.net" in wa_chatid else (wa_chatlid or wa_chatid)
+            
+            # Extrair número de telefone limpo do campo 'phone' que sempre contém o número real
+            phone_raw = v2_chat.get("phone") or ""
+            phone_clean = ""
+            if phone_raw:
+                phone_clean = re.sub(r'[^\d]', '', phone_raw)
+            
+            # Se remote_jid_raw é um LID (@lid), usar o phone_clean como remote_jid
+            if "@lid" in remote_jid_raw or not remote_jid_raw:
+                remote_jid = phone_clean if phone_clean else (remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw)
+            else:
+                remote_jid = remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw
+            
+            # Conteúdo da mensagem está em wa_lastMessageTextVote
+            content = v2_chat.get("wa_lastMessageTextVote") or ""
+            
+            # Determinar se é from_me comparando wa_lastMessageSender com owner
+            last_sender = v2_chat.get("wa_lastMessageSender") or ""
+            owner = payload.get("owner") or v2_chat.get("owner") or ""
+            
+            # Se o sender contém o owner, é uma mensagem enviada por nós
+            from_me = False
+            if owner and last_sender:
+                owner_digits = re.sub(r'[^\d]', '', owner)
+                sender_digits = re.sub(r'[^\d]', '', last_sender.split("@")[0])
+                from_me = owner in last_sender or last_sender.startswith(owner) or (owner_digits and sender_digits and owner_digits == sender_digits)
+            
+            push_name = v2_chat.get("name") or ""
+            
+            # Gerar ID único para a mensagem baseado no timestamp
+            timestamp = v2_chat.get("wa_lastMsgTimestamp")
+            if timestamp and timestamp > 1000000000000:
+                timestamp = timestamp // 1000  # Converter de ms para s
+            
+            message_id = f"uazapi_{v2_chat.get('id', '')}_{timestamp or ''}"
+            
+            msg_type = (v2_chat.get("wa_lastMessageType") or "text").lower()
+            # Normalizar tipos de mensagem de texto
+            if msg_type in ("conversation", "extendedtextmessage", "extended_text_message"):
+                msg_type = "text"
+            
+            return ProviderWebhookEvent(
+                event="message",
+                instance=instance if isinstance(instance, str) else None,
+                data={
+                    "event": "message",
+                    "instance": instance,
+                    "remote_jid_raw": remote_jid_raw,
+                    "remote_jid": remote_jid,
+                    "from_me": from_me,
+                    "message_id": message_id,
+                    "push_name": push_name,
+                    "content": content,
+                    "timestamp": timestamp,
+                    "type": msg_type,
+                    "v2_format": True,
+                },
+            )
+
+        # SEGUNDO: Tentar o Evolution parser como fallback
         parser = EvolutionAPI(base_url="http://unused", api_key="unused")
         parsed: Optional[dict[str, Any]] = None
 
