@@ -15,6 +15,9 @@ from .quick_replies_routes import router as quick_replies_router
 from .webhooks_routes import router as webhooks_router
 from .templates_routes import router as templates_router
 from .conversations_routes import router as conversations_router
+from .connections_routes import router as connections_router
+from .flows_routes import router as flows_router
+from .messages_routes import router as messages_router
 
 __all__ = [
     "auth_router",
@@ -27,4 +30,8 @@ __all__ = [
     "webhooks_router",
     "templates_router",
     "conversations_router",
+    "connections_router",
+    "flows_router",
+    "messages_router",
 ]
+
