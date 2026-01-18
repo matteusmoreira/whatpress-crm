@@ -521,19 +521,23 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                     import re
                     
                     # Extrair dados do formato v2
-                    remote_jid_raw = (
-                        v2_chat.get("wa_chatid")
-                        or v2_chat.get("wa_chatlid")
-                        or ""
-                    )
-                    remote_jid = remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw
+                    wa_chatid = v2_chat.get("wa_chatid") or ""
+                    wa_chatlid = v2_chat.get("wa_chatlid") or ""
                     
-                    # Extrair número de telefone limpo
+                    # Priorizar wa_chatid se tiver @s.whatsapp.net, senão usar wa_chatlid
+                    remote_jid_raw = wa_chatid if "@s.whatsapp.net" in wa_chatid else (wa_chatlid or wa_chatid)
+                    
+                    # Extrair número de telefone limpo do campo 'phone' que sempre contém o número real
                     phone_raw = v2_chat.get("phone") or ""
+                    phone_clean = ""
                     if phone_raw:
                         phone_clean = re.sub(r'[^\d]', '', phone_raw)
-                        if not remote_jid:
-                            remote_jid = phone_clean
+                    
+                    # Se remote_jid_raw é um LID (@lid), usar o phone_clean como remote_jid
+                    if "@lid" in remote_jid_raw or not remote_jid_raw:
+                        remote_jid = phone_clean if phone_clean else (remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw)
+                    else:
+                        remote_jid = remote_jid_raw.split("@")[0] if "@" in remote_jid_raw else remote_jid_raw
                     
                     # Conteúdo da mensagem está em wa_lastMessageTextVote
                     content = v2_chat.get("wa_lastMessageTextVote") or ""
@@ -543,9 +547,12 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                     owner = payload.get("owner") or v2_chat.get("owner") or ""
                     
                     # Se o sender contém o owner, é uma mensagem enviada por nós
+                    # Também verificar se o LID contém dígitos do owner
                     from_me = False
                     if owner and last_sender:
-                        from_me = owner in last_sender or last_sender.startswith(owner)
+                        owner_digits = re.sub(r'[^\d]', '', owner)
+                        sender_digits = re.sub(r'[^\d]', '', last_sender.split("@")[0])
+                        from_me = owner in last_sender or last_sender.startswith(owner) or (owner_digits and sender_digits and owner_digits == sender_digits)
                     
                     push_name = v2_chat.get("name") or ""
                     
@@ -557,7 +564,8 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                     message_id = f"uazapi_{v2_chat.get('id', '')}_{timestamp or ''}"
                     
                     msg_type = (v2_chat.get("wa_lastMessageType") or "text").lower()
-                    if msg_type == "conversation":
+                    # Normalizar tipos de mensagem de texto
+                    if msg_type in ("conversation", "extendedtextmessage", "extended_text_message"):
                         msg_type = "text"
                     
                     return ProviderWebhookEvent(

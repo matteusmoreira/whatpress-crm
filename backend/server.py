@@ -6798,7 +6798,7 @@ async def _process_generic_webhook(provider: str, instance_name: str, payload: d
         parsed = _parse_provider_webhook(provider_id, instance_name, payload)
 
         if parsed.get('event') == 'message':
-            logger.info(f"DEBUG - Parsed pushName: '{parsed.get('push_name')}' | Phone: {parsed.get('remote_jid')}")
+            logger.info(f"DEBUG - Parsed message: pushName='{parsed.get('push_name')}' | Phone={parsed.get('remote_jid')} | from_me={parsed.get('from_me')} | content='{(parsed.get('content') or '')[:50]}' | type={parsed.get('type')} | v2_format={parsed.get('v2_format')}")
 
         if parsed['event'] == 'message':
             is_from_me = parsed.get('from_me', False)
