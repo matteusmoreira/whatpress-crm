@@ -789,14 +789,17 @@ def _parse_provider_webhook(provider: str, instance_name: str, payload: dict) ->
         )
         provider_obj = container.registry.get(provider_id)
         event = provider_obj.parse_webhook(ctx, payload)
+        logger.info(f"DEBUG - Provider {provider_id} parsed event: event_type={event.event}, instance={event.instance}")
         data = event.data
         if isinstance(data, dict):
+            logger.info(f"DEBUG - Parsed data keys: {list(data.keys())[:10]}")
             return data
         return {"event": event.event, "instance": event.instance, "data": data}
-    except Exception:
+    except Exception as e:
+        logger.error(f"ERROR parsing webhook for provider {provider_id}: {e}", exc_info=True)
         if provider_id == "evolution":
             return evolution_api.parse_webhook_message(payload)
-        return {"event": str(payload.get("event") or "unknown"), "instance": instance_name, "data": payload}
+        return {"event": str(payload.get("event") or payload.get("EventType") or "unknown"), "instance": instance_name, "data": payload}
 
 def _resolve_provider_webhook_url(request: Request, provider: str, instance_name: str) -> str:
     base = resolve_public_base_url(request)
