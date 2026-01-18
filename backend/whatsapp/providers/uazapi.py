@@ -518,7 +518,7 @@ class UazapiWhatsAppProvider(WhatsAppProvider):
                 v2_chat = payload.get("chat")
                 if payload.get("EventType") == "messages" and isinstance(v2_chat, dict):
                     # Formato UAZAPI v2 - dados no objeto chat
-                    import re
+                    # (re já importado no topo do arquivo)
                     
                     # Extrair dados do formato v2
                     wa_chatid = v2_chat.get("wa_chatid") or ""
