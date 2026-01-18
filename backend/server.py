@@ -5,6 +5,11 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
+
+# Configure logging levels to reduce noise
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 import concurrent.futures
 from pathlib import Path
@@ -473,8 +478,9 @@ async def ensure_auto_messages_schema():
             asyncio.to_thread(lambda: supabase.rpc("exec_sql", {"sql": sql}).execute()),
             timeout=timeout_seconds,
         )
-    except Exception as e:
-        logger.warning(f"Auto messages schema not ensured (exec_sql unavailable?): {e}")
+    except Exception:
+        # exec_sql RPC is optional - schema should be created via migrations
+        pass
     _ensure_offline_flush_task_started()
     _ensure_bulk_worker_task_started()
 
