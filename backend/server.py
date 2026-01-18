@@ -15,7 +15,32 @@ import concurrent.futures
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+
+from models import (
+    LoginRequest, LoginResponse, MaintenanceAttachment, MaintenanceSettings, MaintenanceSettingsUpdate,
+    TenantCreate, TenantUpdate, TenantRegister, PlanCreate, PlanUpdate,
+    UserCreate, UserUpdate, UserProfileUpdate,
+    ConversationStatusUpdate, InitiateConversation, ConversationTransferCreate, AssignAgent,
+    ContactCreate, ContactUpdate, ContactUpsertByPhone,
+    MessageCreate, SendWhatsAppMessage, MessageTemplateCreate, QuickReplyCreate, LabelCreate,
+    AutoMessageCreate, BulkCampaignCreate, BulkCampaignUpdate, BulkCampaignRecipientsSet, BulkCampaignSchedule,
+    ConnectionCreate, ConnectionStatusUpdate, WebhookCreate,
+    FlowCreate, FlowUpdate, FlowDuplicate, KBCategoryCreate, KBArticleCreate, KBFaqCreate,
+)
+
+# Importar routers modularizados
+from routes import (
+    auth_router, tenants_router, users_router, contacts_router,
+    campaigns_router, auto_messages_router, quick_replies_router,
+    webhooks_router, templates_router, conversations_router,
+)
+
+
+
+
+
 import uuid
+
 from datetime import datetime, timedelta, timezone
 import httpx
 from urllib.parse import urlparse
@@ -484,33 +509,9 @@ async def ensure_auto_messages_schema():
     _ensure_offline_flush_task_started()
     _ensure_bulk_worker_task_started()
 
-# ==================== MODELS (defined early for login endpoint) ====================
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-class LoginResponse(BaseModel):
-    user: dict
-    token: str
-    maintenance: Optional[dict] = None
-
-class MaintenanceAttachment(BaseModel):
-    url: str
-    name: Optional[str] = None
-    type: Optional[str] = None
-    size: Optional[int] = None
-
-class MaintenanceSettings(BaseModel):
-    enabled: bool = False
-    messageHtml: str = ""
-    attachments: List[MaintenanceAttachment] = []
-    updatedAt: Optional[str] = None
-
-class MaintenanceSettingsUpdate(BaseModel):
-    enabled: Optional[bool] = None
-    messageHtml: Optional[str] = None
-    attachments: Optional[List[MaintenanceAttachment]] = None
+# ==================== MODELS ====================
+# Nota: Todos os modelos Pydantic foram movidos para o diretório models/
+# Importados no topo do arquivo
 
 # JWT Secret (needed for login)
 JWT_SECRET = (
@@ -1729,267 +1730,6 @@ def _bulk_campaigns_missing_table_http(table: str) -> HTTPException:
             "no SQL Editor do Supabase e tente novamente."
         ),
     )
-
-# ==================== MODELS ====================
-# Note: LoginRequest and LoginResponse are defined at the top of the file
-
-class TenantCreate(BaseModel):
-    name: str
-    slug: str
-    plan_id: Optional[str] = None
-
-class TenantUpdate(BaseModel):
-    name: Optional[str] = None
-    slug: Optional[str] = None
-    status: Optional[str] = None
-    plan: Optional[str] = None
-    plan_id: Optional[str] = None
-
-# ==================== PLANS MODELS ====================
-
-class PlanCreate(BaseModel):
-    name: str
-    slug: str
-    price: float = 0
-    max_instances: int = 1
-    max_messages_month: int = 1000
-    max_users: int = 1
-    features: Optional[dict] = {}
-    is_active: bool = True
-
-class PlanUpdate(BaseModel):
-    name: Optional[str] = None
-    slug: Optional[str] = None
-    price: Optional[float] = None
-    max_instances: Optional[int] = None
-    max_messages_month: Optional[int] = None
-    max_users: Optional[int] = None
-    features: Optional[dict] = None
-    is_active: Optional[bool] = None
-
-# ==================== USERS MODELS (SuperAdmin) ====================
-
-class UserCreate(BaseModel):
-    email: str
-    password: str
-    name: str
-    role: str = "agent"  # superadmin, admin, agent
-    tenant_id: Optional[str] = None
-    avatar: Optional[str] = None
-
-class UserUpdate(BaseModel):
-    email: Optional[str] = None
-    password: Optional[str] = None
-    name: Optional[str] = None
-    role: Optional[str] = None
-    tenant_id: Optional[str] = None
-    avatar: Optional[str] = None
-
-class ConnectionCreate(BaseModel):
-    tenant_id: str
-    provider: str
-    instance_name: str
-    phone_number: Optional[str] = ""
-    config: Optional[dict] = None
-
-class ConnectionStatusUpdate(BaseModel):
-    status: str
-
-class ConversationStatusUpdate(BaseModel):
-    status: str
-
-class InitiateConversation(BaseModel):
-    phone: str
-    contact_id: Optional[str] = None
-
-class MessageCreate(BaseModel):
-    conversation_id: str
-    content: str
-    type: str = "text"
-
-class SendWhatsAppMessage(BaseModel):
-    provider: Optional[str] = "evolution"
-    instance_name: str
-    phone: str
-    message: str
-    type: str = "text"
-    media_url: Optional[str] = None
-    config: Optional[dict] = None
-
-class QuickReplyCreate(BaseModel):
-    title: str
-    content: str
-    category: str = "custom"
-
-class LabelCreate(BaseModel):
-    name: str
-    color: str
-
-class AssignAgent(BaseModel):
-    agent_id: str
-
-class ConversationTransferCreate(BaseModel):
-    to_agent_id: str
-    reason: Optional[str] = None
-
-class UserProfileUpdate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
-    name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    avatar: Optional[str] = None
-    bio: Optional[str] = None
-    job_title: Optional[str] = Field(default=None, alias="jobTitle")
-    department: Optional[str] = None
-    signature_enabled: Optional[bool] = Field(default=None, alias="signatureEnabled")
-    signature_include_title: Optional[bool] = Field(default=None, alias="signatureIncludeTitle")
-    signature_include_department: Optional[bool] = Field(default=None, alias="signatureIncludeDepartment")
-
-class ContactUpsertByPhone(BaseModel):
-    tenant_id: str
-    phone: str
-    full_name: Optional[str] = None
-    avatar: Optional[str] = None
-
-class ContactUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    tags: Optional[List[str]] = None
-    custom_fields: Optional[dict] = None
-    social_links: Optional[dict] = None
-    notes_html: Optional[str] = None
-    status: Optional[str] = None
-
-class ContactCreate(BaseModel):
-    name: str
-    phone: str
-    email: Optional[str] = None
-    tags: Optional[List[str]] = None
-    custom_fields: Optional[dict] = None
-    source: Optional[str] = None
-    status: Optional[str] = None
-
-class AutoMessageCreate(BaseModel):
-    type: str  # 'welcome', 'away', 'keyword'
-    name: str
-    message: str
-    trigger_keyword: Optional[str] = None
-    is_active: bool = True
-    schedule_start: Optional[str] = None  # HH:MM format
-    schedule_end: Optional[str] = None
-    schedule_days: Optional[List[int]] = None  # 0-6, 0=Sunday
-    delay_seconds: int = 0
-
-class BulkCampaignCreate(BaseModel):
-    name: str
-    template_body: str
-    connection_id: Optional[str] = None
-    selection_mode: str = "explicit"
-    selection_payload: dict = {}
-    delay_seconds: int = 0
-    start_at: Optional[str] = None
-    recurrence: str = "none"
-    max_messages_per_period: Optional[int] = None
-    period_unit: Optional[str] = None
-
-class BulkCampaignUpdate(BaseModel):
-    name: Optional[str] = None
-    template_body: Optional[str] = None
-    connection_id: Optional[str] = None
-    selection_mode: Optional[str] = None
-    selection_payload: Optional[dict] = None
-    delay_seconds: Optional[int] = None
-    start_at: Optional[str] = None
-    recurrence: Optional[str] = None
-    max_messages_per_period: Optional[int] = None
-    period_unit: Optional[str] = None
-    status: Optional[str] = None
-
-class BulkCampaignRecipientsSet(BaseModel):
-    contact_ids: List[str] = Field(default_factory=list)
-
-class BulkCampaignSchedule(BaseModel):
-    start_at: Optional[str] = None
-    recurrence: Optional[str] = None
-    delay_seconds: Optional[int] = None
-    max_messages_per_period: Optional[int] = None
-    period_unit: Optional[str] = None
-
-class WebhookCreate(BaseModel):
-    name: str
-    url: str
-    secret: Optional[str] = None
-    events: List[str] = []
-    headers: Optional[dict] = None
-    is_active: bool = True
-
-class MessageTemplateCreate(BaseModel):
-    name: str
-    category: str = "general"
-    content: str
-    variables: Optional[List[dict]] = None
-    media_url: Optional[str] = None
-    media_type: Optional[str] = None
-    is_active: bool = True
-
-class KBCategoryCreate(BaseModel):
-    name: str
-    slug: Optional[str] = None
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
-    display_order: int = 0
-    is_active: bool = True
-
-class KBArticleCreate(BaseModel):
-    category_id: Optional[str] = None
-    title: str
-    slug: Optional[str] = None
-    content: str
-    excerpt: Optional[str] = None
-    keywords: List[str] = []
-    is_published: bool = False
-    is_featured: bool = False
-
-class KBFaqCreate(BaseModel):
-    category_id: Optional[str] = None
-    question: str
-    answer: str
-    keywords: List[str] = []
-    display_order: int = 0
-    is_active: bool = True
-
-class TenantRegister(BaseModel):
-    tenant_name: str
-    tenant_slug: str
-    admin_name: str
-    admin_email: str
-    admin_password: str
-    plan: str = "free"
-
-# ==================== FLOWS MODELS ====================
-
-class FlowCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    nodes: List[dict] = []
-    edges: List[dict] = []
-    variables: Optional[dict] = None
-    status: str = "draft"
-
-class FlowUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    nodes: Optional[List[dict]] = None
-    edges: Optional[List[dict]] = None
-    variables: Optional[dict] = None
-    status: Optional[str] = None
-    is_active: Optional[bool] = None
-
-class FlowDuplicate(BaseModel):
-    name: str
-    description: Optional[str] = None
-
 
 # ==================== AUTH ====================
 # Note: create_token is defined at the top of the file
@@ -10229,6 +9969,24 @@ app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
 
 # Include the router in the main app
 app.include_router(api_router)
+
+# Include modularized routers (new refactored structure)
+# NOTA: Routers ativos em paralelo com api_router para transição gradual
+# Após teste bem-sucedido, remover endpoints duplicados do api_router
+app.include_router(auth_router, prefix="/api")           # Login, logout, register
+app.include_router(tenants_router, prefix="/api")        # CRUD tenants + plans
+app.include_router(users_router, prefix="/api")          # CRUD users
+app.include_router(contacts_router, prefix="/api")       # CRUD contacts
+app.include_router(campaigns_router, prefix="/api")      # Bulk campaigns
+app.include_router(auto_messages_router, prefix="/api")  # Auto messages
+app.include_router(quick_replies_router, prefix="/api")  # Quick replies
+app.include_router(webhooks_router, prefix="/api")       # Custom webhooks
+app.include_router(templates_router, prefix="/api")      # Message templates
+app.include_router(conversations_router, prefix="/api")  # Core CRM conversations
+
+
+
+
 
 
 
